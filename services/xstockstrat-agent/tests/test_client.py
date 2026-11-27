@@ -459,6 +459,46 @@ class TestIngestSignalClient:
                 )
         assert result == {"signal_id": 7, "deduplicated": True}
 
+    @pytest.mark.asyncio
+    async def test_explicit_zero_conviction_sets_presence(self):
+        from gen.ingest.v1 import ingest_pb2, ingest_pb2_grpc  # type: ignore
+
+        resp = ingest_pb2.IngestSignalResponse(signal_id=8, deduplicated=False)
+        mock_stub = MagicMock()
+        mock_stub.IngestSignal = AsyncMock(return_value=resp)
+        with patch("app.client.mtls") as mock_grpc:
+            mock_grpc.secure_channel.return_value = _channel_cm()
+            with patch.object(ingest_pb2_grpc, "IngestServiceStub", return_value=mock_stub):
+                await client.ingest_signal(
+                    source="unusual_whales",
+                    symbol="AAPL",
+                    direction="buy",
+                    valid_from="2026-05-01T00:00:00Z",
+                    conviction=0.0,
+                )
+        sent = mock_stub.IngestSignal.await_args.args[0].signal
+        assert sent.conviction == 0.0
+        assert sent.conviction_provided is True
+
+    @pytest.mark.asyncio
+    async def test_omitted_conviction_leaves_presence_unset(self):
+        from gen.ingest.v1 import ingest_pb2, ingest_pb2_grpc  # type: ignore
+
+        resp = ingest_pb2.IngestSignalResponse(signal_id=9, deduplicated=False)
+        mock_stub = MagicMock()
+        mock_stub.IngestSignal = AsyncMock(return_value=resp)
+        with patch("app.client.mtls") as mock_grpc:
+            mock_grpc.secure_channel.return_value = _channel_cm()
+            with patch.object(ingest_pb2_grpc, "IngestServiceStub", return_value=mock_stub):
+                await client.ingest_signal(
+                    source="unusual_whales",
+                    symbol="AAPL",
+                    direction="buy",
+                    valid_from="2026-05-01T00:00:00Z",
+                )
+        sent = mock_stub.IngestSignal.await_args.args[0].signal
+        assert sent.conviction_provided is False
+
 
 class TestSetStrategyLiveClient:
     @pytest.mark.asyncio

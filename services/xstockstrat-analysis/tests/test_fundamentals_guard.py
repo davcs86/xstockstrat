@@ -209,7 +209,7 @@ class TestChannelChoice:
 def _ok_resp():
     out = Struct()
     out.update({"value": 1.0, "composite": 1.0})
-    return SimpleNamespace(success=True, output=out, error="")
+    return SimpleNamespace(success=True, output=out, error="", exit_reason=0)
 
 
 @pytest.mark.parametrize(

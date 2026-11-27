@@ -14,7 +14,8 @@ Feature: xstockstrat-portfolio — quote-dependent reads are bounded and never f
   # Narrowed by feature 240 (C-16, operator sign-off 2026-10-19): when a daily close exists within
   # portfolio.marketdata.last_close_lookback_days an offline position falls back to it (see
   # @AC-27 @feature-240); this scenario now covers the no-bar case. Deadline bound and WARN are kept.
-  @AC-1 @regression @feature-229 @feature-240
+  # Fixture only (feature 314, C-16 sign-off 2026-11-20): SetConfig now refuses a global portfolio.marketdata.quote_timeout_ms of 2500 while the stored global marketdata.quotes.batch_timeout_ms is 2500 (strict >); the Given below is a fake-config value, not a reachable stored state.
+  @AC-1 @regression @feature-229 @feature-240 @feature-314
   Scenario Outline: Portfolio reads return unenriched positions when the quote fetch exceeds its deadline and no daily close exists
     Given an offline account holds "AAPL" and "MSFT" with no broker valuation (current_price 0)
     And no daily bar exists for either symbol within portfolio.marketdata.last_close_lookback_days

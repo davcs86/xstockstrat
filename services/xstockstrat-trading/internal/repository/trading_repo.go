@@ -90,7 +90,8 @@ func (r *TradingRepo) UpsertOrder(ctx context.Context, o *tradingv1.Order) error
 		statusStr(o.Status), o.Qty, o.FilledQty,
 		nullableFloat(o.LimitPrice), nullableFloat(o.StopPrice), nullableFloat(o.FilledAvgPrice),
 		tifStr(o.TimeInForce), o.StrategyId, o.UserId, modeStr(o.TradingMode),
-		false, createdAt, updatedAt,
+		// Fixed by the first insert: ON CONFLICT never updates requires_approval.
+		o.Status == tradingv1.OrderStatus_ORDER_STATUS_PENDING_APPROVAL, createdAt, updatedAt,
 		o.AccountId, int32(o.BrokerType), nullableTime(o.FilledAt), o.Fees,
 	)
 	return err

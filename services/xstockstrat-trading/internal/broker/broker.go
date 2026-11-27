@@ -3,7 +3,17 @@ package broker
 import (
 	"context"
 	"errors"
+	"time"
 )
+
+func callTimeout(fn func() time.Duration) time.Duration {
+	if fn != nil {
+		if d := fn(); d > 0 {
+			return d
+		}
+	}
+	return defaultTimeoutMs * time.Millisecond
+}
 
 // ErrInvalidCredentials is returned on a definitive broker auth rejection (HTTP 401/403) or
 // deterministically unusable credentials; may come from any broker call, not only ValidateCredentials.

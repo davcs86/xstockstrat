@@ -116,7 +116,7 @@ Seeds live across `migrations/*.up.sql`; the reader↔seed baseline is `scripts/
 
 ```text
 GRPC_PORT=50060
-APPLICATION_ENV=development  # development | production — default environment scope for this instance
+APPLICATION_ENV=development  # telemetry resource attribute only (deployment.environment) — not a config scope
 DATABASE_CA_CERT=<PEM>                 # required unless sslmode=disable — docs/patterns/database.md
 CONFIG_SECRETS_ENCRYPTION_KEY=<hex, 32 bytes>  # required (feature 147) — AES-256-GCM master key for secret rows; service FAILS TO BOOT if unset. Same custody as BROKER_ACCOUNTS_ENCRYPTION_KEY
 ```

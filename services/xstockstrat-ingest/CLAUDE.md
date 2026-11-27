@@ -185,6 +185,8 @@ errors may print the FQN `ingest.<key>`.
 > with `x-internal-caller: ingest` under config's `keyPrefixes: ['mcp_credential.']` grant, which is
 > bound to the mTLS peer SAN `xstockstrat-ingest`. A missing or empty bearer marks the source
 > "bearer not configured". It is never in `config_json` and never returned by any read edge.
+> A secret no source of the same owner references is reclaimed by the operator orphan sweep after
+> its grace window (`docs/runbooks/config-rollout.md`).
 
 ## Ledger Events Emitted
 
@@ -194,7 +196,7 @@ errors may print the FQN `ingest.<key>`.
 | `ingest.backfill.running` | Job started |
 | `ingest.backfill.completed` | Job done |
 | `ingest.backfill.failed` | Job error |
-| `ingest.signal.ingested` | Newsletter signal persisted |
+| `ingest.signal.ingested` | Newsletter signal persisted; carries the signal owner as `AppendEventRequest.user_id` on both paths. On the `mcp_client` loop path `correlation_id` is one id per source per poll cycle (also sent as `x-trace-id`); on the `IngestSignal` RPC path it is empty |
 | `audit.admin_read` | An ADMIN read another owner's sources/signals (feature 224; 1 event on the admin's stream + 1 per foreign owner) |
 
 ## Running Tests

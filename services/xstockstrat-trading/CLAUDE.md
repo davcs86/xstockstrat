@@ -10,7 +10,7 @@ Go gRPC service responsible for order execution and trade lifecycle management. 
 
 **Alpaca API ownership**: `xstockstrat-trading` is the sole integration point for Alpaca's **broker/order APIs** (`/v2/orders`, `/v2/account`). `xstockstrat-marketdata` owns Alpaca's **market data APIs** — these are separate API surfaces and separate responsibilities.
 
-**Paper vs live**: Mode is resolved per order from the account's persisted `is_paper` / the `trading.broker.paper` live config, falling back to the `TRADING_MODE` env var (there is **no** `ALPACA_PAPER` env var — no code reads one). Paper routes to `https://paper-api.alpaca.markets`; live routes to `https://api.alpaca.markets`.
+**Paper vs live**: Mode is resolved per order from the account's persisted `is_paper` and the `trading.broker.paper` live config (seeded per environment); with no row, trading resolves paper unless `APPLICATION_ENV` is `production`. `TRADING_MODE` no longer affects trading's paper/live (feature 321), and there is **no** `ALPACA_PAPER` env var — no code reads one. Paper routes to `https://paper-api.alpaca.markets`; live routes to `https://api.alpaca.markets`.
 
 **Order types & trailing stops**: `PlaceOrder` supports `market`/`limit`/`stop`/`stop_limit`/`trailing_stop`. A `trailing_stop` order requires **exactly one** of `PlaceOrderRequest.trail_price` / `trail_percent` (sent to Alpaca as `trail_price`/`trail_percent`); any other order type must leave both zero — both rules are validated up front with `InvalidArgument` so a bad request never reaches the broker as a 422. `ReplaceOrder.trail` updates a working trailing stop (Alpaca's PATCH body uses a single `trail`).
 
@@ -18,7 +18,7 @@ Go gRPC service responsible for order execution and trade lifecycle management. 
 
 **Automatic position sizing**: `ComputePositionSize` triggers whenever `PlaceOrder` receives `qty <= 0` (FR-5) — an explicit `qty` bypasses it entirely (override mode). It sizes from account equity (`ListPortfolios`, not `GetPortfolio` — see the Config Keys table's `risk.max_concentration_pct` row), a Wilder ATR(14)-derived stop distance (`xstockstrat-marketdata` `GetBars`), the request's `confidence` (0.0–1.0, defaults to 1.0 when unset), and a portfolio concentration cap. **Fail-closed**, unlike the pre-existing warn-only `checkPortfolioRisk` below: missing/insufficient equity, bar history, or quote data aborts the order rather than sizing to a fallback value. `trading.risk.sizing_enabled=false` rejects any order submitted without an explicit `qty` instead of silently bypassing sizing.
 
-**Broker account registration mode is environment-owned**: `RegisterBrokerAccount` ignores the (deprecated) `is_paper` request field and derives the account's mode from the environment (`trading.broker.paper` config / `TRADING_MODE` env), so users cannot register an account in a mode the deployment does not run. The UI reads `GetTradingEnvironment` to display the fixed mode instead of offering a paper/live choice.
+**Broker account registration mode is environment-owned**: `RegisterBrokerAccount` ignores the (deprecated) `is_paper` request field and derives the account's mode from the environment (`trading.broker.paper` config, seeded per environment; with no row, paper unless `APPLICATION_ENV` is `production`), so users cannot register an account in a mode the deployment does not run. The UI reads `GetTradingEnvironment` to display the fixed mode instead of offering a paper/live choice.
 
 **Credential health and offline accounts** (feature 157/159/240): credential validation and its poller, the `BROKER_TYPE_OFFLINE` record-not-route path (incl. the `CancelOrder` offline guard) and the `ConfirmOrder` offline fields live in this service's `docs/` folder (**`offline-accounts.md`**).
 
@@ -78,16 +78,16 @@ namespace-relative; logs and errors may print the FQN (`platform.trading_state`)
 | `risk.atr_multiplier` | float | `1.5` | Stop distance as a multiple of ATR(14) |
 | `risk.max_concentration_pct` | float | `0.10` | Max fraction of equity in any single auto-sized position — enforcing, unlike the warn-only `max_position_pct` above |
 | `risk.sizing_enabled` | bool | `true` | Master gate for `ComputePositionSize`; `false` rejects any order submitted without an explicit `qty` |
-| `broker.paper` | bool | `true` | Route orders to paper API when true; live API when false. Also the source of truth for the mode new broker accounts are registered in. |
-| `broker.timeout_ms` | int | `5000` | Alpaca broker HTTP call timeout. Read live before every request (`brokerCallTimeout`) and applied as the deadline of each attempt. |
+| `broker.paper` | bool | environment-derived: paper unless `APPLICATION_ENV=production`; seeded staging `true`, production `false` | Route orders to paper API when true; live API when false. Also the source of truth for the mode new broker accounts are registered in. Changing it does not re-route already-registered accounts (they keep their persisted `is_paper`). |
+| `broker.timeout_ms` | int | `5000` | Timeout of each Alpaca request and each signed IBKR request. Read live before every request (`brokerCallTimeout`) and applied as the deadline of each attempt. |
 | `broker.adaptive_rate_limit_enabled` | bool | `true` | Feature 347 — kill switch for adaptive Alpaca broker pacing (Alpaca only; IBKR is not affected). **Explicit `true` default** (a missing key must not read as disabled). `true`: the Alpaca client paces from `X-RateLimit-Limit`/`Remaining`/`Reset` and retries an HTTP 429 inside a budget (§ Adaptive rate limit); `false`: every broker call is one unpaced attempt, as before. Read live on every Alpaca request (`alpacaRateLimitBudget`). Seeded by the `alpaca_adaptive_rate_limit_keys` config migration. |
 | `ibkr.lst_refresh_margin_ms` | int | `60000` | Refresh an IBKR account's cached live session token (LST) this long before its `live_session_token_expiration`. Read live per handshake; `<= 0` reads as the default. |
-| `ibkr.handshake_timeout_ms` | int | `10000` | Detached bound on one IBKR LST + `ssodh/init` handshake. Read live per handshake; `<= 0` reads as the default. Independent of `IBKRRequestTimeout`. |
+| `ibkr.handshake_timeout_ms` | int | `10000` | Detached bound on one IBKR LST + `ssodh/init` handshake. Read live per handshake; `<= 0` reads as the default. Independent of `broker.timeout_ms` (the handshake keeps its own bound). |
 | `ibkr.reauth_min_interval_ms` | int | `30000` | IBKR negative-cache and 401-invalidation throttle: at most one LST request per interval per account with bad credentials. Read live per handshake; `<= 0` reads as the default. |
 | `credential_health.interval_ms` | int | `300000` | Interval for the background poller that re-validates each broker account's API secrets. Read live on every cycle; set to `0` (or negative) to disable/pause the poller without a restart. |
 | `fill_poller.interval_ms` | float | `5000` | Interval for the order-fill reconciliation poller (`pollFills`). Read live on every cycle. |
 | `position_sync.interval_ms` | float | `300000` | Interval for the broker position/balance sync poller (`syncPositions`). Read live on every cycle. |
-| `order_intent.stale_multiplier` | float | `3.0` | Multiplier applied to `max(live trading.broker.timeout_ms, IBKRRequestTimeout)` to derive the PENDING-intent staleness threshold; read live, floor-clamped in code to ≥1.5 so a misconfigured multiplier can never push the threshold below the live broker timeout. |
+| `order_intent.stale_multiplier` | float | `3.0` | Multiplier applied to `max(live trading.broker.timeout_ms, 10 s)` (the floor is `broker.IBKRDefaultHandshakeTimeout`) to derive the PENDING-intent staleness threshold; read live, floor-clamped in code to ≥1.5 so a misconfigured multiplier can never push the threshold below the live broker timeout. |
 | `order_intent.sweep_interval_ms` | int | `5000` | Interval for `StartOrderIntentSweeper`, the proactive reclaim loop that transitions orphaned `PENDING` intents to `UNKNOWN` after an unattended crash (no retry needed). Matches `fill_poller.interval_ms`'s existing default. |
 | `risk.bracket_orders_enabled` | bool | `true` (all environments) | Master gate for automatic stop-loss/take-profit bracket orders on auto-sized entries. Production was seeded `false` (pending feature 103) by feature 030, but the pre-189 config bug meant the getter always returned its code default `true`, so production actually ran with brackets ON; feature 189 (migration 029) bumped the production seed to `true` to preserve that behavior once config resolution was fixed (operator sign-off, feature 189 context.md). |
 | `risk.take_profit_rr_multiple` | float | `2.0` | Reward-to-risk multiple for the take-profit leg; `0` disables the take-profit leg (stop-loss only) |
@@ -115,7 +115,7 @@ never wedge the sync loop. Likewise every ledger `AppendEvent` is bounded (`ledg
 
 ## Approval Flow
 
-Orders requiring approval (above configured thresholds) are placed in `ORDER_STATUS_PENDING_APPROVAL` state and emit an alert via xstockstrat-notify. They never reach the broker: no Approve RPC or approval path exists yet, so `PENDING_APPROVAL` is currently terminal.
+Orders requiring approval (above configured thresholds) are placed in `ORDER_STATUS_PENDING_APPROVAL` state and emit an alert via xstockstrat-notify. They never reach the broker: no Approve RPC or approval path exists yet, so `PENDING_APPROVAL` is currently terminal. An approval-required order is persisted with `requires_approval = true`; `approved_by` / `approved_at` are not written.
 
 ## Ledger Events Emitted
 
@@ -184,6 +184,8 @@ order-intent staleness threshold; `rateLimitBudget` in `internal/service/order_i
 | 5 s | 3.0 | 30 s | 20 s |
 | 5 s | 1.5 | 15 s | 5 s (single attempt) |
 | 10 s | 1.5 | 15 s | 10 s (single attempt) |
+| 10 s | 3.0 | 30 s | 10 s (single attempt) |
+| 10 s | 4.0 | 40 s | 20 s |
 | 1 s | 3.0 | 30 s | 28 s |
 
 - **Trading fails fast.** A non-zero wait starts only if the wait plus one full `T` still ends by the call's
@@ -229,7 +231,7 @@ Position-sync heartbeat/watchdog, `loop tick ok` loops, instruments (incl. the f
 
 ```text
 # GRPC_PORT and the *_ENDPOINT vars: see docker-compose.yml / internal/config/config.go
-TRADING_MODE=paper                     # paper | live
+TRADING_MODE=paper                     # no longer read for trading's paper/live (APPLICATION_ENV + trading.broker.paper); cleanup: feature 322
 BROKER_ACCOUNTS_ENCRYPTION_KEY=<hex>  # hex-encoded 32-byte AES-256 key; required when broker_accounts table is in use. Generate: openssl rand -hex 32
 ```
 

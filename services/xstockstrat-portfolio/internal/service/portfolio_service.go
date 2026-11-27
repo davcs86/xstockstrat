@@ -1712,14 +1712,30 @@ func (s *PortfolioService) processAccountDeregistered(ctx context.Context, event
 	}
 	s.positionsMu.Lock()
 	defer s.positionsMu.Unlock()
+	stop := func() error {
+		slog.DebugContext(ctx, "account deregistration stopped: context done", "account_id", payload.AccountID)
+		return ctx.Err()
+	}
 
 	// Purge all positions for the account (empty present-set deletes every row) and its realized row.
 	var failures []error
+	if ctx.Err() != nil {
+		return stop()
+	}
 	if err := s.repo.DeletePositionsNotInSync(ctx, payload.AccountID, userID, []string{}); err != nil {
+		if ctx.Err() != nil {
+			return stop()
+		}
 		slog.WarnContext(ctx, "deregister: delete positions failed", "account_id", payload.AccountID, "error", err)
 		failures = append(failures, fmt.Errorf("delete positions: %w", err))
 	}
+	if ctx.Err() != nil {
+		return stop()
+	}
 	if err := s.repo.DeleteOfflineRealized(ctx, payload.AccountID); err != nil {
+		if ctx.Err() != nil {
+			return stop()
+		}
 		slog.WarnContext(ctx, "deregister: delete offline realized failed", "account_id", payload.AccountID, "error", err)
 		failures = append(failures, fmt.Errorf("delete offline realized: %w", err))
 	}
@@ -1856,6 +1872,10 @@ func (s *PortfolioService) processBracketUpdate(ctx context.Context, event *ledg
 		return
 	}
 	if err := s.repo.UpdatePositionBracket(ctx, upd.UserID, upd.Symbol, upd.TradingMode, upd.AccountID, upd.StopOrderID, upd.TakeProfitOrderID); err != nil {
+		if ctx.Err() != nil {
+			slog.DebugContext(ctx, "bracket update stopped: context done", "symbol", upd.Symbol)
+			return
+		}
 		slog.WarnContext(ctx, "update position bracket failed", "symbol", upd.Symbol, "error", err)
 	}
 }
@@ -1915,6 +1935,10 @@ func (s *PortfolioService) processBalanceSync(ctx context.Context, event *ledger
 		userID = "default"
 	}
 	if err := s.repo.UpsertAccountBalance(ctx, bal.AccountID, userID, bal.TradingMode, bal.Cash, bal.BuyingPower, bal.Equity, bal.LastEquity); err != nil {
+		if ctx.Err() != nil {
+			slog.DebugContext(ctx, "balance sync stopped: context done", "account_id", bal.AccountID)
+			return
+		}
 		slog.WarnContext(ctx, "upsert account balance failed", "account_id", bal.AccountID, "error", err)
 	}
 }

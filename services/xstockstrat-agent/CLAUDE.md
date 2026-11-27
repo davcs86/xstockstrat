@@ -101,7 +101,8 @@ indicators backend enforces an **author-ownership** check instead (no admin over
 It is not a hardcoded-admin forwarder and was left unchanged by feature 092.
 
 `manage_signal_source`/`instantiate_template` write a source bearer as the caller's own per-user secret
-under an opaque `ingest.mcp_credential.<uuid>` key.
+under an opaque `ingest.mcp_credential.<uuid>` key. A failed register leaves the secret unreferenced;
+the operator orphan sweep (`docs/runbooks/config-rollout.md`) reclaims it.
 
 ### OAuth 2.1 edge auth (feature 049 Part B)
 
@@ -126,7 +127,11 @@ deadline is derived per call by `client.formula_deadline_s()`: `sandbox.timeout_
 | `extract.max_bytes` | int | `5000000` | Max response body bytes read before the `extract_*` fetch aborts (feature 207) |
 | `extract.connect_timeout_seconds` | float | `10.0` | Connect timeout for the `extract_*` fetch (feature 207) |
 | `extract.read_timeout_seconds` | float | `30.0` | Read timeout for the `extract_*` fetch (feature 207) |
-| `opportunities.read_timeout_seconds` | float (int accepted) | `40` | gRPC deadline (s) on analysis `ListOpportunities` (feature 227); invalid/≤0 → `40`; bounded `[30,55]`; seeded by config migration `041` |
+| `extract.call_budget_seconds` | float | `35` | Whole-call budget (s) for the `extract_*` URL fetches, entered after `_get_source` and the attachments (feature 314); non-finite/≤0 → `35`; SetConfig-bounded `[5,35]` (auth 10 + source lookup 10 + budget ≤ 55 s); seeded by the `*_mcp_deadline_budget` config migration |
+| `opportunities.read_timeout_seconds` | float (int accepted) | `40` | gRPC deadline (s) on analysis `ListOpportunities` (feature 227); invalid/≤0 → `40`; SetConfig-bounded `[30,44]` so auth 10 + policy read 3 + value ≤ 57 s (feature 314); seeded by config migration `041` |
+
+Per-user rows of `opportunities.read_timeout_seconds` are never read (the agent watches global config only), so
+the `*_mcp_deadline_budget` clamp leaves them as stored; a future per-user watch must re-run that clamp first.
 
 ## Observability (feature 294-signal-map-instrumentation)
 

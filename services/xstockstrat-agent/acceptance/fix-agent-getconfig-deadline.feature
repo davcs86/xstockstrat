@@ -14,7 +14,8 @@ Feature: xstockstrat-agent - get_config_value is deadline-bounded
     When the agent calls get_config_value for "signal.alert_threshold" in namespace "agent"
     Then the call raises a gRPC DEADLINE_EXCEEDED error within D plus 0.5 seconds
 
-  @AC-2 @FR-2 @regression @feature-247
+  # Changed by feature 314 (C-16, operator sign-off 2026-11-20): the default fetch policy now includes the whole-call budget agent.extract.call_budget_seconds (default 35 s).
+  @AC-2 @FR-2 @regression @feature-247 @feature-314
   Scenario: extract_website_content proceeds with its default fetch policy
     Given the config service accepts connections but never answers GetConfig
     And a registered website source "acme-site" with has_credentials false
@@ -23,7 +24,7 @@ Feature: xstockstrat-agent - get_config_value is deadline-bounded
     Then the tool returns {raw_text: <the page text>}
     And it returns within 4 × D plus 1 second plus the page fetch time
     # Supporting unit check (internal state, not consumer-observable): _fetch_url runs with the defaults
-    # max_redirects 5, max_bytes 5000000, connect_timeout 10.0 s and read_timeout 30.0 s.
+    # max_redirects 5, max_bytes 5000000, connect_timeout 10.0 s, read_timeout 30.0 s and call_budget 35.0 s.
 
   @AC-3 @FR-2 @regression @feature-247
   Scenario: ingest_signal returns and alerts against the default threshold

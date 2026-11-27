@@ -411,3 +411,287 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - [ ] Step 9 is a verification-only `test` step (no new source); the per-step presence checks in Steps 3–7 are the RED evidence it re-runs — Step 9.
 - [ ] `CountPositions` stays as dead code with findings row `:37` narrowed and open; a separate defect owns its deletion — Step 1.
 - [ ] Peer impl specs other than 322's were not read at file level (311 and 324 overlap is from their product specs and context.md) — /sdd-execute Phase 1 re-grep.
+
+## Session 2026-11-26 — sdd-spec re-spec (operator ruling: split Step 9 by surface)
+
+- Trigger: an `/sdd-execute` preflight blocker. Step 9's `**Service**` listed backend services and `xstockstrat-agent` together, and the surface rule (`.claude/skills/sdd-execute/reference/sequential-mode.md` §5.5b: `xstockstrat-ui` → `ui`, `xstockstrat-agent` → `agent`, everything else → `backend`) maps one step to one surface. Operator ruling (2026-11-26): split the step. `implementation-spec.md` now has 10 steps; `feature.md` (Artifacts line, Reviewers step refs, Last Updated) is updated. Status stays `implementation-ready`.
+- Tree: `origin/feature/fix-orphaned-code` @ `42776a1f`. `main-dev` had moved far past the 2026-11-20 stamp (`d97bb9c4`), so every anchor in every step was re-grepped, not only the split step's. Nearly all line numbers shifted (portfolio repo, ci.yml, findings rows, root lock `packages:`/`snapshots:`); the step bodies carry the new ones. Other drift fixed: `scripts/check-watcher-copies.sh` is now `.py`; the four service `CLAUDE.md` "not node-pg-migrate" lines are gone; `scripts/run-e2e.sh` is `scripts/run-e2e.py`; ui `build` now chains `checkThemeBundle.cjs`; `merge-order.md` now mentions 323 at `:129` and `:420-426`, so Step 4's "absent" grep is scoped to `Textual overlap: 323`.
+- New step map (surface in brackets): 1 portfolio service [backend] + 2 portfolio test [backend] (the only atomic unit, `**Lands with**`); 3 config delete [backend]; 4 Node leaves + root lock [backend]; 5 marketdata [backend]; 6 ingest [backend]; **7 backend verification [backend]**, `**Covers**: AC-2`; 8 agent delete [agent] (old Step 7); **9 agent verification [agent]**, `**Covers**: AC-2, AC-3`; 10 ui comment [ui] (old Step 8). Renumbering: old 1–6 unchanged, old 7 → 8, old 8 → 10, old 9 → 7 (config, ledger, identity, notify, marketdata, ingest, item-5 evidence in analysis) plus 9 (agent). Surfaces are contiguous (`backend` 1–7, `agent` 8–9, `ui` 10), so `/sdd-execute sequential` checkpoints fall at: step cap after Step 5 (Steps 1+2 count as two), surface boundaries after 7 and 9, feature end after 10.
+- Scenario coverage (C-15): @AC-1 → Step 2; @AC-2 → Step 7 (backend items) and Step 9 (agent item); @AC-3 → Step 9 (gate also runs in Step 8). Step Dependencies and the Execution Summary were rewritten; no step now exceeds the 4-step unit cap and none crosses a surface.
+- Earlier session entries and their Open Threads above keep the old numbering (append-only): read their "Step 7" as 8, "Step 8" as 10, and "Step 9" as 7 plus 9.
+- Self-review (no subagent tool available in this session, so this was a hand review against `impl-spec-criteria.md` §B2, §B3 and §B3b, not a `spec-reviewer` run): evidence populated and re-grepped for all 10 steps; every `**Verification**` is a runnable command with the threshold stated (c8 `--lines 40`, Go ≥ 40%, `--cov-fail-under=40`); every non-frontend `service` step has a paired `test` step (2 for 1, 7 for 3–6, 9 for 8); `**Lands with**` is symmetric, adjacent, single-surface, 2 members. One FAIL remains and is not fixable by this re-spec: Step 8 matches the §C trigger "deletes a referenced resource" without a step that repoints the references (O-1 below). Everything else passes; the earlier advisory warnings (Step 4 has 11 files; Steps 3 and 6 have 6) stand as accepted.
+- New findings (both caused by feature 355, now `launched`, which `merge-order.md:129` made 323 wait for):
+  - O-1: `services/xstockstrat-agent/app/prompts/signal_extraction.md` is read by three assertions in `services/xstockstrat-agent/tests/test_extraction_instructions.py` (`:298`, `:305`, `:319`) and asserted by durable `@AC-15 @feature-355` in `services/xstockstrat-agent/acceptance/mediated-source-extraction-instructions.feature:54-59`. 355's recorded decision (its `context.md:23`) and `merge-order.md:129` say the edit-vs-delete conflict "resolves as a delete" but do not cover those assertions. Step 8 carries a blocking precondition and was not otherwise changed.
+  - O-2: `merge-order.md:129` says 323 "re-decides `noop.py` against what 355 shipped". 355 added `_MEDIATED_EXTRACTOR_MODULE = "app.extractors.noop"` (`services/xstockstrat-ingest/app/handlers/servicer.py:78`), stored on every mediated source and never imported. Step 6 keeps the delete (D-3, R-3); the re-decision is unrecorded.
+
+## Open Threads
+
+- [ ] O-1: operator to rule on `signal_extraction.md` — delete it and retarget or remove the three agent test assertions plus durable `@AC-15` (explicit sign-off, C-15/C-16), or keep the file and drop Step 8. After the ruling, re-spec Step 8 (list the test and acceptance edits in `**Files**`, add `**Lands with**` to the repointing step) and re-run `/sdd-review fix-orphaned-code impl-spec` — Step 8, Step 9.
+- [ ] O-2: operator to confirm that `noop.py` is still deleted now that 355 stores its dotted name on every mediated source — Step 6.
+- [ ] Peer 322's impl spec (`origin/feature/fix-retired-surface-proto-cleanup` @ `e1c1f040`) was not re-read at this re-spec; its Step 27 (`alpaca/client.go`) still needs a re-grep against Step 5's `:817-825` at execute time — Step 5.
+- [ ] Step 4 still needs Docker for `docker compose build` and still lists 11 files (accepted earlier) — Step 4.
+
+## Session 2026-11-26 — operator rulings O-1 and O-2, recorded by the orchestrator (verbatim)
+
+Two rulings on the open items the previous re-spec raised, relayed by the orchestrator.
+
+**O-1.**
+
+- Question (verbatim): "323 (fix-orphaned-code), Step 8 blocker (found by the re-spec): the step deletes services/xstockstrat-agent/app/prompts/signal_extraction.md as an orphan, but feature 355 (now launched) made agent tests read that file (tests/test_extraction_instructions.py :298, :305, :319) and the durable scenario @AC-15 @feature-355 asserts its content. Deleting it as specced turns three agent tests red. What should 323 do?"
+- Answer (verbatim): "Keep the file, drop that step (Recommended)" — option text: "The file is no longer orphaned (355 tests and @AC-15 depend on it): remove the deletion from 323's scope, record why, no durable-suite change."
+
+**O-2.**
+
+- Question (verbatim): "323, Step 6 (ingest orphan extractors): merge-order.md:129 says 323 must re-decide noop.py against what 355 shipped. 355 added _MEDIATED_EXTRACTOR_MODULE = "app.extractors.noop" at services/xstockstrat-ingest/app/handlers/servicer.py:78, stored on every mediated source but never imported. Step 6 currently deletes noop.py with the other orphan extractors. What should 323 do with noop.py?"
+- Answer (verbatim): "Keep noop.py (Recommended)" — option text: "It is the module name every mediated source stores (the string is a data reference even though it's never imported); deleting the file leaves a dangling module path. Drop it from Step 6's deletions and record why."
+
+### Changes applied to `implementation-spec.md` and `feature.md` (now 9 steps)
+
+- The agent deletion step (the previous Step 8) is removed. The agent surface keeps one step: the former agent verification, now **Step 8**, a regression check with `**Covers**: AC-3` (`green` run of `tests/test_config_watcher.py` and the agent gate; the `red N/A — no behavior change` escape is stated, since no agent file changes). The ui comment step is now **Step 9**. New map: 1+2 portfolio (backend, one unit), 3 config, 4 Node leaves, 5 marketdata, 6 ingest, 7 backend verification (all backend), 8 agent regression check (agent), 9 ui comment (ui). One surface per step; the only unit is still 1+2, under the 4-step cap. `/sdd-execute sequential` checkpoints: step cap after Step 5, surface boundaries after 7 and 8, feature end after 9.
+- Step 6 no longer deletes or lists `noop.py`; it still deletes `example_simple_email.py` and `tests/test_extractor.py` and trims the five non-MCP dataclasses (`RawInput = McpClientInput`; `noop.py` keeps importing `BaseExtractor` and the `RawInput` name, both left in place). Its Verification now asserts `noop.py` is still tracked, drops `NoopExtractor` from the "no output" grep, and its findings instruction resolves `:22` for the example extractor and dataclasses while narrowing the row to `noop.py` as kept (O-2). `tests/test_extractor.py` still goes whole: its noop tests (`:82`, `:132`) build the five dataclasses the step removes, so they cannot be kept without rewriting them, which the ruling did not ask for.
+- Step 7's file-presence check drops `noop.py` (and asserts it is kept); its `**Covers**` line records the exclusion.
+- Execution Summary, Scenario Coverage, Step Dependencies and the C-14 text were rewritten for the new numbering; the findings-row references to the ui step now say Step 9. All affected greps were re-run on the 2026-11-26 tree; no anchor changed (this re-spec only removes scope).
+- Self-review (no subagent tool in this session, so a hand review against `impl-spec-criteria.md` §B2, §B3, §B3b, not a `spec-reviewer` run): evidence present and re-grepped for the changed steps; every `**Verification**` is a runnable command with its threshold stated; non-frontend `service` steps 1, 3–6 each have a paired `test` step (2, 7); Step 8 is a test step with no service step by design (stated in Step Dependencies); `**Lands with**` is symmetric, adjacent, one surface, two members. The earlier B3b FAIL on the agent deletion is gone with the step. No FAIL remains; the earlier advisory warnings stand (Step 4 lists 11 files; Steps 3 and 6 list 6).
+
+### Still open (not edited by this session)
+
+- `acceptance.feature` `@AC-2` still names `noop.py` and `signal_extraction.md` in its Given and says "none of them exists", which can no longer be true. Step 7 covers `@AC-2` for every other listed item. Scenarios were not edited; the operator needs to approve an amendment (drop those two names from the Given), or accept the scenario as partially covered. `@AC-3` is covered by Step 8 and `@AC-1` by Step 2 as before.
+- `merge-order.md:129` (the 323 ↔ 355 row) describes a delete-vs-edit conflict that the rulings dissolved, and 355 is `launched`; the row likely needs updating or removal by whoever owns that file. Not edited here.
+- `product-spec.md`, `design.md` (D-3) and `feature.md`'s Summary ("Ten orphaned modules…") still count the two kept files among the deletions; `docs/reports/2026-10-19-orphaned-code-defect.md` items 6 (the `noop.py` half) and 8 therefore stay unresolved when 323 merges.
+- `services/xstockstrat-agent/docs/context-constitution-findings.md:36` still says `signal_extraction.md` is "still unreferenced"; 355's tests now read it. No step edits agent docs.
+- `noop.py` is left without a dedicated test once `tests/test_extractor.py` is deleted; the operator may want a minimal replacement test or accept that.
+- Peer 322's impl spec was not re-read; its Step 27 (`alpaca/client.go`) needs a re-grep against Step 5's `:817-825` at execute time. Step 4 still needs Docker for `docker compose build`.
+
+## Session 2026-11-26 — operator ruling on AC-2 and noop.py test, recorded by the orchestrator (verbatim)
+
+- Question (verbatim): "323 follow-up from the re-spec: @AC-2 in 323's own acceptance.feature still says the files noop.py and signal_extraction.md (among the orphans) no longer exist, which can't be true now that you chose to keep both. Also the spec still deletes tests/test_extractor.py whole, which leaves noop.py with no test. How should I handle these?"
+- Answer (verbatim): "Amend @AC-2, add a noop test (Recommended)" — option text: "Reword @AC-2 (same ID, Given/When unchanged) to list only the files actually deleted, and add a minimal replacement test for noop.py in Step 6 so it is not left untested. Recorded with your answer; 323 then needs a small re-spec and re-review."
+
+### Changes applied (the spec stays at 9 steps; no renumbering)
+
+- `acceptance.feature` `@AC-2`: ID, tags, title, Given and When unchanged (C-15 append-only IDs holds). The Then is split in three lines: the deleted items (configWatcher.ts and its test, the four migrate scripts and `node-pg-migrate` devDependencies, notify `jsonwebtoken`/`bcrypt`, `AlpacaAsset`, `example_simple_email.py`, `tests/test_extractor.py`), "ingest noop.py and agent signal_extraction.md still exist", and the build-and-test line. A comment above the tag records the amendment. The title still reads "are gone"; only the Then was reworded, as ruled.
+- Step 6: new file `services/xstockstrat-ingest/tests/test_noop_extractor.py` (confirmed absent; created from scratch). Three tests replace the noop assertions in the deleted `test_extractor.py` (`:83-84`, `:86-111`, `:124-128`, `:132-143`) without any of the five removed dataclasses: `issubclass(NoopExtractor, BaseExtractor)`; `import_module(servicer_mod._MEDIATED_EXTRACTOR_MODULE).NoopExtractor is NoopExtractor` (pins the label 355 stores to the kept module); `await NoopExtractor().extract(McpClientInput(result_items=[...])) == []`. Pattern: `tests/test_mcp_client_extractor.py:9-12,48`, `asyncio_mode = "auto"` (`pyproject.toml:34`), `from app.handlers import servicer as servicer_mod` (`tests/test_seed_source_templates.py:17`). TDD note in the step: a characterization test of kept code has no RED; GREEN pre-edit, and it must stay GREEN after the `base.py` trim (it guards `noop.py`'s `BaseExtractor`/`RawInput` imports). Verification adds the test run and a `grep -c` of 3. The pairing is unchanged (service Step 6, paired test Step 7, whose ingest pytest run now includes it); no unit grows.
+- Scenario Coverage: `@AC-2` → Step 7 (deleted items, `noop.py` kept) and Step 8 (`signal_extraction.md` kept); `@AC-3` → Step 8; `@AC-1` → Step 2. Step 8 now has `**Covers**: AC-2, AC-3` with a `git ls-files` check that the prompt remains; Step 7's `**Covers**` says "backend part".
+- Counting text: the Execution Summary, the re-spec findings list (the `@AC-2` open item is removed) and `feature.md`'s Summary ("Ten orphaned…" now says two were later kept, eight removed) are updated.
+- Self-review (no subagent tool in this session, so a hand review against `impl-spec-criteria.md` §B2, §B3, §B3b, not a `spec-reviewer` run): every new anchor was grepped; the new test's two non-servicer tests were run locally (the async one needs `pytest-asyncio`, and the servicer import needs `asyncpg` and generated stubs, neither installed in this sandbox, so the full file was not run here and is first run by `/sdd-execute`); `ruff check` and `ruff format --check` on the file passed; every `**Covers**` ID exists in `acceptance.feature`; every scenario is covered; no FAIL.
+
+### Stale text not edited (this ruling did not authorize it)
+
+- `product-spec.md` and `design.md` (D-3 and its `noop.py` rationale) still list the `noop.py` and `signal_extraction.md` deletions and the "ten items" scope.
+- `docs/reports/2026-10-19-orphaned-code-defect.md` items 6 (the `noop.py` half) and 8 stay open when 323 merges.
+- `merge-order.md:129` (the 323 ↔ 355 row) describes a conflict that no longer exists.
+- `services/xstockstrat-agent/docs/context-constitution-findings.md:36` still says the prompt is "unreferenced".
+
+## Open Threads
+
+- [ ] Run `/sdd-review fix-orphaned-code impl-spec` again on the amended spec (operator ruling asks for a re-review) — all steps.
+- [ ] Stale text above (`product-spec.md`, `design.md`, defect report, `merge-order.md:129`, agent findings `:36`) needs a decision on who edits it — Step 6, Step 8.
+- [ ] `tests/test_noop_extractor.py` was not run end to end in the spec session; confirm GREEN pre-edit and post-trim at execute — Step 6.
+
+## Session 2026-11-26 — independent impl-spec review (spec-reviewer), recorded by the orchestrator
+
+- Verdict: **PASS WITH WARNINGS**, no blockers (independent spec-review of the 9-step spec at `f3ac2b05`).
+- Changes in `implementation-spec.md`:
+  - Step 8 `**TDD**` now reads `N/A (verification-only: no agent file or test changes; commands are green before and after)`; the "characterization test added" escape never applied to it.
+  - Step 6 `**TDD**` now uses the tdd-gate escape wording `red N/A — no behavior change; characterization test added` (`.claude/skills/sdd-execute/reference/tdd-gate.md:55-58`); the deletions' RED stays the presence check. Its Verification gained an optional mutation proof (drop the `RawInput = McpClientInput` line, expect `tests/test_noop_extractor.py` RED, re-insert it).
+  - Steps 7 and 8 `**Covers**` are bare ID lists (`AC-2`; `AC-2, AC-3`); the "backend part / agent part" split moved into their Instructions.
+  - Step 6 now states why it lists six files (the dataclass trim breaks `tests/test_extractor.py` and the example extractor, so trim, both deletions and the replacement test land in one green commit; the findings and constitution edits are same-step teardown).
+- Stale siblings were not rewritten. Supersession notes (`Superseded 2026-11-26 by operator rulings O-1/O-2: signal_extraction.md and noop.py are kept; see context.md`) were added as HTML comments at `product-spec.md:22`, `:24` and `:45`, above the two affected step paragraphs in `design.md` (D-3's ingest step and the agent step), and as an appended ruling note after the Settled Decisions table in `debate.md` (the settled D-3 row is untouched). `feature.md`'s Summary was already corrected in the previous session and is not stale.
+- Still open: the other warnings from the review beyond these five items were not relayed to this session; `merge-order.md:129`, defect report items 6 and 8, and agent findings `:36` remain as listed in the previous section.
+
+## Session 2026-11-26 — sdd-execute sequential (sdd-batch-execute)
+
+- Up-front confirmation: the operator approved the plan with this record (binding, verbatim):
+  `{"mainDev":"f802b184b13bd899d858c4b0349a616e9981b9d9","dev":"22f1e38c35c98c129af7918575089d0008b95228","specHash":"04a3135e53af15a167e50e30b9358a1c61303f5b","directive":"conditional","pending":[1,2,3,4,5,6,7,8,9],"mismatches":[{"n":1,"detail":"The UpdatePositionBracket call site is now services/xstockstrat-portfolio/internal/service/portfolio_service.go:1755, not :1747. Everything else matches: r.pool at :57/:247/:271/:379, queryRower :23-27, struct :30-35, constructors :46/:50-52, Pool() :56-58, Ge"},{"n":3,"detail":"services/xstockstrat-config/CLAUDE.md anchors have shifted on the merged tree. The WaitForSnapshot line is now :72 (spec says :68) and the APPLICATION_ENV line that Instruction 4 rewords is now :119 (spec says :114). All other Step 3 anchors match: configWatch"},{"n":4,"detail":"docs/roadmap/features/merge-order.md anchors are off by one. The 300↔304 precedent section is :363-373, not :362-371, and the 347/322/323 Alpaca overlap is :421-426, not :420-426. The claim that 324 is not mentioned is false: line :390 names fix-ci-enforcement"},{"n":5,"detail":"The git grep for AlpacaAsset (excluding docs/roadmap/features and docs/reports) also hits services/xstockstrat-trading/docs/context-constitution-findings.md:37, an old resolved note. The spec says there are only three hits. It is docs-only, and Step 5's Verifi"},{"n":6,"detail":"servicer.py anchors have shifted. The _MEDIATED_EXTRACTOR_MODULE constant is still at :78 with its comment at :77, but it is used at :1807 and :1903, not :1698/:1794. The extractor_module store sites are :1810-1812, :1862 and :1902-1905, not :1701-1703, :1753 "},{"n":8,"detail":"register_prompts is now at services/xstockstrat-agent/app/tools.py:2752, not :2749. Everything else matches: app/config contents, the importers (main.py:94,226, client.py:1145, tools.py:79, oauth_server.py:28), watcher.py:13, tools.py:89, main.py:87, test_extr"}]}`
+- Merged `origin/main-dev` @ `f802b184` into `feature/fix-orphaned-code` (`f08066ed`; no conflicts, ledger-guard clean).
+- Re-spec (directive conditional), only the drifted anchors in steps 1, 3, 4, 5, 6 and 8, each re-grepped on the merged tree:
+  - `e7af7f66` respec(fix-orphaned-code): align steps 1,3,4,5,6,8 with current codebase
+- Not re-spec'd (outside the step bodies): `## Step Dependencies` still cites `merge-order.md:420-426`; the live section is `:421-426`.
+- Tooling setup (steps 1-9): go1.27 ✓ · golangci-lint ✗ v2.5.0 present (the per-step install `GOTOOLCHAIN=go1.27.0 go install …@v2.14.0` is documented) · python 3.13 ✓ · uv ✓ · pnpm ✓ 9.15.9 · node v22 (Node 24 pinned; no `engines` constraint) · docker ✓ CLI.
+- Step 4 changes four `package.json` dependency sets and regenerates the root `pnpm-lock.yaml`. Under the sdd-batch-execute rule it must run through `/sdd-execute` outside `/sdd-batch-execute`.
+
+```sdd-batch-setup
+{"mainDev":"f802b184b13bd899d858c4b0349a616e9981b9d9","date":"2026-11-26"}
+```
+
+## Session 2026-11-27 — sdd-execute sequential (sdd-batch-execute), steps 1+2
+
+- Tooling setup (steps 1+2): go1.27 ✓ · golangci-lint ⬇ v2.14.0 (`GOTOOLCHAIN=go1.27.0 go install`, built with go1.27.0, at `/root/go/bin`; `/usr/local/bin` still holds v2.5.0, so the verification runs put `/root/go/bin` first on `PATH`).
+- Discovery re-verified at `origin/feature/fix-orphaned-code` @ `b0ee4e61`: `r.pool` at `portfolio_repo.go:57,247,271,379`; callers `portfolio_service.go:1212` (`GetSnapshot`), `:1755` (`UpdatePositionBracket`); `CountPositions` has none; findings rows `:37`, `:38`; the three tests absent.
+
+### Step 1 — service: portfolio — move the three `r.pool` stragglers to `r.db` [done]
+- Atomic unit steps 1+2. `GetSnapshot`, `CountPositions` and `UpdatePositionBracket` now use `r.db`; `Pool()` still returns `r.pool`. Portfolio findings `:37` marked `**RESOLVED (feature 323)**`; `:38` narrowed to "zero non-test callers" (kept open).
+- Files modified: `services/xstockstrat-portfolio/internal/repository/portfolio_repo.go`, `services/xstockstrat-portfolio/docs/context-constitution-findings.md`
+- Verification: `grep r\.pool` → only `57:	return r.pool`; build, vet, the three tests and `golangci-lint` (v2.14.0, `0 issues.`) pass.
+- Deviations: none
+
+### Step 2 — test: portfolio — pgxmock tests for `GetSnapshot`, `CountPositions`, `UpdatePositionBracket` [done]
+- Atomic unit steps 1+2. Added `TestGetSnapshot_UsesMockableDB` (subtests `row_returned`, `mock_error`), `TestCountPositions_UsesMockableDB` and `TestUpdatePositionBracket_UsesMockableDB`, each on `NewPortfolioRepoWithDB(mock)`.
+- TDD: AC-1 red: each test panicked with `invalid memory address or nil pointer dereference` in `pgxpool.(*Pool).Acquire(0x0, …)` from `portfolio_repo.go:247`, `:271`, `:379` → green: all three pass with both subtests listed; full race suite ok, coverage `total: (statements) 79.1%` (≥ 40%), `golangci-lint` `0 issues.`
+- Files modified: `services/xstockstrat-portfolio/internal/repository/portfolio_repo_test.go`
+- Deviations: none
+
+## Session 2026-11-27 — sdd-execute sequential (sdd-batch-execute), step 3
+
+- Tooling setup (step 3): pnpm ✓ 9.15.9 (worktree links the main checkout's `node_modules`; no install) · node v22 ✓ (Node 24 pinned; no `engines` constraint). Nothing installed.
+- Discovery re-verified at `origin/feature/fix-orphaned-code` @ `cf67cec5`: `ConfigWatcher` at `src/services/configWatcher.ts:18`; sole importer `src/__tests__/configWatcher.test.ts:23,26`; `src/services/logger.ts` exists (directory survives); `scripts/config-wiring.json:52-55` (4 entries); config `CLAUDE.md:119` (`APPLICATION_ENV`) and `:72` (generic `WaitForSnapshot` line, kept); findings `:4`, `:14`, `:35`, `## Resolved` `:37`; constitution `:3`, `:14`, `:44`; only other non-feature reference is the defect report.
+
+### Step 3 — service: config — delete the orphan `ConfigWatcher`, its test, its registry entries and its doc rows [done]
+- Deleted `configWatcher.ts` and its test (`git rm`) and the four `config-wiring.json` `dynamic` entries; reworded the `APPLICATION_ENV` comment to "telemetry resource attribute only"; moved findings rows `:14` and `:35` to `## Resolved` (dated 2026-11-27) and refreshed both docs' stamps; dropped the dead-copy clauses from the constitution's 90s pointer and CONFIG-1.
+- TDD: red (pre-edit presence check, `.sdd-logs/v-1.log`): `git ls-files` printed both paths and the registry `grep -c` printed `4` → green (`.sdd-logs/v-2.log`, `exit=0`): `git ls-files` empty, `0`, `3` kept `:lookup` entries; `config-wiring.test.mjs` 75/75 pass; config tests 396/396 pass (405 before; the deleted test's 9 cases gone); c8 `All files` lines 94.05% (≥ 40; was 92.31%); lint 0 errors. Config-key wiring gate: N/A (no key touched); `--final` ran in the Verification block anyway.
+- Files modified: `services/xstockstrat-config/src/services/configWatcher.ts` (deleted), `services/xstockstrat-config/src/__tests__/configWatcher.test.ts` (deleted), `scripts/config-wiring.json`, `services/xstockstrat-config/CLAUDE.md`, `services/xstockstrat-config/docs/context-constitution-findings.md`, `services/xstockstrat-config/docs/context-constitution.md`
+- Deviations: CONFIG-1 clause naming the deleted file also dropped; the emptied "Dead / orphaned code" table replaced by `_None open._` — full detail in Deviation Log.
+
+## Session 2026-11-27 — sdd-execute (by hand, outside sdd-batch-execute), step 4
+
+- Operator ruling 2026-11-27 (question: "Step 4 blocker: the batch runner won't run a Node dependency change that only this branch adds. How should Step 4 be handled?", answer: "A: I run Step 4 outside the batch (Recommended)"). Run in a fresh worktree on `origin/feature/fix-orphaned-code` @ `30bd94a0`; `origin/main-dev` @ `f802b184` was already an ancestor (BRANCH-SYNC: nothing to merge).
+- Tooling setup (step 4): Node v24.22.3 (`/opt/node24/bin`, per the CLAUDE.md pin) · pnpm 9.15.9 · `pnpm install --frozen-lockfile` run in the worktree (no symlinked `node_modules`) · Docker daemon already running; `node:24-alpine` pulled.
+- Discovery re-verified at `30bd94a0`: manifest lines as cited (ledger `:11,:54`; config `:11,:50`; identity `:11,:55`; notify `:11,:35,:36,:51,:52,:57`); notify `src/` has no `jsonwebtoken`/`bcrypt` use; findings rows ledger `:29`, notify `:33`, root `:65`; `grep -n "Textual overlap: 323" merge-order.md` empty before the edit.
+
+### Step 4 — service: Node leaves — remove dead dependencies and the `migrate` script, regenerate the root lock [done]
+- Removed the `migrate` script and `node-pg-migrate` devDependency from all four leaf manifests, plus notify's `jsonwebtoken`, `bcrypt`, `@types/jsonwebtoken`, `@types/bcrypt`. Identity: those two lines only (its `jsonwebtoken`/`bcrypt` and their `@types` stay). Root `pnpm-lock.yaml` regenerated with `pnpm install --lockfile-only` then `pnpm install --frozen-lockfile` (pnpm 9.15.9); no per-service lock touched.
+- Lock diff (D-7 expected shape): 87 deletions, 0 additions: the `node-pg-migrate` entries in the config, identity, ledger and notify importer blocks, notify's `bcrypt`/`jsonwebtoken`/`@types/bcrypt`/`@types/jsonwebtoken` importer entries, and the `packages:`/`snapshots:` entries for `node-pg-migrate@7.9.1` and its now-unshared closure (`glob@11.0.3`, `jackspeak@4.2.3`, `lru-cache@11.3.5`, `path-scurry@2.0.2`, `@isaacs/cliui@9.0.0`). The `bcrypt`/`jsonwebtoken`/`@types` package entries stay (identity).
+- TDD: red (pre-edit, repo root): `grep` printed the 8 `migrate`/`node-pg-migrate` lines and notify's 4 dead-dep lines; `pnpm why -r node-pg-migrate` listed config, identity, ledger, notify (`7.9.1`, devDependencies); `pnpm why -r bcrypt jsonwebtoken` listed identity and notify (`5.1.1`, `9.0.3`) → green (post-edit): both manifest greps print nothing, identity count `4`, identity diff `package.json | 2 --`, `pnpm install --frozen-lockfile` rc 0, `pnpm why -r node-pg-migrate` prints nothing, `pnpm why -r bcrypt jsonwebtoken` lists only `xstockstrat-identity` (`bcrypt 5.1.1`, `jsonwebtoken 9.0.3`), `git diff HEAD -- pnpm-lock.yaml | grep -c '^+[^+]'` = 0, `git status --porcelain -- 'services/*/pnpm-lock.yaml'` empty.
+- Per-leaf gates (`rm -rf dist`, `pnpm build`, `test:coverage`, `c8 check-coverage --lines 40`, `lint`), each rc 0 on Node 24: ledger 168/168 tests, c8 lines 85.78%; config 396/396, 94.05%; identity 169/169, 85.5%; notify 416/416, 90.7%; lint 0 errors in all four (warnings only).
+- D-12 evidence: `pnpm install --frozen-lockfile` → `Lockfile is up to date, resolution step is skipped` / `Already up to date`, rc 0. `docker compose build xstockstrat-ledger xstockstrat-notify xstockstrat-config xstockstrat-identity` rc 0, all four `Built`; each builder ran `RUN pnpm install --frozen-lockfile` uncached (`Lockfile is up to date, resolution step is skipped`; `Packages: +434` ledger, `+432` config, `+479` identity, `+446` notify) and the `pnpm deploy --prod` images contain no `node-pg-migrate`, notify has neither `bcrypt` nor `jsonwebtoken`, identity has both. Harness note: the build ran with a throwaway compose override (`build.network: host`) and a local `node:24-alpine` retag carrying `/root/.ccr/ca-bundle.crt` and the agent proxy env; the repo Dockerfiles and compose file are unchanged. The four images, the retag, the pulled base and the build cache were removed afterwards.
+- Docs: ledger `CLAUDE.md` banner, notify `CLAUDE.md` banner, ledger and notify findings (row moved to `## Resolved`, `_None open._`), root findings `:65` resolved in place plus one new row recording the four vestigial per-service `pnpm-lock.yaml` files (D-11), and `merge-order.md` gained `## Textual overlap: 323 ↔ 324 (2026-11-27, non-blocking)` (`grep -n "Textual overlap: 323"` → `:461`).
+- Files modified: `services/xstockstrat-{ledger,config,identity,notify}/package.json`, `pnpm-lock.yaml`, `services/xstockstrat-ledger/CLAUDE.md`, `services/xstockstrat-ledger/docs/context-constitution-findings.md`, `services/xstockstrat-notify/CLAUDE.md`, `services/xstockstrat-notify/docs/context-constitution-findings.md`, `docs/context-constitution-findings.md`, `docs/roadmap/features/merge-order.md`
+- Deviations: ledger banner names the two other open Latent-bugs rows because the large-payload stub row is already RESOLVED (feature 248); emptied Dead/orphaned tables replaced by `_None open._` — full detail in Deviation Log.
+
+## Session 2026-11-27 — sdd-execute sequential (sdd-batch-execute), step 5
+
+- Tooling setup (step 5): go1.27.0 ✓ · golangci-lint ✓ v2.14.0 built with go1.27.0 at `/root/go/bin` (put first on `PATH` for the runs; `/usr/local/bin` still holds the old one). Nothing installed.
+- Discovery re-verified at `origin/feature/fix-orphaned-code` @ `1cc3b665`: `AlpacaAsset` at `internal/alpaca/client.go:817-825` (last declaration, file 825 lines, `ListAssets` closes at `:815`); findings row `:35`, `## Resolved` at `:48`; the only other non-feature hit is the struck-through trading findings note `:37` (left unchanged, as specced). Peer 322's Step 27 hunks (`client.go:50,94-98,113` at its stamp) are disjoint from this tail deletion.
+
+### Step 5 — service: marketdata — delete the unreferenced `AlpacaAsset` type [done]
+- Deleted the `AlpacaAsset` comment and struct (and the blank line before it), so `client.go` ends at `ListAssets`'s closing brace; removed findings row `:35` from `## Dead / orphaned code` (the `Watcher.tradingMode` row stays) and added a `**RESOLVED (feature 323)**` bullet under `## Resolved`.
+- TDD: red (pre-edit, `.sdd-logs/v-1.log`, `exit=0`): `git grep -n "AlpacaAsset" -- '*.go' '*.ts' '*.py'` printed `client.go:817` and `:818` → green (`.sdd-logs/v-2.log`, `exit=0`): the grep prints nothing; build and vet clean; `go test -race` 18 packages `ok` (1 with no test files); coverage `total: (statements) 87.5%` (≥ 40%); `golangci-lint` `0 issues.` Config-key wiring gate: N/A (no key touched).
+- Files modified: `services/xstockstrat-marketdata/internal/alpaca/client.go`, `services/xstockstrat-marketdata/docs/context-constitution-findings.md`
+- Deviations: none
+
+## Session 2026-11-27 — sdd-execute sequential (sdd-batch-execute), step 6
+
+- Tooling setup (step 6): python 3.13.18 ✓ · uv 0.11.32 ✓ · `uv sync --extra dev` in `services/xstockstrat-ingest` (worktree-local `.venv`; ruff and pytest from it). No Node install.
+- Discovery re-verified at `origin/feature/fix-orphaned-code` @ `7d4bbced`: `app/extractors/` holds the five listed files; `base.py` dataclasses at `:10,16,23,30,36,43`, union `:51-58`, `BaseExtractor` `:61`; importers as cited (`mcp_client_loop.py:24-25`, `mcp_client.py:13`, `noop.py:5`, `example_simple_email.py:7`, `tests/test_mcp_client_extractor.py:10-11`, `tests/test_extractor.py:5,13,14`); `servicer.py:78` `_MEDIATED_EXTRACTOR_MODULE`; no `importlib` in `app/`; findings rows `:22`, `:23`, `## Resolved` `:41`; INGEST-6 at constitution `:20`; `tests/test_noop_extractor.py` absent.
+
+### Step 6 — service: ingest — delete the orphan example extractor and trim the non-MCP input dataclasses [done]
+- Added `tests/test_noop_extractor.py` (three tests, per Instruction 7) before any edit; `git rm` of `example_simple_email.py` and `tests/test_extractor.py`; `base.py` keeps only `McpClientInput`, `RawInput = McpClientInput` and `BaseExtractor` (`noop.py` untouched, O-2). Findings: the `app/extractors/*` row narrowed to `noop.py` kept by O-2, a `**RESOLVED (feature 323)**` bullet added under `## Resolved`, and the `extractor_module` row annotated (the `example_simple_email` label now dangles, harmless; `noop` still resolves). INGEST-6 anchors refreshed to `McpClientInput` ~L10-15, `BaseExtractor` ~L21-25.
+- TDD: red N/A — no behavior change; characterization test added. Presence RED (pre-edit, `.sdd-logs/v-1.log`, `exit=0`): `git ls-files` printed both paths, the dataclass/`ExampleSimpleEmailExtractor` grep printed hits in `base.py`, `example_simple_email.py` and `tests/test_extractor.py`, no `RawInput = McpClientInput` line; the new noop test `3 passed` pre-edit; suite 625 passed. GREEN (`.sdd-logs/v-2.log`, `exit=0`): `git ls-files` prints only `noop.py`, the grep prints nothing, `18:RawInput = McpClientInput`, `3 passed`, `grep -c` `3`, `609 passed` (the deleted file's 16 cases gone), `Total coverage: 87.49%` (≥ 40), `All checks passed!`, `57 files already formatted`. The optional mutation proof was not run. Config-key wiring gate: N/A (no key touched).
+- Files modified: `services/xstockstrat-ingest/app/extractors/example_simple_email.py` (deleted), `services/xstockstrat-ingest/tests/test_extractor.py` (deleted), `services/xstockstrat-ingest/tests/test_noop_extractor.py` (new), `services/xstockstrat-ingest/app/extractors/base.py`, `services/xstockstrat-ingest/docs/context-constitution-findings.md`, `services/xstockstrat-ingest/docs/context-constitution.md`
+- Deviations: none
+
+
+## Session 2026-11-27 — sdd-execute (by hand, outside sdd-batch-execute), steps 7-9
+
+- Operator ruling 2026-11-27 (same as Step 4: "A: I run Step 4 outside the batch"): Step 4's regenerated root `pnpm-lock.yaml` trips the batch runner's "lockfile differs from main-dev" gate on every later step, so Steps 7, 8 and 9 run by hand, one commit each. Fresh worktree on `origin/feature/fix-orphaned-code` @ `681f0f90`.
+- Tooling setup (step 7): Node v24.22.3 (`/opt/node24/bin`) · pnpm 9.15.9 · real `pnpm install --frozen-lockfile` in the worktree (no symlinked `node_modules`) · go 1.27 · `uv sync --extra dev` in `services/xstockstrat-ingest`. No database, no image build.
+
+### Step 7 — test: backend — scoped presence verification for the config, Node-leaf, marketdata and ingest deletions [done]
+- Verification-only; no source file added or edited. Ran the Verification block on the tree holding Steps 1-6 and read every line.
+- AC-2 deleted paths: `git ls-files` for `configWatcher.ts`, `configWatcher.test.ts`, `example_simple_email.py`, `tests/test_extractor.py` printed nothing; `git ls-files .../extractors/noop.py` printed the path (kept, O-2). Manifest greps (`"migrate"`/`node-pg-migrate` across the four leaves; `jsonwebtoken`/`bcrypt` in notify) printed nothing.
+- `pnpm install --frozen-lockfile` rc 0. `pnpm why -r node-pg-migrate` printed nothing. `pnpm why -r bcrypt jsonwebtoken` listed only `xstockstrat-identity@0.1.0` (`bcrypt 5.1.1`, `jsonwebtoken 9.0.3`, dependencies).
+- `git grep -n "AlpacaAsset" -- '*.go' '*.ts' '*.py'` printed nothing. Item 5: `git grep -n "sandbox_timeout\|sandbox_memory\|sandbox_max\|indicators\.sandbox" -- services/xstockstrat-analysis/app services/xstockstrat-ingest/app` printed nothing (already resolved, no code change).
+- Node leaves (`rm -rf dist`, `pnpm build`, `test:coverage`, `c8 check-coverage --lines 40`, `lint`), each rc 0 on Node 24: config 396/396, lines 94.05%; ledger 168/168, 85.78%; identity 169/169, 85.5%; notify 416/416, 90.7%; lint 0 errors (warnings only: 300, 292, 271, 382).
+- marketdata: `go build`, `go vet` clean; `go test ./... -race` all packages `ok`; `total: (statements) 87.5%` (>= 40%). ingest: `609 passed` (includes `tests/test_noop_extractor.py`), `Total coverage: 87.49%` (>= 40), `ruff check` `All checks passed!`, `ruff format --check` `57 files already formatted`.
+- `node scripts/check-config-wiring.mjs --final` rc 0; it printed two `REPORTED:` lines that do not involve this feature's keys (`fundsignal_loop.py:marketdata/fundamentals.provider:readers-disagree`, `trading.go:platform/trading_state:readers-disagree`).
+- TDD: RED was the per-item pre-edit capture of Steps 3-6; this step's consolidated GREEN is the run above.
+- Files modified: none outside `docs/roadmap/features/323-fix-orphaned-code/` (`context.md`, `implementation-spec.md` Status)
+- Deviations: none
+
+### Step 8 — test: agent — regression check that the live config package and the kept prompt survive [done]
+- Verification-only; no agent file or test changed. Tooling: `uv sync --extra dev` in `services/xstockstrat-agent` (worktree-local `.venv`).
+- AC-2 (amended): `git ls-files services/xstockstrat-agent/app/prompts/signal_extraction.md` printed the path (kept, O-1). AC-3: `git ls-files services/xstockstrat-agent/app/config/watcher.py` printed the path; `uv run pytest tests/test_config_watcher.py -q` printed `8 passed`, rc 0.
+- Agent gate: `uv run pytest --cov=app --cov-fail-under=40` `831 passed`, `Total coverage: 88.47%` (>= 40); `ruff check .` `All checks passed!`; `ruff format --check .` `79 files already formatted`.
+- TDD: N/A (verification-only: no agent file or test changes; commands green before and after).
+- Files modified: none outside `docs/roadmap/features/323-fix-orphaned-code/` (`context.md`, `implementation-spec.md` Status)
+- Deviations: none
+
+### Step 9 — service: ui — state when the `PortfolioPanel` combined view renders [done]
+- Added a 2-line constraint comment immediately above `if (selectedAccountId) {` in `PortfolioPanel.tsx` (now `:85-86`, the `if` at `:87`): the combined view below renders when no account is selected (none active, or the account fetch failed). No code line touched. UI findings: removed the `PortfolioPanel` row from `## Dead / orphaned code` (the struck-through `insightsBff.test.ts` row stays) and added a `RESOLVED (feature 323)` row at the head of `## Resolved` (disproved, branch kept; cites `AccountContext.tsx#firstActive`, `e2e/trader/offline-pnl.spec.ts`, durable `@AC-30`; keeps the pointer that the combined "Book" surface is `src/app/trader/portfolio/page.tsx`).
+- TDD: red N/A — comment-only, no behavior change (the step's allowed escape). Green: `git diff HEAD -- src/components/trader/PortfolioPanel.tsx | grep '^[-+][^-+]'` printed exactly the two added comment lines, no removed line; `pnpm run lint` rc 0 (0 errors, warnings only); `pnpm build` rc 0 (`checkThemeBundle: staging bundle OK (3 css files)`); `pnpm exec playwright test e2e/trader/offline-pnl.spec.ts --project=chromium --no-deps --timeout=240000`: `12 passed (1.8m)`, including both `All accounts` combined-panel tests (`@AC-30`, feature 256 `@AC-3`).
+- Harness note: the verbatim `playwright test e2e/trader/offline-pnl.spec.ts` failed twice at the `[setup] pre-warm SSR routes` project (fixed 10 s test timeout exceeded by the cold `next dev` compile; `12 did not run`), and one run hit `EADDRINUSE 127.0.0.1:9091` because a sibling session's Playwright run held the mock ports (not killed; waited for it to exit). The passing run used `--project=chromium --no-deps --timeout=240000`, which skips only the warm-up project and runs the same spec file. `python3 scripts/run-e2e.py` was not used (no image build).
+- C-12/C-17: no test, fixture, token or component added or changed.
+- Files modified: `services/xstockstrat-ui/src/components/trader/PortfolioPanel.tsx`, `services/xstockstrat-ui/docs/context-constitution-findings.md`
+- Deviations: none (the Playwright flags above change how the unchanged spec is launched, not what it asserts)
+
+## Session 2026-11-27 — sdd-execute (by hand) — session end
+
+**Steps this session**: 7, 8, 9
+**Progress**: 9 done / 9 total
+**Stopped at**: all complete (`status.md` -> `code-completed`; `feature.md` history row added; spec header `complete`). `node scripts/check-config-wiring.mjs --final` rc 0 (two unrelated `REPORTED:` readers-disagree lines, as in Step 7).
+**Next**: integration PR `feature/fix-orphaned-code` -> `main-dev`, the merge-order gate (`merge-order.md`) and the C-16 promotion of `@AC-1`..`@AC-3` are left to the batch runner with the operator's confirmation. No ledger entry written (nothing generalizable beyond the existing Step 4 lock-gate note).
+
+Accountability:
+- Out-of-scope changes: none
+- Open questions / items: stale text listed earlier in this log (`product-spec.md`, `design.md` D-3, `feature.md` Summary, `merge-order.md:129`, agent findings `:36`) remains unedited; the vestigial per-service `pnpm-lock.yaml` files are recorded in the root findings (D-11)
+- Unaddressed review warnings: none new from this session
+
+## Session 2026-11-27 — sdd-batch-execute promotion plan (awaiting operator confirm)
+
+```sdd-batch-promotion-plan
+## Promotion plan — fix-orphaned-code (feature 323)
+
+Source: docs/roadmap/features/323-fix-orphaned-code/acceptance.feature. I read it from the working tree, not from origin/feature/fix-orphaned-code, because I had no git access. The orchestrator should confirm the working-tree copy matches the branch.
+
+### Verdicts
+| @AC | target suite (path) | CREATE/APPEND | verdict | note |
+|---|---|---|---|---|
+| @AC-1 | services/xstockstrat-portfolio/acceptance/fix-orphaned-code.feature | CREATE | NEW | The Then asserts on portfolio's GetSnapshot. No existing portfolio scenario mentions NewPortfolioRepoWithDB or GetSnapshot. |
+| @AC-2 | docs/sdd/business-rules/platform.feature | APPEND | NEW | Cross-cutting. It spans config, ledger, identity, notify, marketdata, ingest and agent, and asserts on repo-wide state (package.json files, pnpm-lock.yaml importers, `git ls-files`). |
+| @AC-3 | services/xstockstrat-agent/acceptance/fix-orphaned-code.feature | CREATE | NEW | The Then asserts on `services/xstockstrat-agent/app/config/watcher.py` and the agent's `tests/test_config_watcher.py`. |
+
+### Ready-to-write blocks
+
+--- /home/user/xstockstrat/services/xstockstrat-portfolio/acceptance/fix-orphaned-code.feature (CREATE) ---
+# Promoted from docs/roadmap/features/323-fix-orphaned-code/acceptance.feature at launch
+# (Constitution C-16). Source-feature provenance is carried on every scenario's `@feature-323` tag.
+# Durable business rules xstockstrat-portfolio already guarantees — a rule enters only by promotion
+# from a reviewed feature acceptance.feature, never by hand-authoring.
+
+Feature: xstockstrat-portfolio — mock-DB repository serves GetSnapshot without panicking (bug fix)
+  Regression guard for defect report: orphaned modules, scripts and dependencies across services.
+
+  # guards: docs/reports/2026-10-19-orphaned-code-defect.md
+  @AC-1 @regression @feature-323
+  Scenario: The portfolio repository built on a mock DB serves GetSnapshot without panicking
+    Given a PortfolioRepo constructed with NewPortfolioRepoWithDB over a pgxmock pool
+    When GetSnapshot is called
+    Then it queries through the mock and returns a result or a mock error, with no nil-pointer panic
+
+--- /home/user/xstockstrat/services/xstockstrat-agent/acceptance/fix-orphaned-code.feature (CREATE) ---
+# Promoted from docs/roadmap/features/323-fix-orphaned-code/acceptance.feature at launch
+# (Constitution C-16). Source-feature provenance is carried on every scenario's `@feature-323` tag.
+# Durable business rules xstockstrat-agent already guarantees — a rule enters only by promotion
+# from a reviewed feature acceptance.feature, never by hand-authoring.
+
+Feature: xstockstrat-agent — live config watcher package survives orphaned-code cleanup (bug fix)
+  Regression guard for defect report: orphaned modules, scripts and dependencies across services.
+
+  # guards: docs/reports/2026-10-19-orphaned-code-defect.md
+  @AC-3 @regression @feature-323
+  Scenario: The live agent config package survives the cleanup
+    Given the agent imports app.config.watcher at startup (app/main.py) and for formula deadlines (app/client.py)
+    When the cleanup lands
+    Then services/xstockstrat-agent/app/config/watcher.py still exists
+    And the agent's tests/test_config_watcher.py passes
+
+--- /home/user/xstockstrat/docs/sdd/business-rules/platform.feature (APPEND) ---
+  # guards: docs/reports/2026-10-19-orphaned-code-defect.md
+  @AC-2 @regression @feature-323
+  Scenario: Orphaned modules, scripts and dependencies are gone
+    Given the orphaned items listed in the report (config configWatcher.ts, the ledger, config, identity and notify node-pg-migrate migrate script and devDependency, notify jsonwebtoken and bcrypt, marketdata AlpacaAsset, ingest example_simple_email.py and noop.py, agent signal_extraction.md)
+    When each touched leaf's package.json and the root pnpm-lock.yaml importers are inspected, and git ls-files is searched for the deleted paths
+    Then none of them exists and every affected service still builds and passes its tests
+
+### Notes / ambiguities / conflicts
+- **AC-1 attribution:** The Then lives in portfolio's repository code (GetSnapshot via NewPortfolioRepoWithDB), so it goes in the portfolio suite.
+- **AC-2 attribution:** No single service owns it, and `git ls-files` plus the root lockfile are repo-wide. The platform suite already holds repo-wide absence checks, such as @feature-147 for MCP_AGENT_SECRET.
+- **AC-3 attribution:** The agent suite is the right home even though the cleanup touches other services. It is the live-keep counterpart to AC-2's deletions.
+- **No @FR-* tags:** The source scenarios carry none, and I did not invent any (rule 2). The tags are `@AC-n @regression @feature-323`, the same shape as platform.feature's @feature-329 scenario. The business-rules/CLAUDE.md convention asks for at least one @FR tag. If the orchestrator wants strict conformance, the fix is on the source acceptance.feature, not here.
+- **AC-2 and AC-3 overlap:** Both mention the config service's watcher, but they assert different things. AC-2 deletes the TS `configWatcher.ts`. AC-3 keeps the agent's Python `watcher.py`. This is not a conflict. Services/xstockstrat-ledger/acceptance/config-keys-relative-consumers.feature:10 references `configWatcher.test.ts`, the ledger's core log-format test. AC-2 lists only the config service's `configWatcher.ts` as deleted, so I flag this only as an informational cross-reference and plan no write for it. The implementer should confirm the ledger test file is not among the deleted paths.
+- **Dedup results:** I grepped all of services/*/acceptance/*.feature and platform.feature for NewPortfolioRepoWithDB, GetSnapshot, config/watcher, test_config_watcher, configWatcher, node-pg-migrate, AlpacaAsset, signal_extraction, example_simple_email and jsonwebtoken. There are no `@feature-323` tags anywhere. Hits on other features' scenarios (the agent suite mentions the signal_extraction prompt, the ingest suite mentions the example_simple_email extractor) assert different outcomes. There are no DUP, OVERLAP or CONFLICT verdicts.
+- **Placement:** In platform.feature, append after the last scenario, which currently ends with the @feature-329 Scenario Outline. Re-check the file tail before writing, since it is long. The `acceptance/` directories already exist for portfolio and agent, and neither already has a fix-orphaned-code.feature.
+
+### Coverage check
+- Source scenarios: 3 (@AC-1, @AC-2, @AC-3). Planned: 3 NEW, 0 DUP, 0 OVERLAP, 0 CONFLICT. Every @AC-* is accounted for, nothing was skipped, and the scenario text is verbatim from the source.
+```

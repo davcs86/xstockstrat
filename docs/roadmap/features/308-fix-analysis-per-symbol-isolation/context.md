@@ -507,3 +507,592 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - [ ] Rebase overlap with `fix-analysis-evidence-dry` (327) in the analysis `servicer.py`: the regions are disjoint today, so this is a re-grep only.
 - [ ] recon.md:150, design.md:203 and the "sdd-review product-spec" entry above still say peers 309, 313, 323 and 329 share the analysis servicer. That is wrong for 309 and 313 (ingest servicer); this session did not edit them (prior entries are append-only, and recon and design are closed artifacts).
 - [ ] Still open from "sdd-spec": `EvaluateReadiness` returns OK when every symbol failed, with no alert until `analysis-isolation-degraded-counter`.
+
+---
+
+## Session 2026-11-21 — sdd-execute sequential (sdd-batch-execute)
+
+- Up-front confirmation: the operator approved the plan with this record (binding, verbatim):
+  `{"mainDev":"8baf3976c17f2f074f834d63ad9a1e8ffd8af22e","dev":"985d694cf57c42b7ce528cfba2e994a2fbe378e0","specHash":"b24e7ea2e6705395e3804970684748cf7b4ea467","directive":"conditional","pending":[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17],"mismatches":[{"n":2,"detail":"Codebase Evidence double inventory is stale against the merged tree (HEAD 985d694c, with 8baf3976 already an ancestor, so the merge was a no-op). Re-running `grep -rn \"SimpleNamespace(success=\" services/xstockstrat-analysis/tests` finds 4 ExecuteFormula response doubles the spec does not list: tests/test_fundsignal_loop.py:688, tests/test_owner_header_guard.py:229 and tests/test_opportunities_fundamentals_guard.py:202 (all success=True, no exit_reason), plus tests/test_screener.py:45 (the `formula_resp` helper, success=True). None of the first three files is in Step 2's **Files** list. Step 2's own Verification `grep -rn \"SimpleNamespace(success=\" tests | grep -v exit_reason  # expect no output` will therefore still report hits unless those three files are edited outside the declared Files. Separately, the evidence lists tests/test_screener.py:549 as a success=True double, but it is `SimpleNamespace(success=False, output=Struct(), error=\"boom\")`. It does not reach `_decode_formula_output`: the screener checks `resp.success` itself at app/services/screener.py:382, so it will not turn red under Step 1. The classification is wrong, not the red/green outcome. The multi-line `SimpleNamespace($` grep and the `ExecuteFormulaResponse(` grep both still return nothing, as the spec says. All 9 Files paths exist."},{"n":16,"detail":"Minor evidence drift. The mock-backend conviction-floor exemption (services/xstockstrat-ui/e2e/mock-backend.ts about lines 987-994) is keyed on boolean row flags (`o.muted || o.dataUnavailable || fundamentalsUnavailable || formulaUnreadable`), not on provenance. Instruction 2 ('exempt a row whose provenance includes it') therefore adds a new provenance-based condition rather than mirroring an existing one. The MARKERS array is at lines 969-975, as stated. Also, `grep -rn \"src/lib\" e2e` now finds more modules than the evidence names (alertShared, connectClients, indicatorChart, positionLineage, traderBff, as well as deadlines, headers, auth, copilot, configNamespaces). The key claim still holds: no e2e file imports readinessCue. The @phosphor-icons/react version claim (2.1.10) could not be checked because there is no node_modules in the worktree (package.json pins ^2.1.7). All 4 Files paths exist."}]}`
+- Merge: skipped; `8baf3976` is already an ancestor of `985d694c`.
+- Re-spec commits (`git log --first-parent origin/main-dev..HEAD`):
+  - `bb6788ff` respec(fix-analysis-per-symbol-isolation): align steps 2,16 with current codebase
+- Step 2 **Files** now also lists `test_fundsignal_loop.py`, `test_owner_header_guard.py` and `test_opportunities_fundamentals_guard.py`. Step 16 Instruction 2 now states that the provenance check is a new floor-exemption condition.
+- Tooling (steps 1-17): python 3.13 ✓ · uv ✓ · ruff ✓ · pnpm ✓ 9.15.9 · node 24 ✓ (`/opt/node24/bin`; the PATH default is v22) · chromium ✓ (`/opt/pw-browsers`) · hook check hook=0.
+- Status: `implementation-ready` → `in-progress`.
+
+```sdd-batch-setup
+{"mainDev":"8baf3976c17f2f074f834d63ad9a1e8ffd8af22e","date":"2026-11-21"}
+```
+
+### Step 1 — service: typed `exit_reason` on `FormulaExecutionError` and the transient predicate [done]
+- Atomic unit Steps 1+2, one commit. `FormulaExecutionError` gains `exit_reason: int = 0`. The `not resp.success` raise in `_decode_formula_output` passes `resp.exit_reason` directly. The new `_is_transient_formula_error` returns True only for `grpc.RpcError` or `exit_reason == SANDBOX_EXIT_REASON_TIMEOUT`.
+- TDD (unit 1+2), red: the `_is_transient_formula_error` import failed (`ImportError: cannot import name '_is_transient_formula_error'`) → green: 105 passed (evaluator + unreadable-formula tests); full suite 1769 passed, coverage 91.64%.
+- Tooling: the analysis `.venv` was synced with `uv sync --extra dev`, and it resolved Python 3.12.3, not the pinned 3.13. The suite passed under it.
+- Files modified: `services/xstockstrat-analysis/app/services/evaluator.py`
+- Deviations: none
+
+### Step 2 — test: predicate tests and `exit_reason` on every ExecuteFormula response double [done]
+- Atomic unit Steps 1+2. Every `SimpleNamespace(success=` ExecuteFormula double in the 12 listed files gains `exit_reason=0` (31 doubles). The three `_TIMEOUT` doubles get `SANDBOX_EXIT_REASON_TIMEOUT`, and `_formula_stub` forwards a new `exit_reason=0` keyword. `TestTransientFormulaError` builds its errors through `_decode_formula_output`. It covers TIMEOUT and `aio_rpc_error(UNAVAILABLE)` as transient, and UNSPECIFIED, RUNTIME_ERROR, IMPORT_BLOCKED, MEMORY_EXCEEDED, a bare `FormulaExecutionError`, `ValueError` and `ZeroDivisionError` as terminal.
+- TDD: shared red→green with Step 1 (above).
+- Files modified: the 12 test files in Step 2 **Files**
+- Deviations: the multi-line grep prints six wrapped doubles, all carrying `exit_reason` and checked by hand (Deviation Log).
+
+### Step 3 — service: indicators deadline refusal reports `SANDBOX_EXIT_REASON_TIMEOUT` [done]
+- The `if refused_remaining_ms:` response in indicators `servicer.py` now sets `exit_reason=indicators_pb2.SANDBOX_EXIT_REASON_TIMEOUT`, which is the in-scope D-9 cross-service touch. Metrics are unchanged because the early return still precedes `record_sandbox_execution`. Accepted side effect: agent `test_formula` now shows TIMEOUT instead of UNSPECIFIED for a deadline-refused run.
+- TDD red: `resp.exit_reason == SANDBOX_EXIT_REASON_TIMEOUT` failed with `assert 0 == 2` in a temporary probe test (Deviation Log). Green: probe `1 passed`. Verification: the grep prints `354-                exit_reason=indicators_pb2.SANDBOX_EXIT_REASON_TIMEOUT,`, `tests/test_sandbox_deadline.py` gives 5 passed, ruff reports "All checks passed!" and "65 files already formatted", exit=0.
+- Config-wiring gate: not applicable (no config key, no migration).
+- Tooling: the indicators `.venv` was synced with `uv sync --extra dev`.
+- Files modified: `services/xstockstrat-indicators/app/handlers/servicer.py`
+- Deviations: RED captured with a temporary untracked probe test, deleted before the commit (Deviation Log).
+
+### Step 4 — test: assert the refusal's `exit_reason` [done]
+- `test_too_little_remaining_deadline_fails_without_spawning` now asserts `resp.exit_reason == indicators_pb2.SANDBOX_EXIT_REASON_TIMEOUT`, using the module's existing `indicators_pb2` import. This is the indicators test for the D-9 touch (O-8). No domain literal was added (C-13).
+- TDD red, run with `servicer.py` checked out at the pre-Step-3 commit `8fe8fcb8` and restored before GREEN: `assert 0 == 2` at `tests/test_sandbox_deadline.py:82` (`1 failed, 4 passed`). Green: `5 passed`, full suite `610 passed`, coverage 87.14% (`Required test coverage of 50% reached`), ruff "All checks passed!" and "65 files already formatted", exit=0.
+- The RED full-suite run also failed `test_sandbox_watchdog.py::test_ac8_fork_bomb_is_not_a_success_the_service_recovers_and_nothing_is_unobservable` (`sandbox memory watchdog cannot observe child`). It passed in the GREEN run with no related change, so it looks like a timing flake in the fork-bomb test, not something this step caused.
+- Config-wiring gate: not applicable (no config key, no migration).
+- Files modified: `services/xstockstrat-indicators/tests/test_sandbox_deadline.py`
+- Deviations: none
+
+### Step 5 — service: shared `app/services/isolation.py`, adopted by the screener [done]
+- New `app/services/isolation.py` holds `isolated(coro)` (`except Exception` only, so `CancelledError` passes through) and `log_isolation_tally(logger, site, failures, total)`, which emits the summary line through the caller's logger and sets `<site>.degraded_count` on the current span. `ScreenerEngine._eval_symbol_isolated` now calls `isolated(...)`, and the screener tally block is one `log_isolation_tally(log, "screener", ...)` call. The rendered message and span attribute are unchanged.
+- TDD red: a temporary probe test failed with `ModuleNotFoundError: No module named 'app.services.isolation'` → green: probe `2 passed`, then deleted (Deviation Log). Verification: `tests/test_screener.py` `30 passed` (it includes the pinning tests at `:842`, `:889`, `:1018`), ruff "All checks passed!" and "142 files already formatted", exit=0. Step 5 has no coverage line; Step 6 carries it.
+- Config-wiring gate: not applicable (no config key, no migration).
+- Files modified: `services/xstockstrat-analysis/app/services/isolation.py`, `services/xstockstrat-analysis/app/services/screener.py`
+- Deviations: RED came from a temporary untracked probe test, and the now-unused `from opentelemetry import trace` was removed from `screener.py` (Deviation Log).
+
+### Step 6 — test: isolation helper unit tests with a cancellation mutation run [done]
+- New `tests/test_isolation.py` (7 tests): `isolated` returns `(value, None)`, captures `ZeroDivisionError` as `(None, exc)` and lets `CancelledError` raise out; `log_isolation_tally` writes nothing on empty failures, WARNING for 1/3, ERROR for 2/2, the message carries the site, counts and `NVDA:ZeroDivisionError`, and `<site>.degraded_count` lands on the current span. Imports only `app.services.isolation`, stdlib, pytest and the OTel SDK test exporter (as `test_screener.py` does). Symbols are scenario one-offs (C-13).
+- TDD red (mutation `except Exception` → `except BaseException`, reverted uncommitted): `FAILED tests/test_isolation.py::test_isolated_lets_cancelled_error_propagate` `Failed: DID NOT RAISE <class 'asyncio.exceptions.CancelledError'>`, `2 failed, 35 passed` → green: `37 passed`; full suite `1776 passed`, `Required test coverage of 40% reached. Total coverage: 91.65%` (`isolation.py` 100%); ruff "All checks passed!", "143 files already formatted", exit=0.
+- Config-wiring gate: not applicable (no config key, no migration).
+- Files modified: `services/xstockstrat-analysis/tests/test_isolation.py`
+- Deviations: RED from the step's specced mutation run rather than the Step Dependencies prior-step checkout (Deviation Log).
+
+### Step 7 — service: `evaluation_failed` structural marker and read-floor exemption [done]
+- `app/repositories/opportunities.py` gains `EVALUATION_FAILED_PROVENANCE = "evaluation_failed"` above `_PROVENANCE_STRUCTURAL_MARKERS`, appended to that list (so `_primary_source` and the source filter/facet skip it), with one block-comment line. The `ListOpportunities` read floor adds `OR o.provenance ? 'evaluation_failed'` as a literal beside its siblings. `data_unavailable=("unavailable" in provenance)` (`servicer.py`) is untouched. No migration (JSONB token).
+- TDD red: a temporary probe test failed with `ImportError: cannot import name 'EVALUATION_FAILED_PROVENANCE' from 'app.repositories.opportunities'` → green: probe `2 passed`, then deleted (Deviation Log). Verification: the grep prints the comment (`:28`), the constant (`:29`) and the SQL clause (`:270`); `tests/test_opportunities_repo.py` `40 passed`; ruff "All checks passed!" and "143 files already formatted", exit=0.
+- Config-wiring gate: not applicable (no config key, no migration).
+- Files modified: `services/xstockstrat-analysis/app/repositories/opportunities.py`
+- Deviations: RED came from a temporary untracked probe test (Deviation Log).
+
+### Step 8 — test: marker is structural, floor-exempt, and the fake repo mirrors it [done]
+- `tests/test_opportunities_repo.py` gains `test_read_floor_exempts_evaluation_failed`, whose needle `f"o.provenance ? '{EVALUATION_FAILED_PROVENANCE}'"` pins the SQL literal to the constant, and `test_evaluation_failed_is_a_structural_marker`, which checks list membership and both `_primary_source` cases. `_FakeOppRepo.read`'s floor mirror (`tests/test_analysis_servicer.py`) adds `and EVALUATION_FAILED_PROVENANCE not in _prov`, imported from `app.repositories.opportunities`. No domain literal was added (C-13).
+- TDD red, with `opportunities.py` checked out at the pre-Step-7 commit `c508326e` and restored before GREEN: `ImportError: cannot import name 'EVALUATION_FAILED_PROVENANCE' from 'app.repositories.opportunities'` in both files (`36 errors during collection` in the full run). Green: `452 passed` for the two files, full suite `1778 passed`, `Required test coverage of 40% reached. Total coverage: 91.65%`, ruff "All checks passed!" and "143 files already formatted", exit=0. In both runs `exit=` reflects only the last line of the block (ruff), so the pytest results were read from the log.
+- Not changed: `_FakeOppRepo.available_sources` has its own hard-coded skip list (`("watchlist", "position", "denied", "formula_unreadable")`). The step does not name it, and the list already lacks `fundamentals_unavailable`. Raise it at the checkpoint if Steps 12/14 need the facet fake to skip the marker (ledger `fails.md`, 2026-11-10 fake-enumeration rule).
+- Config-wiring gate: not applicable (no config key, no migration).
+- Files modified: `services/xstockstrat-analysis/tests/test_opportunities_repo.py`, `services/xstockstrat-analysis/tests/test_analysis_servicer.py`
+- Deviations: none
+
+### Step 9 — service: isolate the three readiness callers [done]
+- Atomic unit Steps 9+10, one commit. `readiness.py` gains `unavailable_readiness_row`, which returns `bar_epoch=-1` and `readiness_json={}`. It and `compute_readiness_row` both build their row through one private `_staged_row`, and the `-1` comment now names both producers.
+  - `EvaluateReadiness` gathers `isolated(_readiness_for(s))`. A failing symbol becomes `(_symbol_readiness_from_json({}, symbol), None, now)`, so it is returned empty and not staged, with a tally under site `evaluate_readiness`.
+  - The kick and the materializer await their per-symbol body (the loaders plus `compute_readiness_row`) through `isolated`. On an exception they stage `unavailable_readiness_row` with the healthy branch's `rule`, fingerprint, strategy, owner, `now` and `valid_until`, then log a tally under sites `readiness_kick` (total `len(triples)`) and `readiness_materializer` (total = symbols computed after skip-fresh).
+  - `valid_until` is now computed once per pass instead of once per symbol. It is the same value, because `now` is fixed per pass. The outer catch, the `finally`, the per-strategy setup and header propagation are unchanged.
+  - The `_READINESS_UNKNOWN_RETRY_SECONDS` comment names both sentinel producers.
+- TDD (unit 9+10): see Step 10.
+- Config-wiring gate: not applicable (no config key, no migration).
+- Files modified: `services/xstockstrat-analysis/app/services/readiness.py`, `services/xstockstrat-analysis/app/handlers/servicer.py`
+- Deviations: see Step 10 (Deviation Log "Steps 9+10").
+
+### Step 10 — test: readiness isolation regressions (`@AC-2`, `@AC-3` kick and materializer) [done]
+- Atomic unit Steps 9+10. New `tests/test_per_symbol_isolation.py` has 7 tests:
+  - `@AC-2`, parametrized over a raising `compute_readiness_row` and a raising `_load_fundamentals_snapshot`. Results stay in request order, `AAPL`/`MSFT` have `total_conditions > 0`, `NVDA` is `(0, 0)`, the one upsert holds exactly `[AAPL, MSFT]`, and the tally line is logged.
+  - `@AC-3` kick and `@AC-3` materializer. `ExecuteFormula` returns `UNAVAILABLE` for `NVDA` only. The failing pair's row has `-1` and `{}`, the healthy rows have `bar_epoch >= 0`, and neither outer-catch WARN appears. On the kick, a second read classifies `NVDA` as `READINESS_STATE_UNKNOWN`.
+  - Three cancellation tests (EvaluateReadiness, kick task, materializer tick).
+- `test_unreadable_formula.py`: the pinning test is rewritten as `test_evaluate_readiness_timeout_degrades_the_symbol`. The symbol is `(0, 0)`, `formula_unreadable` is False and nothing is staged. This is the feature-289 `@AC-13` CHANGE the operator signed off on 2026-11-20.
+- `test_readiness.py`: a unit test for `unavailable_readiness_row`. Its keys equal a `compute_readiness_row` row's keys, `bar_epoch == -1`, and `is_readiness_row_fresh` is False at `latest_bar_epoch=0`.
+- C-13: every harness, bar set and strategy fixture is imported from sibling test modules (`conftest`, `test_analysis_servicer`, `test_owner_header_guard`, `test_readiness_cache`, `test_readiness_materializer`, `test_readiness_opportunities_source_symbol`, `test_unreadable_formula`).
+- TDD:
+  - RED run 1 (Verification block) stopped at collection: `ImportError: cannot import name 'unavailable_readiness_row' from 'app.services.readiness'`.
+  - RED run 2: `5 failed, 53 passed`. `@AC-2` raised `ZeroDivisionError: boom`, the kick logged `readiness refresh kick failed for user=bob`, the materializer logged `readiness materializer failed for owner=bob`, and the timeout test raised `FormulaExecutionError`.
+  - GREEN: `92 passed` for the six listed files. Full suite `1786 passed`, `Required test coverage of 40% reached. Total coverage: 91.71%` (`readiness.py` 100%). ruff `All checks passed!` and `144 files already formatted`. The C-13 grep printed the 7 `from tests.` import lines. exit=0, which reflects only the final grep, so the pytest results were read from the log.
+  - Mutation run (`except BaseException` in `isolation.py`, reverted without committing): all three cancellation tests failed with `DID NOT RAISE <class 'asyncio.exceptions.CancelledError'>` (`3 failed, 4 passed`).
+- Config-wiring gate: not applicable (no config key, no migration).
+- Files modified: `services/xstockstrat-analysis/tests/test_per_symbol_isolation.py`, `services/xstockstrat-analysis/tests/test_unreadable_formula.py`, `services/xstockstrat-analysis/tests/test_readiness.py`
+- Deviations: RED took a second run because of the collection error. The failing symbol is picked out by its closes. The cancellation tests are credited by the mutation run (Deviation Log "Steps 9+10").
+
+## Session 2026-11-26 — sdd-execute sequential (sdd-batch-execute), steps 11+12
+
+### Operator decision
+
+- Operator (2026-11-26, option A, on the step 11 blocker): expand the unit's scope to `services/xstockstrat-analysis/tests/test_analysis_servicer.py`. Rewrite `test_formula_execution_error_still_propagates` as a CHANGE characterization: the compute returns, the `AAPL` row carries `EVALUATION_FAILED_PROVENANCE` and no `unavailable`, and the `opportunity_compute` tally is logged. Record it in the Deviation Log as a missed pinning test, and log the recurring gap in `fails.md`.
+- Tooling: the analysis `.venv` was synced with `uv sync --extra dev` (pytest reports Python 3.12.3, as in Step 1); ruff 0.16.9 on PATH; hook check hook=0.
+
+### Step 11 — service: isolate `_row_for` and classify the fault on the row [done]
+- Atomic unit Steps 11+12, one commit. In `_row_for` one `try` now covers the loaders, `assess` and the traced eval. Its `except Exception` sets a row-local flag: `eval_outage` when `_is_transient_formula_error(e)`, otherwise `eval_failed`. It also resets `readiness` to `_empty_readiness(sym)` and appends `(sym, e)` to a per-compute `failures` list.
+- The eval-side `fetch_failed.add(sym)` is removed, so `fetch_failed` is bars-only again (the grep prints `:5752`, `:5761` and `:5794` only).
+- Markers: `sym_unavailable` gains `or eval_outage`. When `eval_failed and not sym_unavailable`, the row gets `EVALUATION_FAILED_PROVENANCE`, a non-held row's action becomes UNSPECIFIED, and `zeroed` covers a non-held marked row. A held row keeps its action.
+- The gather awaits `isolated(_row_for(c))`. A candidate that raises outside the inner `try` is dropped and appended to `failures`. `log_isolation_tally(log, "opportunity_compute", failures, len(selected))` runs after the gather.
+- The two comments now state the new constraint. The per-candidate `indicator RPC failed for <sym>` WARNING is gone, and the tally line (WARNING, or ERROR when every candidate failed) replaces it. No new outbound RPC.
+- Config-wiring gate: not applicable (no config key, no migration).
+- Files modified: `services/xstockstrat-analysis/app/handlers/servicer.py`
+- Deviations: see Step 12 (Deviation Log "Steps 11+12").
+
+### Step 12 — test: opportunities compute isolation regressions (`@AC-1`) [done]
+- Atomic unit Steps 11+12. `tests/test_per_symbol_isolation.py` gains 15 test cases (22 in the file):
+  - `@AC-1` over AAPL/MSFT/NVDA, run with an eval `FormulaExecutionError`, an eval `ZeroDivisionError` and a raising `_load_fundamentals_snapshot`. The other two rows are evaluated. `NVDA` carries the marker, no `unavailable`, conviction 0.0 and action UNSPECIFIED, and the tally is logged.
+  - Terminal exit reasons, through `_decode_formula_output`: RUNTIME_ERROR, IMPORT_BLOCKED, MEMORY_EXCEEDED and UNSPECIFIED.
+  - A held row keeps ADD and carries the marker.
+  - A row-local `UNAVAILABLE` outage in both completion orders.
+  - Precedence: a bars outage plus a terminal fault gives `unavailable` only.
+  - The marker clears on a healthy recompute.
+  - `ListOpportunities` serves the marked row past a 0.9 floor with `data_unavailable` False and the token in `provenance`.
+  - The gather backstop drops one candidate when `_composite_score` raises, with a WARNING tally that names it.
+  - Cancellation propagates.
+  - Every regression checks the `_is_transient_formula_error` spy's input (O-10).
+- `test_unreadable_formula.py`: the pinning test is rewritten as `test_opportunity_recompute_timeout_marks_the_row_unavailable`. The spy receives a `FormulaExecutionError` with `exit_reason == TIMEOUT`, the row has `unavailable` and no marker, and "opportunity recompute failed" is absent. This is the feature-289 `@AC-10` CHANGE the operator signed off on 2026-11-20. The file also gains the shared `_classifier_spy`.
+- `test_analysis_servicer.py` (operator scope expansion): `test_formula_execution_error_still_propagates` → `test_formula_execution_error_degrades_only_its_row`.
+- C-13: the harnesses come from `test_analysis_servicer`, `test_unreadable_formula` and `conftest`. `"boom"`, `"sx"`, `"sy"` and `"f-1"` are one-off scenario values.
+- TDD:
+  - RED (`.sdd-logs/v-1.log`): `16 failed, 1785 passed`. Each failure is the missing behavior: the fault propagates (`FormulaExecutionError: formula f-1 failed: boom`, `ZeroDivisionError: boom`), or the spy was never called (`Expected '_is_transient_formula_error' to be called once. Called 0 times.`).
+  - GREEN (`.sdd-logs/v-2.log`): `509 passed in 6.44s` for the six listed files, full suite `1801 passed`, `Required test coverage of 40% reached. Total coverage: 91.73%`, ruff `All checks passed!` and `144 files already formatted`. exit=0, which reflects only the final grep.
+  - Mutation (`except BaseException` in `_row_for`, reverted without committing; `.sdd-logs/v-3.log`): `Failed: DID NOT RAISE <class 'asyncio.exceptions.CancelledError'>`, `1 failed, 3 passed, 18 deselected`. Re-run after the revert: `22 passed`.
+- Config-wiring gate: not applicable (no config key, no migration).
+- Files modified: `services/xstockstrat-analysis/tests/test_per_symbol_isolation.py`, `services/xstockstrat-analysis/tests/test_unreadable_formula.py`, `services/xstockstrat-analysis/tests/test_analysis_servicer.py` (operator scope expansion)
+- Deviations: a missed pinning test, the spy built with `create=True`, and a first-call `_composite_score` double (Deviation Log "Steps 11+12").
+
+### Open Threads
+- [ ] The comment above `sym_unavailable` in `_row_for` still says a sibling candidate may add this symbol to `fetch_failed` concurrently. That can no longer happen, because `fetch_failed` is now filled before Phase 2. Step 11 rewrote only the two comments it names, so the stale sentence remains for Step 17 or the integration PR.
+- [ ] `_FakeOppRepo.available_sources` (`tests/test_analysis_servicer.py`) still lacks `evaluation_failed` in its skip list (noted at Step 8). No Step 12 test reads the facet, so it is unchanged.
+
+## Session 2026-11-26 — sdd-execute sequential (sdd-batch-execute), step 13
+
+- Tooling: the analysis `.venv` was synced with `uv sync --extra dev`; ruff 0.16.9 on PATH; hook check hook=0.
+
+### Step 13 — service: isolate the surgical retry (heal) [done]
+- In `_retry_unavailable_symbols`, one `try` / `except Exception` now covers the loaders, `assess` and the eval. The inner `except grpc.RpcError` is absorbed by it.
+  - A fault that `_is_transient_formula_error` accepts keeps the row `unavailable`, with the same "indicator RPC still failing" WARNING as before.
+  - Any other fault sets a row-local `eval_failed`.
+  - Both kinds are appended to a per-heal `failures` list.
+- A new `if eval_failed:` branch, placed before `if unreadable:`, mirrors that branch with `EVALUATION_FAILED_PROVENANCE`:
+  - `unavailable` is dropped, so the selector does not pick the row again.
+  - A held row omits `action`. A non-held row binds UNSPECIFIED with zeroed axes.
+  - `_healed` is True.
+  - The branch ends in `continue`, so no readiness-cache row is staged for it.
+- The readiness-cache subset body is wrapped too. A failure there appends to `failures` and stages nothing.
+- `log_isolation_tally(log, "opportunity_heal", failures, len(targets))` runs after the loop.
+- The docstring sentence and the eval comment now state the new contract. No new outbound RPC; header propagation unchanged.
+- TDD:
+  - Probe: a temporary probe test (Deviation Log "Step 13") patched the eval to raise `ZeroDivisionError`.
+  - RED (`.sdd-logs/v-2.log`): `ZeroDivisionError: boom`, raised from `servicer.py:5209` in `_retry_unavailable_symbols`.
+  - GREEN (`.sdd-logs/v-3.log`): `1 passed`. The probe was then deleted.
+  - Verification (`.sdd-logs/v-4.log`): `488 passed in 6.73s`, ruff `All checks passed!` and `144 files already formatted`, and the stale-phrase grep printed nothing. It reports `exit=1`, which is that grep's no-match status.
+  - Full suite (`.sdd-logs/v-5.log`): `1801 passed`, `Required test coverage of 40% reached. Total coverage: 91.56%`, exit=0.
+- Config-wiring gate: not applicable (no config key, no migration).
+- Files modified: `services/xstockstrat-analysis/app/handlers/servicer.py`
+- Deviations: RED came from a temporary untracked probe test. Three existing comments that the re-indent pushed past 100 columns were re-wrapped (Deviation Log "Step 13").
+
+### Open Threads
+- [ ] A bars-fetch failure in the heal still only logs "bars fetch still failing" and is not counted in the `opportunity_heal` tally. Instruction 1 scopes the tally to the wrapped `else:` branch.
+
+## Session 2026-11-26 — sdd-execute sequential (sdd-batch-execute), step 14
+
+- Tooling: the analysis `.venv` was synced with `uv sync --extra dev` (pytest reports Python 3.12.3, as in Step 1); ruff 0.16.9 on PATH; hook check hook=0.
+
+### Step 14 — test: heal isolation regressions (`@AC-3` surgical retry) [done]
+- `tests/test_per_symbol_isolation.py` gains 7 heal test cases (29 in the file), built on a two-row (`AAPL`, `NVDA`) `_heal_svc` over `_materialized_svc`, with `replace_symbols` spied and `_FakeReadinessCache` swapped in:
+  - `@AC-3` outage: `NVDA`'s reversed closes make `ExecuteFormula` raise `UNAVAILABLE` (the Steps 9+10 technique). One `replace_symbols` await holds both rows, `AAPL` is healed, `NVDA` keeps `unavailable`, only `AAPL` is staged, and one WARNING `opportunity_heal` tally names `NVDA:AioRpcError`.
+  - Terminal fault (`ZeroDivisionError` in `evaluate_conditions_traced`), parametrized held / non-held: the heal returns, `AAPL` is healed, `NVDA` carries `EVALUATION_FAILED_PROVENANCE` without `unavailable`, nothing is staged for it, a held row omits `action`, and a second heal does not reselect it (`await_count == 1`, extends feature-289 `@AC-9`).
+  - TIMEOUT (`success=False`, `exit_reason=TIMEOUT`) keeps the `MYSZ` row `unavailable`. A RUNTIME_ERROR response marks it. Both assert the classifier spy received a `FormulaExecutionError` with that `exit_reason` (O-10).
+  - A raising `compute_readiness_row` in the cache subset leaves both rows healed and stages only `AAPL`.
+  - `CancelledError` from the eval propagates; nothing is written.
+- The module docstring now names the heal. C-13: every harness comes from `test_analysis_servicer`, `test_unreadable_formula` and this module's existing helpers.
+- TDD:
+  - RED (`.sdd-logs/v-1.log`, `servicer.py` checked out at the pre-Step-13 commit `dceacb11`, restored before GREEN): `6 failed, 74 passed`. Both terminal-fault variants failed with the propagated `ZeroDivisionError: boom`, the TIMEOUT and RUNTIME_ERROR cases with `FormulaExecutionError: formula f-zscore failed: boom`, the cache-subset case with `ZeroDivisionError: boom`, and the outage case with the classifier never called (`not enough values to unpack (expected 1, got 0)`).
+  - GREEN (`.sdd-logs/v-2.log`): `80 passed in 0.91s`, full suite `1808 passed`, `Required test coverage of 40% reached. Total coverage: 91.78%`, ruff `All checks passed!` and `144 files already formatted`, exit=0 (which reflects only the last line).
+  - Mutation (`except BaseException` on the heal's eval handler, reverted without committing; `.sdd-logs/v-3.log`): `FAILED tests/test_per_symbol_isolation.py::test_heal_propagates_cancellation`, `Failed: DID NOT RAISE <class 'asyncio.exceptions.CancelledError'>`, `1 failed, 7 passed`. Re-run after the revert (`.sdd-logs/v-4.log`): `8 passed`.
+- Config-wiring gate: not applicable (no config key, no migration).
+- Files modified: `services/xstockstrat-analysis/tests/test_per_symbol_isolation.py`
+- Deviations: none
+
+## Session 2026-11-26 — operator ruling on O-9 and re-spec, recorded by the orchestrator (verbatim)
+
+- Operator ruling (2026-11-26, before Step 15). Question, verbatim: "before Step 15: the O-9 deferral — the evaluation_failed cue parity on the mobile SignalRow and the Signal-detail header is deferred (not built in 308). Confirm the deferral?" Answer, verbatim: "Build the cue parity in 308". Option text, verbatim: "Add the cue to the mobile SignalRow and Signal-detail header now; 308 needs a re-spec (new UI step) and impl-spec review before Step 15."
+- Branch sync first: `origin/main-dev` merged into the feature branch (merge commit `4054a35c`). The only conflict was `docs/roadmap/ledger/fails.md`, resolved as the union of both sides. `git diff --quiet origin/main-dev -- pnpm-lock.yaml` returns rc=0 after the merge (lockfile gate clear).
+- Re-spec, by hand (no `/sdd-spec` subagent run); status stays `in-progress`. Steps 1-16 are untouched except Step 15 Instruction 3, which now points to Steps 17-20.
+  - New Step 17 (service): `evaluationFailed: boolean` on `SignalItem` (`src/components/mobile/sections.ts`), set from `o.provenance.includes(EVALUATION_FAILED_PROVENANCE)` in `mobileSections` (`src/app/insights/opportunities/page.tsx:193`), and a `role="status"` arm after the `formulaUnreadable` arm in `SignalRow` (`SectionRenderer.tsx:248`), test id `opportunity-evaluation-failed-mobile-<sym>`.
+  - New Step 18 (test): mobile Playwright test in `e2e/insights/opportunities.spec.ts`, reusing Step 16's `MYSZ_EVALUATION_FAILED_OPPORTUNITY` and the existing `routeWithUnreadableRow`; `INVENTORY.md` consumer column extended.
+  - New Step 19 (service): header arm in `OpportunitySection` (`src/app/trader/positions/[symbol]/page.tsx:1009`, header chain `:1038-1052`), test id `detail-evaluation-failed`.
+  - New Step 20 (test): Signal-detail Playwright test in `e2e/trader/position-detail.spec.ts`, serving the fixture through `page.route` (the mock backend serves only the unreadable row for `MYSZ`), `INVENTORY.md` extended.
+  - Old Step 17 (docs) is now Step 21; its `ui-ux-governance.md` § 9 backlog row (instruction 6) and that file are dropped, because the gap it recorded is now built. Total steps 17 → 21; `feature.md` step count, artifacts line and reviewers snapshot updated.
+- The design supports this change: design.md Open Risks O-9 names "a `SignalItem` field plumbed via `sections.ts`" as one of the two options, and the operator picked it. No new design decision was made. The one implementation choice is that the new field is required like its sibling `formulaUnreadable`; checked with `tsc` that `page.tsx:193` is its only construction site, so no `**Lands with**` unit.
+- Steps 17-20 keep one UI consumer surface, at most one component surface per step, and each service step is paired with the next test step (C-12 fixture reuse, no new inline domain literal; C-17 design-role tokens via the shared cue).
+- Self-review (no subagent tool in this run; a self-review against `.claude/skills/sdd-review/reference/impl-spec-criteria.md` B2/B3/B3b and `step-constraints.md` §B/§C, not a `spec-reviewer` run): every new step has grep-found evidence, exact files, a runnable Verification with the lint gate, `**TDD**`, `**Reviewers**` and `**Covers**: —` (UI steps, like Step 16, cover no `@AC-*`); ordering holds (17/19 need Step 15, 18/20 need Step 16); cross-references (Execution Summary, Step Dependencies, Step 15, old Step 17 → 21) fixed. Verdict: PASS, no ✗; one ⚠ below. A formal `/sdd-review fix-analysis-per-symbol-isolation impl-spec` subagent run is still the advisory gate if the operator wants it.
+
+### Open Threads
+
+- [ ] ⚠ The Signal-detail "Why this fired" card (`src/components/insights/SignalReadiness.tsx`, the `readiness.conditions.length === 0` branch) will read "This strategy has no entry conditions to evaluate" for an `evaluation_failed` symbol, because Step 21's text has `EvaluateReadiness` return the failing symbol as an empty 0-of-0 `SymbolReadiness` without the unreadable marker. The ruling names only the SignalRow and the header, so Steps 17-20 do not change it. Operator to decide whether it needs its own change; no follow-up slug was invented.
+- [ ] The 2026-11-21 binding approval record (the `sdd-batch-setup` fence: `specHash`, `pending` steps 1-17) no longer matches this spec (21 steps, new hash). `/sdd-execute` must re-confirm before Step 15; the "O-9 deferral needs the operator" thread of the 2026-11-20 impl-spec review is closed by the ruling above.
+- [ ] `evaluation-failed-cue-parity` is no longer a follow-up and needs no feature number; only `analysis-isolation-degraded-counter` does.
+- [ ] design.md Open Risks O-9 and debate.md O-9 still read open (closed artifacts, not edited); this section and the spec's Decisions record the resolution. Earlier sessions' "Step 17" means the docs step, now Step 21.
+- [ ] Step 20's `page.route` body converts `validUntil` inline; `toJson` and `routeWithUnreadableRow` stay private to `opportunities.spec.ts`, so one three-token expression is duplicated rather than a shared helper being added (touch only what the task needs). Revisit if the DRY hook flags it.
+
+## Session 2026-11-26 — operator ruling on the readiness card and independent impl-spec review, recorded by the orchestrator (verbatim)
+
+- Operator ruling (2026-11-26). Question, verbatim: "308's independent review confirms a gap your cue-parity ruling doesn't cover. The 'Why this fired' card (SignalReadiness.tsx) will say 'This strategy has no entry conditions to evaluate' for an evaluation_failed symbol, because Step 9 now returns an empty 0-of-0 readiness row for a failing symbol (before 308 the call raised and the card said 'Failed to evaluate readiness'). So after Steps 19-20 the header says 'evaluation failed' next to a card claiming there are no conditions — 308 itself introduces that. What should 308 do?" Answer (option selected), verbatim: "Add a card arm in 308 (Recommended)". Option text, verbatim: "Add one small arm to SignalReadiness keyed on the row's evaluation_failed provenance (notice: 'Evaluation failed for <symbol>'), plus its test and an e2e route; about one service+test step pair, placed with Steps 19–20. 308 gets a small re-spec + re-review."
+- Independent impl-spec review verdict: PASS WITH WARNINGS. Addressed in this re-spec (by hand, no `/sdd-spec` run; status stays `in-progress`; Steps 1-14 untouched). Spec is now 23 steps:
+  - New Step 21 (service): arm in `src/components/insights/SignalReadiness.tsx` after the `readiness?.formulaUnreadable` arm and before the "no conditions" arm, keyed on `pairRow?.provenance.includes(EVALUATION_FAILED_PROVENANCE)`: `<div role="status" data-testid="readiness-evaluation-failed"><CardNotice>Evaluation failed for {symbol}.</CardNotice></div>`. One UI surface, no signature change, so no `**Lands with**` unit.
+  - New Step 22 (test): in `e2e/trader/position-detail.spec.ts`, overrides `EvaluateReadiness` with `page.route` (the shared mock forces `MYSZ` to `formulaUnreadable` through `READINESS_BUCKET_OVERRIDE`), reuses `symbolReadiness` and Step 20's helper; no new fixture; extends `INVENTORY.md`.
+  - Old Step 21 (docs) is now Step 23. Cross-references fixed (header, Execution Summary, Consumer surfaces, Decisions, Step Dependencies, Steps 15 and 19).
+  - (a) C-10: Step 23 now edits `services/xstockstrat-ui/docs/opportunities-shell.md` (per-surface test ids, the second required `SignalItem` field `evaluationFailed`, the card arm id), by symbol after the "Formula-unreadable row (289)" bullet.
+  - (b) Step 16: the `mock-backend.ts` `MARKERS` / floor-exemption edit is removed. It was unreachable (every test serves the row through `page.route`; `MARKERS` only feeds the facet over `OPPORTUNITIES`). The ledger rule on mirrored fakes is met by an evidence paragraph in Step 16.
+  - (c) Step 16: the `readinessCue` import check is widened to a whole-suite `playwright test --list` plus a run of `opportunities.spec.ts` (which loads the global setup), because `e2e/fixtures/index.ts` re-exports the fixture module; the named fallback is a second TS copy of the token in the fixture module, recorded as a deviation (P-03).
+  - (d) Step 16 adds the fixture to the spec's import list (`opportunities.spec.ts:3-8`) and Step 18 confirms it; Step 20's helper null-guards `postDataJSON()`; the UI test steps (16, 18, 20, 22) state `pnpm run test:coverage` as their statable gate (vitest logic layer; Playwright has no threshold).
+  - (e) Steps 20 and 22 say "edit by symbol"; the spec header notes UI line anchors drift.
+- Self-review (no subagent tool in this run): against `impl-spec-criteria.md` B2/B3/B3b and the sdd-spec step constraints; every new step has grep-found evidence, files, runnable Verification with lint, `**TDD**`, `**Reviewers**`, `**Covers**: —`; pairing 21↔22 holds; C-12 and C-17 honored. Verdict: PASS, no ✗.
+
+### Open Threads
+
+- [ ] The 2026-11-26 warning on `SignalReadiness` in the previous session's Open Threads is resolved by Steps 21-22.
+- [ ] Step 21's arm is keyed on the row's provenance only, as ruled. If `EvaluateReadiness` later returns real conditions while the stored row still carries `evaluation_failed` (cleared only on the next recompute), the arm shows the notice instead of the conditions. Operator to decide whether to also require an empty readiness row.
+- [ ] Step 16's import check may force the fallback (a second TS copy of the wire token in the fixture module); the executor must report it at the checkpoint.
+- [ ] The `sdd-batch-setup` approval record is stale (now 23 steps); `/sdd-execute` must re-confirm before Step 15.
+- [ ] The re-review the ruling asks for is this self-review; a subagent `/sdd-review ... impl-spec` run remains available.
+
+## Session 2026-11-27 — operator ruling on the card arm condition, recorded by the orchestrator (verbatim)
+
+- Operator ruling (2026-11-27). Open item raised by the re-spec, verbatim: "Step 21's arm is keyed on provenance only, as ruled. If EvaluateReadiness returns real conditions while the stored row still carries evaluation_failed, the arm hides them. You need to decide whether to also require an empty readiness row." The orchestrator's list item B4, verbatim: "308: the new card arm is keyed only on evaluation_failed provenance. Also require an empty readiness row?" Operator's answer, verbatim: "B4 yes".
+- Changed (spec only, by hand; Steps 1-14 untouched; spec hash changes, as expected):
+  - Step 21: the arm is taken only when the row's provenance includes `EVALUATION_FAILED_PROVENANCE` AND the readiness row is empty. One `noConditions` const (`!readiness || readiness.conditions.length === 0`) now defines emptiness for both the new arm and the existing "no conditions" arm. With real conditions present, the card renders them as today. Evidence, Instructions and Verification updated (a grep that the expression exists once).
+  - Step 22: adds a negative test (stored row `evaluation_failed`, `EvaluateReadiness` returns `symbolReadiness('MYSZ')` with its 2/3 conditions: conditions render, arm absent) and a mutation run (drop `&& noConditions`, confirm the negative test fails, restore). No component-level unit harness exists for this card (vitest covers `src/lib/**` in node), so the guard is e2e; extracting a helper would be speculative.
+  - Execution Summary / Decisions text: the O-9 bullet records the third ruling.
+- Self-review (no subagent tool in this run): Evidence, Instructions, Verification and TDD of Steps 21-22 are consistent; no new fixture (C-12), no color literal (C-17); the negative test is not red before Step 21, which Step 22 states, and its value is carried by the mutation run. Verdict: PASS, no ✗.
+
+### Open Threads
+
+- [x] The "arm keyed on provenance only" open thread of the 2026-11-26 readiness-card session is resolved by this ruling.
+
+## Session 2026-11-27 — sdd-execute sequential (sdd-batch-execute), step 15
+
+- Tooling: pnpm 9.15.9 ✓ · node v22.23.5 on PATH (`/opt/node24` present, not on PATH) · chromium ✓ (`/opt/pw-browsers`) · Docker e2e runner ✗ (`corepack prepare pnpm@9.15.9` registry fetch error, so the host fallback was used) · hook check hook=0.
+
+### Step 15 — service: `evaluation_failed` cue on the insights opportunities page [done]
+- `readinessCue.ts` exports `EVALUATION_FAILED_PROVENANCE = 'evaluation_failed'`, the only TS copy of the wire token, and `EVALUATION_FAILED_CUE`: label `evaluation failed`, role `secondary`, Phosphor `Warning`. Both sit beside `IN_QUEUE_CUE`.
+- `page.tsx` derives `evalFailed` from `o.provenance` beside `held`/`unreadable`. The header gains an `evalFailed && !held` arm after the unreadable arm, plus a held companion badge. The readiness slot gains an `evalFailed` arm (`role="status"`, `opportunity-evaluation-failed-<sym>`, `Evaluation failed for <sym>`). The act gate is now `fundUnavailable || ((unreadable || evalFailed) && !held)`.
+- TDD:
+  - RED (temporary probe spec, `.sdd-logs/v-5.log`): `getByTestId('opportunity-evaluation-failed-MYSZ')`, `element(s) not found`, with the card visible.
+  - GREEN (`.sdd-logs/v-6.log`): `1 passed`. The probe was then deleted.
+- Verification:
+  - The verbatim block (`.sdd-logs/v-7.log`) exited 1. Lint passed (warnings in untouched files only). The `'evaluation_failed'` grep printed nothing.
+  - tsc failed on `BackfillSymbolOutcome.INCOMPLETE` in two untouched files. Cause: the linked proto package is the main checkout's stale dist. Against this branch's dist, tsc exited 0 (`.sdd-logs/v-8.log`).
+  - The Playwright warmup timed out at 10 s. A re-run with `--timeout=240000` gave `45 passed (2.9m)`, exit=0 (`.sdd-logs/v-9.log`).
+- Config-wiring gate: not applicable (no config key, no migration).
+- Files modified: `services/xstockstrat-ui/src/lib/readinessCue.ts`, `services/xstockstrat-ui/src/app/insights/opportunities/page.tsx`
+- Deviations: probe RED, the host-harness timeout and the stale linked proto dist (Deviation Log "Step 15").
+
+### Open Threads
+- [ ] The 2026-11-26 thread "the `sdd-batch-setup` approval record is stale; `/sdd-execute` must re-confirm before Step 15" was not re-confirmed inside this agent. The workflow launched Step 15 directly, so the orchestrator's approvals are taken as the re-confirmation.
+- [ ] Host e2e in a worktree needs a raised `--timeout` (cold `pnpm dev` compile), and `tsc` needs the branch's own proto dist when the main checkout's `packages/proto/gen/ts` is stale. Steps 16-22 will hit both.
+
+## Session 2026-11-27 — sdd-execute sequential (sdd-batch-execute), step 16
+
+- Tooling: pnpm 9.15.9 ✓ · node v22.23.5 on PATH · chromium ✓ (`/opt/pw-browsers`) · hook check hook=0. The Docker e2e runner was not retried; Step 15 found it broken (`corepack prepare` fetch error).
+
+### Step 16 — test: Playwright assertion for a non-held `evaluation_failed` row [done]
+- `e2e/fixtures/opportunities.ts` gains `MYSZ_EVALUATION_FAILED_OPPORTUNITY`: the non-held unreadable row with `formulaUnreadable: false` and provenance `['watchlist', EVALUATION_FAILED_PROVENANCE]`. It is not in `OPPORTUNITIES`, and `INVENTORY.md` has a catalog row for it.
+- `e2e/insights/opportunities.spec.ts` has a new describe, `Opportunities — evaluation failed (feature 308)`, served through `routeWithUnreadableRow`. It asserts that `opportunity-evaluation-failed-MYSZ` is visible and contains `evaluation failed`, and that `snooze-MYSZ`, `opportunity-unavailable-MYSZ` and `opportunity-formula-unreadable-MYSZ` each have count 0. No `mock-backend.ts` edit.
+- **Import check failed, so the named fallback was taken (P-03, report at checkpoint).** Importing from `src/lib/readinessCue.ts` made the whole-suite `playwright test --list` exit 1 with `ReferenceError: exports is not defined in ES module scope` (`@phosphor-icons/react` under Playwright's CJS transform). The fixture module now holds a non-exported second TS copy of the token, and a comment says to keep the two equal. Steps 18, 20 and 22 reuse the fixture, so they inherit this.
+- TDD:
+  - RED (`.sdd-logs/v-1.log`, `page.tsx` checked out at the pre-Step-15 commit `58442bc5` and restored before GREEN): `getByTestId('opportunity-evaluation-failed-MYSZ')`, `element(s) not found`, with the `MYSZ` card rendered, `1 failed`.
+  - GREEN (`.sdd-logs/v-5.log`): `46 passed (3.6m)`.
+- Verification:
+  - The verbatim block (`.sdd-logs/v-2.log`) printed exit=0, but that status comes from the last grep.
+    - Lint passed, with warnings in untouched files only.
+    - `--list` printed `Total: 709 tests in 83 files`.
+    - vitest: `Tests  748 passed | 2 skipped (750)`, `Statements   : 81.13%`.
+    - Both greps hit.
+  - tsc failed on `BackfillSymbolOutcome.INCOMPLETE` (the stale linked proto dist). Against this branch's dist it exited 0 (`.sdd-logs/v-3.log`).
+  - The warmup timed out at 10 s. A re-run with `--timeout=240000` (`.sdd-logs/v-4.log`) gave `1 failed, 45 passed`. The failure was the untouched 5 s `mobile-ohlc-CAPR` assertion. An identical re-run gave `46 passed (3.6m)`, exit=0 (`.sdd-logs/v-5.log`).
+- Config-wiring gate: not applicable (no config key, no migration).
+- Files modified: `services/xstockstrat-ui/e2e/fixtures/opportunities.ts`, `services/xstockstrat-ui/e2e/fixtures/INVENTORY.md`, `services/xstockstrat-ui/e2e/insights/opportunities.spec.ts`
+- Deviations: the fixture-local token copy, plus the Step 15 `tsc` and e2e-timeout fallbacks (Deviation Log "Step 16").
+
+### Open Threads
+- [ ] The token `'evaluation_failed'` now has two TS copies: `src/lib/readinessCue.ts` and `e2e/fixtures/opportunities.ts`. A Playwright-loadable home for it (a module with no icon import) would remove the copy. That is a `src/lib` change outside this step's scope; operator to decide.
+- [ ] `feature 188: mobile card shows previous-day OHLC block` (`opportunities.spec.ts:592`) failed once on the host dev server (hard-coded 5 s wait) and passed on re-run. Possible flake; it is untouched by this feature.
+
+## Session 2026-11-27 — sdd-execute sequential (sdd-batch-execute), step 17
+
+- Tooling: pnpm 9.15.9 ✓ · chromium ✓ (`/opt/pw-browsers`) · hook check hook=0. No install was run.
+- Discovery: the advisory digest read the main checkout's pre-re-spec spec, where Step 17 is docs-only. At `origin/feature/fix-analysis-per-symbol-isolation@b8322200`, Step 17 is the mobile `SignalRow` step and every evidence symbol exists. The anchors had drifted: the construction site is now `page.tsx:209` and the unreadable arm is `SectionRenderer.tsx:247`. `grep -rn "kind: 'signal"` still finds only one construction site.
+
+### Step 17 — service: `evaluation_failed` cue on the mobile `SignalRow` [done]
+- `SignalItem` gains a required `evaluationFailed: boolean`, set in `mobileSections` from `o.provenance.includes(EVALUATION_FAILED_PROVENANCE)`. The constant comes from the existing `readinessCue` import, so the file has no new import line and no literal. `SignalRow` gains an arm after `s.formulaUnreadable` and before `hasReadiness`: a `role="status"` span with `opportunity-evaluation-failed-mobile-<sym>` and `Evaluation failed for <sym>`, wrapping `<EnumBadge render={EVALUATION_FAILED_CUE} />`. The mobile header chain is unchanged.
+- TDD:
+  - RED (temporary probe spec, `.sdd-logs/v-1.log`): `getByTestId('opportunity-evaluation-failed-mobile-MYSZ')`, `element(s) not found`, with `MYSZ` visible.
+  - GREEN (`.sdd-logs/v-2.log`): `1 passed (24.0s)`. The probe was then deleted.
+- Verification:
+  - The verbatim block (`.sdd-logs/v-3.log`) exited 1, and that status comes from the last grep (no match).
+    - Lint passed, with warnings in untouched files only.
+    - The `evaluationFailed` grep hit `sections.ts:26`, `SectionRenderer.tsx:257` and `page.tsx:210`.
+    - The `'evaluation_failed'` literal grep printed nothing.
+  - tsc failed on `BackfillSymbolOutcome.INCOMPLETE` in two untouched files, because the linked proto dist is stale. Against this branch's dist it exited 0 (`.sdd-logs/v-4.log`), and `--listFilesOnly` confirmed it compiled the three step files.
+  - The Playwright warmup timed out at 10 s. A re-run with `--timeout=240000` gave `49 passed (2.9m)`, exit=0 (`.sdd-logs/v-5.log`).
+- Config-wiring gate: not applicable (no config key, no migration). Lockfile gate: `git diff --quiet origin/main-dev -- pnpm-lock.yaml` rc=0.
+- Files modified: `services/xstockstrat-ui/src/components/mobile/sections.ts`, `services/xstockstrat-ui/src/components/mobile/SectionRenderer.tsx`, `services/xstockstrat-ui/src/app/insights/opportunities/page.tsx`
+- Deviations: probe RED, the stale linked proto dist and the host-harness timeout (Deviation Log "Step 17").
+
+## Session 2026-11-27 — sdd-execute sequential (sdd-batch-execute), step 18
+
+- Tooling: pnpm 9.15.9 ✓ · chromium ✓ (`/opt/pw-browsers`) · hook check hook=0. No install was run. Lockfile gate: `git diff --quiet origin/main-dev -- pnpm-lock.yaml` rc=0.
+- Discovery: at `origin/feature/fix-analysis-per-symbol-isolation@4abba94e` everything the step needs is there:
+  - the import at `opportunities.spec.ts:8`
+  - Step 16's describe at `:787`
+  - the mobile precedent at `:802`
+  - `routeWithUnreadableRow` at `:717`
+  - the Step 16 catalog row at `INVENTORY.md:45`
+  - Step 17's `opportunity-evaluation-failed-mobile-` test id at `SectionRenderer.tsx:261`
+
+  The advisory digest's missing-Step-16/17 blockers came from an older tree and do not hold here.
+
+### Step 18 — test: Playwright assertion for the mobile `evaluation_failed` row [done]
+- `opportunities.spec.ts` has a new describe, `Opportunities — evaluation failed, mobile (feature 308)`, at 375x800 after Step 16's describe. It serves `MYSZ_EVALUATION_FAILED_OPPORTUNITY` through `routeWithUnreadableRow`. It asserts that `opportunity-evaluation-failed-mobile-MYSZ` is visible, contains `evaluation failed` and has `aria-label` `Evaluation failed for MYSZ`, and that the unreadable and unavailable mobile ids each have count 0. The import was already present. `INVENTORY.md` has the mobile cue added to the consumer column of the Step 16 row. No new fixture (C-12).
+- TDD:
+  - RED (`.sdd-logs/v-1.log`): run with `SectionRenderer.tsx`, `sections.ts` and `page.tsx` checked out at the pre-Step-17 commit `b8322200`, then restored. `getByTestId('opportunity-evaluation-failed-mobile-MYSZ')` gave `element(s) not found`, with `MYSZ` rendered (`1 failed`).
+  - GREEN (`.sdd-logs/v-4.log`): `47 passed (2.9m)`, the new test included.
+- Verification:
+  - The verbatim block (`.sdd-logs/v-2.log`) printed exit=0, but that status comes from the last grep.
+    - Lint passed, with warnings in untouched files only.
+    - vitest: `Tests  748 passed | 2 skipped (750)`, `Statements   : 81.13%`.
+    - Both greps hit.
+  - tsc failed on `BackfillSymbolOutcome.INCOMPLETE`, because the linked proto dist is stale. Against this branch's dist it exited 0 (`.sdd-logs/v-3.log`).
+  - The warmup timed out at 10 s. A re-run with `--timeout=240000` gave `47 passed (2.9m)`, exit=0 (`.sdd-logs/v-4.log`).
+- Config-wiring gate: not applicable (no config key, no migration).
+- Files modified: `services/xstockstrat-ui/e2e/insights/opportunities.spec.ts`, `services/xstockstrat-ui/e2e/fixtures/INVENTORY.md`
+- Deviations: a targeted RED run, plus the stale linked proto dist and the host-harness timeout (Deviation Log "Step 18").
+
+## Session 2026-11-27 — sdd-execute sequential (sdd-batch-execute), step 19
+
+- Tooling: pnpm 9.15.9 ✓ · chromium ✓ (`/opt/pw-browsers`) · hook check hook=0. No install was run. Lockfile gate: `git diff --quiet origin/main-dev -- pnpm-lock.yaml` rc=0.
+- Discovery: the advisory digest read the main checkout's pre-re-spec spec, which ends at Step 17 with O-9 deferred. At `origin/feature/fix-analysis-per-symbol-isolation@062b7194`, Step 19 exists and every evidence symbol is in place: the `readinessCue` import at `page.tsx:27`, `OpportunitySection` at `:1009`, the header chain at `:1038-1052`, and `EVALUATION_FAILED_PROVENANCE` / `EVALUATION_FAILED_CUE` at `readinessCue.ts:27,29` (Step 15).
+
+### Step 19 — service: `evaluation_failed` cue on the Signal-detail header [done]
+- `OpportunitySection` derives `evalFailed` from `opportunity.provenance` after the `if (!opportunity)` guard. The header chain gains an `evalFailed && !held` arm after the unreadable arm, rendering `EVALUATION_FAILED_CUE` with test id `detail-evaluation-failed`. The held branch renders the same badge beside the action badge. Both constants come from the existing `readinessCue` import. No literal token and no colour literal. `SignalReadiness` is unchanged (Step 21).
+- TDD:
+  - RED (temporary probe spec, `.sdd-logs/v-1.log`): `getByTestId('detail-evaluation-failed')` `element(s) not found` in both the non-held and held tests, with the Opportunity card rendered (`2 failed`).
+  - GREEN (`.sdd-logs/v-2.log`): `2 passed (27.9s)`. The probe was then deleted.
+- Verification:
+  - The verbatim block (`.sdd-logs/v-3.log`) exited 1.
+    - Lint passed, with warnings in untouched files only.
+    - The grep hit `page.tsx:28,1051,1059`, and the `'evaluation_failed'` literal grep printed nothing.
+    - tsc failed on `BackfillSymbolOutcome.INCOMPLETE`, because the linked proto dist is stale. Against this branch's dist it exited 0 and compiled `page.tsx` (`.sdd-logs/v-4.log`).
+    - The warmup timed out at 10 s.
+  - The spec re-runs with `--timeout=240000` gave `5 failed, 57 passed` (`.sdd-logs/v-5.log`) and `3 failed, 59 passed` (`.sdd-logs/v-6.log`). None of the failures is in a test this step touches:
+    - `@AC-5 INCOMPLETE-only partial` fails from the stale proto dist at runtime.
+    - The two AAPL `Single Position page` tests (`+$100.00`, `no stop set`) fail the same way with `page.tsx` at the pre-Step-19 commit `062b7194` (`.sdd-logs/v-7.log`, `2 failed`), so they were already failing in this worktree.
+- Config-wiring gate: not applicable (no config key, no migration).
+- Files modified: `services/xstockstrat-ui/src/app/trader/positions/[symbol]/page.tsx`
+- Deviations: probe RED, the stale linked proto dist, and the baseline-failing e2e tests (Deviation Log "Step 19").
+
+### Open Threads
+- [ ] `position-detail.spec.ts` tests `renders the risk-framed header …` and `a position with no resting stop …` fail on the host harness in this worktree both with and without Step 19. CI (Docker e2e, the branch's own proto dist) is the arbiter; if they fail there, triage them separately from 308.
+
+## Session 2026-11-27 — sdd-execute sequential (sdd-batch-execute), step 20
+
+- Tooling: pnpm 9.15.9 ✓ · chromium ✓ (`/opt/pw-browsers`) · hook check hook=0. No install was run. Lockfile gate: `git diff --quiet origin/main-dev -- pnpm-lock.yaml` rc=0.
+- Discovery: the advisory digest read the main checkout's pre-re-spec spec, which ends at Step 17. At `origin/feature/fix-analysis-per-symbol-isolation@8f5b11c8`, Step 20 exists and everything it needs is in place: the feature-289 describe, `fulfillJson` and `watchlist` in `position-detail.spec.ts`, `MYSZ_EVALUATION_FAILED_OPPORTUNITY` (re-exported by `e2e/fixtures/index.ts:22`), its catalog row at `INVENTORY.md:45`, and Step 19's `detail-evaluation-failed` at `page.tsx:1051,1059`.
+
+### Step 20 — test: Playwright assertion for the Signal-detail `evaluation_failed` header [done]
+- `position-detail.spec.ts` imports `MYSZ_EVALUATION_FAILED_OPPORTUNITY` from `'../fixtures'` and adds the in-file helper `routeEvaluationFailedRow(page)`, which Step 22 reuses. The helper answers only the null-guarded `symbol === 'MYSZ'` `ListOpportunities` request with the row, converting `validUntil` to an ISO string; every other request falls through. A new describe, `Signal-detail evaluation failed (feature 308)`, asserts that `detail-evaluation-failed` is visible and contains `evaluation failed`, and that `detail-formula-unreadable` has count 0. `INVENTORY.md` has the Signal-detail header cue added to the consumer column of the Step 16 row. No new fixture (C-12).
+- TDD:
+  - RED (`.sdd-logs/v-1.log`): run with `page.tsx` checked out at the pre-Step-19 commit `062b7194`, then restored. `getByTestId('detail-evaluation-failed')` gave `element(s) not found`, with the routed row's Opportunity card rendered (`1 failed`).
+  - GREEN (`.sdd-logs/v-5.log`): the new test passed in the full spec run (`59 passed`).
+- Verification:
+  - The verbatim block (`.sdd-logs/v-2.log`) printed exit=0, but that status comes from the last grep.
+    - Lint passed, with warnings in untouched files only.
+    - vitest: `Tests  748 passed | 2 skipped (750)`, `Statements   : 81.13%`.
+    - Both greps hit.
+  - tsc failed on `BackfillSymbolOutcome.INCOMPLETE`, because the linked proto dist is stale. Against this branch's dist it exited 0 and compiled `position-detail.spec.ts` (`.sdd-logs/v-3.log`).
+  - The warmup timed out at 10 s. One re-run hit `EADDRINUSE 127.0.0.1:9091` from the previous run's teardown (`.sdd-logs/v-4.log`). The next, with `--timeout=240000`, gave `4 failed, 59 passed` (`.sdd-logs/v-5.log`). All four failures are in untouched tests: the two AAPL tests and `@AC-5 INCOMPLETE-only` seen in Step 19, plus `INSUFFICIENT_DATA inline`, which fails the same way with the spec file at `HEAD` (`.sdd-logs/v-7.log`).
+- Config-wiring gate: not applicable (no config key, no migration).
+- Files modified: `services/xstockstrat-ui/e2e/trader/position-detail.spec.ts`, `services/xstockstrat-ui/e2e/fixtures/INVENTORY.md`
+- Deviations: a targeted RED run, the stale linked proto dist and three baseline-failing tests (Deviation Log "Step 20").
+
+### Open Threads
+- [ ] `position-detail.spec.ts` `a backtest over a data-less symbol surfaces INSUFFICIENT_DATA inline …` also fails on the host harness in this worktree with and without this feature's edits. As with the two AAPL tests (Step 19), CI's Docker e2e is the arbiter; triage separately from 308 if it fails there.
+
+## Session 2026-11-27 — sdd-execute sequential (sdd-batch-execute), step 21
+
+- Tooling: pnpm 9.15.9 ✓ · chromium ✓ (`/opt/pw-browsers`) · hook check hook=0. No install was run. Lockfile gate: `git diff --quiet origin/main-dev -- pnpm-lock.yaml` rc=0.
+- Discovery: the advisory digest read the main checkout's pre-re-spec spec, which ends at Step 17. At `origin/feature/fix-analysis-per-symbol-isolation@1f8d6635`, Step 21 exists and every evidence symbol is in place: the `readinessCue` import at `SignalReadiness.tsx:13`, `isHeld` at `:47`, `readiness` at `:56`, the body chain at `:80-103`, `CardNotice` (`children`, `variant`), and `EVALUATION_FAILED_PROVENANCE` at `readinessCue.ts:27` (Step 15).
+
+### Step 21 — service: `evaluation_failed` arm in the Signal-detail "Why this fired" card [done]
+- `SignalReadiness` imports `EVALUATION_FAILED_PROVENANCE`, derives `evalFailed` from `pairRow.provenance` after `isHeld`, and `noConditions` (`!readiness || readiness.conditions.length === 0`) after `readiness`. The chain gains an `evalFailed && noConditions` arm after the unreadable arm and before the `noConditions` "no conditions" arm: `role="status"`, `readiness-evaluation-failed`, `<CardNotice>Evaluation failed for {symbol}.</CardNotice>`. The `error` arm still wins, and real conditions render as before (operator ruling 2026-11-27). No literal token, no colour literal.
+- TDD:
+  - RED (temporary probe spec, `.sdd-logs/v-1.log`): `getByTestId('readiness-evaluation-failed')` `element(s) not found`, with the card reading "This strategy has no entry conditions to evaluate." (`1 failed, 1 passed`).
+  - GREEN (`.sdd-logs/v-2.log`): `2 passed (29.6s)`, the empty-row arm and the 2/3 conditions case. The probe was then deleted.
+- Verification:
+  - The verbatim block (`.sdd-logs/v-3.log`) exited 1. Lint passed (warnings in untouched files only); the greps hit `:13,48,58,102,103,106`, the `=== 0` count is `1`, and the literal grep printed nothing.
+  - tsc failed on `BackfillSymbolOutcome.INCOMPLETE` (stale linked proto dist). Against this branch's dist it exited 0 and compiled `SignalReadiness.tsx` (`.sdd-logs/v-4.log`).
+  - The warmup timed out at 10 s. A re-run with `--timeout=240000` gave `4 failed, 59 passed` (`.sdd-logs/v-5.log`): the two AAPL tests and `@AC-5 INCOMPLETE-only` seen in Steps 19-20, plus `feature 139` section nav, which fails the same way with `SignalReadiness.tsx` at `HEAD` (`.sdd-logs/v-9.log`, `2 failed, 2 passed`).
+- Config-wiring gate: not applicable (no config key, no migration).
+- Files modified: `services/xstockstrat-ui/src/components/insights/SignalReadiness.tsx`
+- Deviations: probe RED, the stale linked proto dist and baseline-failing e2e tests (Deviation Log "Step 21").
+
+### Open Threads
+- [ ] `position-detail.spec.ts` `feature 139` section-nav tests fail on the host harness in this worktree with and without Step 21 (one also passed in a full-spec run during Step 19). CI's Docker e2e is the arbiter; triage separately from 308 if they fail there.
+
+## Session 2026-11-27 — sdd-execute sequential (sdd-batch-execute), step 22
+
+- Tooling: pnpm 9.15.9 ✓ · chromium ✓ (`/opt/pw-browsers`) · hook check hook=0. No install was run. Lockfile gate: `git diff --quiet origin/main-dev -- pnpm-lock.yaml` rc=0.
+- Discovery: the advisory digest read the main checkout's pre-re-spec spec, which ends at Step 17. At `origin/feature/fix-analysis-per-symbol-isolation@bd49aa7d`, Step 22 exists and everything it needs is in place: `routeEvaluationFailedRow`, `fulfillJson`, `watchlist` and `readinessCard` in `position-detail.spec.ts`, `symbolReadiness` (re-exported through `e2e/fixtures/index.ts`), the Step 16 catalog row at `INVENTORY.md:45`, and Step 21's arm (`evalFailed && noConditions`, `readiness-evaluation-failed`) at `SignalReadiness.tsx:102-103`.
+
+### Step 22 — test: Playwright assertion for the `evaluation_failed` readiness-card arm [done]
+- `position-detail.spec.ts` adds `symbolReadiness` to the `'../fixtures'` import and two tests to the `Signal-detail evaluation failed (feature 308)` describe, both using `watchlist` and `routeEvaluationFailedRow` with `EvaluateReadiness` overridden through `page.route`:
+  - empty row (`{ ...symbolReadiness('MYSZ'), conviction: 0, passingConditions: 0, totalConditions: 0, conditions: [] }`): `readiness-evaluation-failed` is visible with `Evaluation failed for MYSZ`, and `readiness-formula-unreadable` and `getByText('conditions to evaluate')` each have count 0;
+  - negative case (`symbolReadiness('MYSZ')`, 2/3): `2/3 conditions` is visible inside `signal-readiness`, and the two notice ids each have count 0.
+- `INVENTORY.md`: both tests added to the consumer column of the Step 16 row. No new fixture (C-12).
+- TDD:
+  - RED (`.sdd-logs/v-1.log`, `SignalReadiness.tsx` at the pre-Step-21 commit `1f8d6635`, restored before GREEN): `getByTestId('readiness-evaluation-failed')` `element(s) not found`, with the card reading "This strategy has no entry conditions to evaluate." (`1 failed, 1 passed`; the negative test is not red before Step 21, as specced).
+  - Mutation (`.sdd-logs/v-2.log`, arm reduced to `evalFailed`, reverted without committing): the negative test failed on `getByTestId('signal-readiness').getByText('2/3 conditions')` `element(s) not found` (`1 failed, 1 passed`).
+  - GREEN (`.sdd-logs/v-3.log`): `2 passed (36.2s)`.
+- Verification:
+  - The verbatim block (`.sdd-logs/v-4.log`) printed exit=0, but that status comes from the last grep. Lint passed (warnings in untouched files only); vitest `Tests  748 passed | 2 skipped (750)`, `Statements   : 81.13%`; all three greps hit.
+  - tsc failed on `BackfillSymbolOutcome.INCOMPLETE` (stale linked proto dist). Against this branch's dist it exited 0 and compiled `position-detail.spec.ts` (`.sdd-logs/v-5.log`).
+  - The warmup timed out at 10 s. A re-run with `--timeout=240000` gave `5 failed, 60 passed` (`.sdd-logs/v-6.log`), with all three feature-308 tests passing. Failures: the two AAPL tests, `@AC-5 INCOMPLETE-only` and `feature 139` seen in Steps 19-21, plus `feature 083/125` strategy picker, which fails the same way alone with the spec file at `HEAD` (`.sdd-logs/v-9.log`).
+- Config-wiring gate: not applicable (no config key, no migration).
+- Files modified: `services/xstockstrat-ui/e2e/trader/position-detail.spec.ts`, `services/xstockstrat-ui/e2e/fixtures/INVENTORY.md`
+- Deviations: targeted RED and mutation runs, the stale linked proto dist and baseline-failing tests (Deviation Log "Step 22").
+
+### Open Threads
+- [ ] `position-detail.spec.ts` `the readiness strategy picker excludes non-live strategies (feature 083/125)` fails on the host harness in this worktree with and without this step's edit (it passed in Step 21's full run). CI's Docker e2e is the arbiter; triage separately from 308 if it fails there.
+
+## Session 2026-11-27 — sdd-execute sequential (sdd-batch-execute), step 23
+
+- Tooling: none needed (docs step; the Verification block is greps only) · hook check hook=0. No install was run. Lockfile gate: not applicable (no manifest change).
+- Discovery: the advisory digest read the main checkout's pre-re-spec spec, where this docs step is Step 17. At `origin/feature/fix-analysis-per-symbol-isolation@63143858`, Step 23 exists and every anchor was re-grepped there:
+  - `@AC-10` at `opportunity-compute-robustness.feature:108-112` and `@AC-13` at `readiness-caching-poll-discipline.feature:94-98`.
+  - `opportunities.md:7` (the "still propagates" parenthetical and the floor-clause list). The `-1` scope note is now at `:70`.
+  - The `formula_unreadable` block at `mcp-tools.md:1230-1240`.
+  - The "Formula-unreadable row (289)" bullet at `opportunities-shell.md:12-22`.
+  - The code symbols: `_kick_readiness_refresh` `servicer.py:4299`, its `get_by_owner_and_id` `:4329`, `_materialize_readiness_for_owner` `:6346`, `_load_benchmark_bars_windowed` `:2010`, `_formula_fundamentals` `:1928`, `log_isolation_tally` `isolation.py:15`, `unavailable_readiness_row` `readiness.py:110`.
+  - The C-16 sign-off in this file ("Operator (2026-11-20, design gate, option A)").
+
+### Step 23 — docs: amended durable scenarios, contract sentences, sentinel text, follow-ups [done]
+- Durable suites:
+  - Feature-289 `@AC-10` is retitled "A formula execution timeout degrades only its candidate". Its Then is now: the recompute completes, the timed-out candidate's row is `data_unavailable` (`unavailable`), and the others are materialized.
+  - `@AC-13` is retitled "A formula execution timeout degrades only its symbol in EvaluateReadiness". Its Then is now: OK, an empty 0-of-0 `SymbolReadiness` without the unreadable marker, nothing staged.
+  - Both keep their ids and tags and gain `@feature-308`. These are the C-16 CHANGEs signed off on 2026-11-20.
+- `opportunities.md`:
+  - The "`FormulaExecutionError` still propagates" parenthetical is replaced by the new rule: a timeout or RpcError gives `unavailable`; any other failure gives the structural, floor-exempt `evaluation_failed`, which clears on the next recompute and is exposed through `provenance` only.
+  - The floor-clause list gains `OR provenance ? 'evaluation_failed'`.
+  - The `-1` scope note now names the kick and the materializer (`unavailable_readiness_row`) and the empty, unstaged `EvaluateReadiness` symbol.
+- `mcp-tools.md`: one paragraph on the `"evaluation_failed"` marker (`data_unavailable` stays false).
+- `opportunities-shell.md` (C-10): an "Evaluation-failed row (308)" bullet with the four test ids and the second required `SignalItem` field `evaluationFailed`.
+- Analysis findings log, `## Latent bugs`, two rows:
+  - No alert covers a sustained degraded rate. The signal is the tally line and `<site>.degraded_count`. Follow-up: `analysis-isolation-degraded-counter`.
+  - The per-strategy setup in `_kick_readiness_refresh` / `_materialize_readiness_for_owner` is not isolated, so defect report 3 is only partly met.
+- TDD: N/A (docs).
+- Verification:
+  - RED baseline (`.sdd-logs/v-1.log`): only the two "expect no output" greps printed. They matched the old `@AC-10`/`@AC-13` titles and `opportunities.md:7`.
+  - GREEN (`.sdd-logs/v-2.log`, `exit=0`): those two printed nothing, and the other five hit: `opportunities-shell.md:27-31`, `@feature-308` at `:108`/`:94`, `evaluation_failed` at `opportunities.md:7` and `mcp-tools.md:1243`, and findings rows `:27`/`:28`.
+- Config-wiring gate:
+  - Step-time: not applicable (no config key, no migration).
+  - Final (last step, `.sdd-logs/v-3.log`): `node scripts/check-config-wiring.mjs --final` exit=0. It printed two `REPORTED:` `readers-disagree` lines for keys outside this feature (`marketdata/fundamentals.provider`, `platform/trading_state`).
+- Status: `in-progress` → `code-completed` (all 23 steps done). No insights-ledger entry: nothing new generalizes beyond the existing isolation-helper and fake-mirroring entries.
+- Files modified: `services/xstockstrat-analysis/acceptance/opportunity-compute-robustness.feature`, `services/xstockstrat-analysis/acceptance/readiness-caching-poll-discipline.feature`, `services/xstockstrat-analysis/docs/opportunities.md`, `services/xstockstrat-analysis/docs/context-constitution-findings.md`, `docs/runbooks/mcp-tools.md`, `services/xstockstrat-ui/docs/opportunities-shell.md`
+- Deviations: anchor drift, the `mcp-tools.md` paragraph placement, the instruction-5 row's section, and the run-script paren (Deviation Log "Step 23").
+
+### Open Threads
+- [ ] `feature.md` § Next Action still says to run `/sdd-review … impl-spec` and then `/sdd-execute`. The next action is now the integration PR into `main-dev`, which promotes this feature's `acceptance.feature` scenarios into the durable suites (C-16). This step did not edit that section.
+- [ ] The stale comment above `sym_unavailable` in `_row_for` (Steps 11+12 Open Threads) is still unaddressed. Step 23's **Files** do not include `servicer.py`, so it is left for the integration PR.
+- [ ] The service `CLAUDE.md` "Fundamentals-skip (feature 215) and formula-unreadable (289) rows" pointer (`services/xstockstrat-ui/CLAUDE.md`) does not mention the 308 evaluation-failed row or `evaluationFailed`. It is outside Step 23's **Files**.
+
+## Session 2026-11-27 — sdd-batch-execute promotion plan (awaiting operator confirm)
+
+````sdd-batch-promotion-plan
+## Promotion plan — fix-analysis-per-symbol-isolation (feature 308)
+
+Source: /home/user/xstockstrat/docs/roadmap/features/308-fix-analysis-per-symbol-isolation/acceptance.feature. I read the working-tree copy, because I have no git access. It already carries the 2026-11-20 amended @AC-2 and @AC-3 wording. The caller should confirm it matches origin/feature/fix-analysis-per-symbol-isolation before writing.
+
+### Verdicts
+| @AC | target suite (path) | CREATE/APPEND | verdict | note |
+|---|---|---|---|---|
+| @AC-1 | services/xstockstrat-analysis/acceptance/fix-analysis-per-symbol-isolation.feature | CREATE | NEW | `_compute_opportunities` per-candidate isolation. A generic FormulaExecutionError degrades only that row, with a fault marker. See Notes 1 and 2. |
+| @AC-2 | services/xstockstrat-analysis/acceptance/fix-analysis-per-symbol-isolation.feature | CREATE | NEW | EvaluateReadiness per-symbol isolation. Uses the amended wording, with an empty SymbolReadiness and no cache row staged. See Notes 1 and 3. |
+| @AC-3 | services/xstockstrat-analysis/acceptance/fix-analysis-per-symbol-isolation.feature | CREATE | NEW | Readiness kick, materializer and opportunity-heal isolation. Uses the amended outcome split by site. See Notes 1 and 4. |
+
+No scenario is DUP, OVERLAP or CONFLICT. The suite file does not exist yet, so there is no `@feature-308` scenario to dedup against. The `acceptance/` directory already exists.
+
+### Ready-to-write blocks
+
+--- /home/user/xstockstrat/services/xstockstrat-analysis/acceptance/fix-analysis-per-symbol-isolation.feature (CREATE) ---
+```gherkin
+# Promoted business-rule suite for xstockstrat-analysis (Constitution C-16). Promoted from feature 308's
+# acceptance.feature at launch; @feature-308 marks provenance. These are the guarantees a future
+# feature must not regress (recon reads this suite; the design-adversary enforces it).
+
+Feature: Analysis per-symbol fan-outs isolate a failing symbol or candidate
+  Regression guard: one failing symbol or candidate must degrade only itself in xstockstrat-analysis
+  per-symbol fan-outs (opportunities compute, EvaluateReadiness, readiness kick / materializer /
+  opportunity heal), never discard its healthy siblings' rows.
+
+  # guards: docs/reports/2026-10-21-analysis-opportunities-row-gather-no-per-symbol-isolation-defect.md
+  @AC-1 @regression @feature-308
+  Scenario: A candidate whose evaluation raises degrades to its own row and healthy candidates are materialized
+    Given a user whose opportunity candidates are "AAPL", "MSFT" and "NVDA"
+    And evaluate_conditions_traced raises FormulaExecutionError for "NVDA"
+    When _compute_opportunities runs for that user
+    Then the compute does not raise
+    And opportunity rows are written for "AAPL" and "MSFT"
+    And the "NVDA" row is degraded with a fault marker instead of aborting the compute
+
+  # guards: docs/reports/2026-10-21-analysis-readiness-gather-no-per-symbol-isolation-defect.md
+  # wording amended 2026-11-20 (C-16 operator sign-off, design gate option A; design.md § 2)
+  @AC-2 @regression @feature-308
+  Scenario: EvaluateReadiness returns and caches healthy symbols when one symbol's compute raises
+    Given compute_readiness_row raises ZeroDivisionError for "NVDA"
+    When EvaluateReadiness is called with symbols "AAPL", "MSFT" and "NVDA"
+    Then the RPC succeeds
+    And readiness is returned for "AAPL" and "MSFT"
+    And "NVDA" is returned as an empty SymbolReadiness (0 of 0 conditions; the proto has no unavailable field)
+    And the "AAPL" and "MSFT" SLOW rows are persisted to readiness_cache
+    And no readiness_cache row is staged for "NVDA"
+
+  # guards: docs/reports/2026-11-05-analysis-readiness-batch-loss-on-indicator-outage-defect.md
+  # outcome split by site, amended 2026-11-20 (C-16 operator sign-off, design gate option A; design.md § 2)
+  @AC-3 @regression @feature-308
+  Scenario: An indicators outage on one strategy component does not discard the user's readiness batch
+    Given indicators ExecuteFormula returns UNAVAILABLE for one component of strategy "s1" on "NVDA"
+    And the user's other strategy/symbol pairs evaluate normally
+    When the readiness refresh kick or the readiness materializer tick runs for that user
+    Then readiness rows are written for every healthy pair
+    And the failing "s1"/"NVDA" pair is cached as the bar_epoch -1 data-unavailable sentinel (UNKNOWN, 300 s cooldown), never as a fresh success
+    When the opportunity surgical retry runs for that user
+    Then the heal rows of the healthy symbols are written
+    And the failing pair keeps its "unavailable" provenance, no readiness_cache row is written for it, and one WARN tally names it
+```
+
+### Notes / ambiguities / conflicts
+1. **Tags.** 308's acceptance.feature carries only `@AC-n @regression` and no `@FR-*` tags. I added `@feature-308` and did not invent `@FR-*` tags. The `@AC-*` numbers are unchanged.
+2. **@AC-1 and 289 @AC-10, not an OVERLAP.**
+   - Amended feature-289 @AC-10 (Step 17 of 308, in `opportunity-compute-robustness.feature`) asserts only that a formula timeout marks the row `unavailable`.
+   - 308 @AC-1 asserts the generic per-candidate isolation outcome, with a fault marker. The two guarantees differ, so I planned @AC-1 as NEW.
+   - A consolidation review could still look at the pair, but nothing here is deleted.
+3. **@AC-2 and 289 @AC-13, not an OVERLAP.**
+   - Amended 289 @AC-13 covers the timeout case. 308 @AC-2 covers a non-RPC compute exception (ZeroDivisionError) and the persistence split. So @AC-2 is NEW.
+   - The timeout case is not duplicated here.
+4. **@AC-3 routing.**
+   - Indicators is in the Reviewers table (steps 3-4), but @AC-3 asserts on analysis-owned rows: readiness_cache, `bar_epoch -1`, heal provenance and the WARN tally.
+   - The indicators change is only the `exit_reason=TIMEOUT` field on its deadline-refusal response. No indicators scenario exists in the source, so nothing goes to `services/xstockstrat-indicators/acceptance/`.
+   - Nothing is cross-cutting, so `docs/sdd/business-rules/platform.feature` is untouched.
+5. **C-16 conflict check against the existing suites.**
+   - On main-dev, 289 @AC-10 (`opportunity-compute-robustness.feature:108-112`) and 289 @AC-13 (`readiness-caching-poll-discipline.feature:94-98`) assert that a FormulaExecutionError timeout aborts the recompute and the RPC.
+   - That would contradict 308 @AC-1 and @AC-2. It is not an open CONFLICT, for two reasons:
+     - The operator signed off on the change on 2026-11-20 at the design gate, option A (context.md line 431; design.md § "Business Rules Touched").
+     - Step 17 of implementation-spec.md amends both scenarios in place, keeping their ids and adding `@feature-308`.
+   - The promotion write must therefore come after Step 17 has landed on the branch. I have not checked that. If the two old "still fails" / "still aborts" wordings are still present, the amendment is missing. Do not write the suite until it is in.
+   - The Step 17 verification grep shows whether it landed: `grep -n "still fails the opportunities recompute\|still aborts EvaluateReadiness" services/xstockstrat-analysis/acceptance/*.feature` should return nothing.
+6. **Other suites checked, no equivalent scenario found.**
+   - `fix-screener-symbol-isolation.feature` (feature 245) covers ScreenSymbols per-symbol isolation, a different RPC.
+   - `fix-backtest-silent-symbol-skip.feature` covers backtest.
+   - `opportunity-compute-robustness.feature` and `readiness-caching-poll-discipline.feature` cover data-unavailable sentinels, but not this per-symbol-failure isolation, except the 289 timeout scenarios in notes 2 and 3.
+   - `docs/sdd/business-rules/platform.feature` has no `feature-308`, readiness or compute scenario.
+7. **Files this promotion does not write.** Step 17 edits `opportunity-compute-robustness.feature` and `readiness-caching-poll-discipline.feature`. This plan leaves those two files untouched.
+
+### Coverage check
+- Source scenarios: 3 (@AC-1, @AC-2, @AC-3).
+- Planned: 3 NEW, 0 DUP, 0 OVERLAP, 0 CONFLICT, 0 skipped.
+- All three scenarios are accounted for.
+- They go into one CREATE block, and the scenario text is verbatim.
+````

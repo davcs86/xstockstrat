@@ -620,3 +620,290 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - [ ] unaddressed — **Branch-only interim (Steps 9 → 11).** The branch stamps composites nothing reads yet; `/sdd-execute` must not open a `main-dev` PR between those steps (per-step PRs target `feature/fix-analysis-evidence-dry` only).
 - [ ] unaddressed — **Overlap (WARN, merge-conflict risk only).** `services/xstockstrat-analysis/app/handlers/servicer.py` with 308-fix-analysis-per-symbol-isolation (its Steps 9, 11, 13) and 322-fix-retired-surface-proto-cleanup (its Step 8, `_compute_opportunities`); `tests/test_analysis_servicer.py` with 308 and 322; `app/engine/entry_backfill.py` with 312-fix-read-path-owner-trust (comment only); `services/xstockstrat-analysis/CLAUDE.md` with 309 and 322 (this feature does not edit it). The new agent steps also touch `services/xstockstrat-agent/app/tools.py`, `tests/test_tool_errors.py` and `docs/runbooks/mcp-tools.md`, which this overlap scan predates — re-check against the agent peers (fix-agent-bearer-secret-orphan, fix-agent-mcp-transport-fallthrough, fix-mcp-deadline-budget) before execution. Target: merge order at `/sdd-execute` / `/merge-train`.
 - **Mixed refused and readable formulas (O-19)**, **`completed_at` ordering**, **fallback query cost (O-20)**, **indicators availability coupling (O-23)**, **one-time evidence reset (D-4)** — accepted limitations, documented at Step 15 (unchanged).
+
+## Session 2026-11-27 — operator ruling on the C-14 agent scope addition and O-18, recorded by the orchestrator (verbatim)
+
+Operator answer (2026-11-27) to the orchestrator list item "327: Approve or decline the C-14 agent scope addition. Acknowledge O-18.": "B1 approve".
+
+Effect: the C-14 agent scope addition (the agent-surface scope the design proposes and the impl-spec review flagged) is APPROVED, and the O-18 acknowledgement is GIVEN. Step 11 gate and the O-18 acknowledgement thread are cleared. Orchestrator note (not an operator quote): the exact C-14 wording approved is the one recorded in this file's Open Threads; no scope beyond it.
+
+## Session 2026-11-27 — sdd-execute sequential (sdd-batch-execute)
+
+- **Up-front confirmation.** The operator approved the up-front plan with this record (binding, verbatim): `{"mainDev":"f802b184b13bd899d858c4b0349a616e9981b9d9","dev":"42bb7a1fd536f8bef25caafb3559ad409317e928","specHash":"c5e5b4cf1797135527e80edd978f76d64b76a79d","directive":"conditional","pending":[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18],"mismatches":[{"n":2,"detail":"Line drift only: the LIVE_ENABLED_PREDICATE_SQL pin in tests/test_analysis_servicer.py was cited at :7034-7060 and is now at :7055 (import) to :7081 (assert). Fixture anchors in tests/test_entry_backf"},{"n":3,"detail":"Line drift only, symbols and text unchanged, in services/xstockstrat-analysis/app/handlers/servicer.py: _definition_fingerprint :7333→:7488; _FINGERPRINT_EXCLUDED_KEYS :7330→:7485; canonical json.dump"},{"n":4,"detail":"Line drift only: the existing fingerprint unit tests are now at tests/test_analysis_servicer.py:2216-2242 (cited 2209-2241), and the @AC-2 @feature-194 rename test is at ~:3428-3440 (cited 3424-3439)."},{"n":5,"detail":"Line drift only, all symbols and call shapes confirmed: _formula_fundamentals :1919→:1923 (cache hit :1941, cache write :1956, `if fid in out` :1938); _declared_formula_warmup :2533→:2537 (`if formula"},{"n":6,"detail":"Line drift only: make_servicer :44→:45; GetFormula.await_count == 1 pins :4273/:6837/:7302→:4274/:6858/:7323. grade_fundamentals_exclusion AioRpcError :63-64 and the import block :29 match. tests/test"},{"n":9,"detail":"Line drift (+4) only: _run_backtest :844→:848; run_fingerprint block :921-929→:927-933; fund_failures :986→:990; formula_fund_map :990→:994; prefetch/formula_fundamentals calls :993-1004→:997-1008; fo"},{"n":10,"detail":"Line drift only in tests/test_analysis_servicer.py: test_registered_own_run_stamps_fingerprint :2302→:2303; _windowed_req :3916→:3917; _row_for :675→:676; _owned_ctx :71→:72; CUSTOM_FORMULA definition"},{"n":11,"detail":"Line drift (+4) only, code text matches: _fetch_and_aggregate :2867-2923→:2871-2927 (fingerprint line :2890→:2894, guarded :2896, fetch_eligible :2902-2904, fetch_all_for_fingerprint :2908-2910, _excl"},{"n":12,"detail":"Line drift only: _derivation_svc :109→:110; _eligible_cell :96→:97; _owned_ctx :71→:72. tests/test_grade_fundamentals_exclusion.py anchors (:46 _SID, :47 _UNKNOWN_MSG, :55 _cell, :63 _rpc_error, :67 _"},{"n":13,"detail":"Line drift (+4/+5) only: ManageStrategy :3232→:3236; pre read :3324→:3328; _apply :3344→:3348 (old_json :3349); comment/sid/lock/pop/recompute/except :3393-3403→:3398-3407 (unconditional pop :3403, lo"},{"n":14,"detail":"Line drift only in tests/test_analysis_servicer.py: _stub_update_repo :2500→:2501; _update_req :2470→:2471; _updated_row :2518→:2519. test_update_keeps_db_grade_and_forwards_trio is at grade_fundament"}]}`
+- **Setup.** Hook check hook=0. Tooling detection (steps 1-18, no installs): python3.13 ✓ · uv ✓ 0.11.32 · ruff ✓ · PostgreSQL 16 binaries ✓ (`/usr/lib/postgresql/16`, Step 8 real_pg). `origin/main-dev` f802b184 merged into the branch (`4a95ce6b`, resolver and ledger-guard clean).
+- **Re-spec (directive conditional), line anchors only:** `d453eea7` respec(fix-analysis-evidence-dry): align steps 2,3,4,5,6,9,10,11,12,13,14 with current codebase. Every anchor was re-grepped on the merged tree. Where that disagreed with the record's detail, the grep wins: the fingerprint tests are at `:2213-2242` (`class TestDefinitionFingerprint`); the rename test is still at `:3424-3439` and has no `@AC-*` tag in the file; the `run_fingerprint` block is at `:925-933`; the UPDATE comment/pop/recompute block is at `:3397-3407`, with the pop at `:3401`.
+- Status `implementation-ready` → `in-progress`.
+
+```sdd-batch-setup
+{"mainDev":"f802b184b13bd899d858c4b0349a616e9981b9d9","date":"2026-11-27"}
+```
+
+### Step 1 — service: entry-backfill reads live strategies through `list_live_enabled` [done]
+- `entry_backfill.run_once` now reads `rows = await StrategiesRepository(db_pool).list_live_enabled()` inside the unchanged try/except → warning → return; module-top import `from app.repositories.strategies import StrategiesRepository` (no name-bound `LIVE_ENABLED_PREDICATE_SQL`, R-3).
+- TDD: red (structural) — the pre-implementation Verification run printed `65:            "SELECT * FROM analysis.strategies WHERE live_enabled = TRUE AND active = TRUE"` and no `list_live_enabled` hit; the behavioural AC-2 red is produced in Step 2 instruction 3, per the spec's Step Dependencies. Green: `65:        rows = await StrategiesRepository(db_pool).list_live_enabled()`, `46 passed`, `All checks passed!`, `143 files already formatted`, exit=0.
+- Tooling: `uv sync --extra dev` in services/xstockstrat-analysis (worktree-local .venv). Config-key wiring gate: not applicable (no config key, not a config step).
+- Files modified: `services/xstockstrat-analysis/app/engine/entry_backfill.py`
+- Deviations: none
+
+### Step 2 — test: the backfill selection follows `LIVE_ENABLED_PREDICATE_SQL` [done]
+- Added `test_ac2_selects_through_the_live_enabled_predicate` and `test_ac2_narrowed_predicate_selects_nothing` to `TestRunOnce` (inline rows via `_strategy_row`/`_fake_live_loop`/`_cfg`/`_order`, no new fixture home; module import `from app.repositories import strategies` so the monkeypatched constant is read at call time).
+- TDD: AC-2 red (Step 1 literal temporarily restored in the working tree, then discarded with `git checkout -- app/engine/entry_backfill.py`): `assert "live_enabled = TRUE AND active = TRUE AND strategy_id <> 's1'" in 'SELECT * FROM analysis.strategies WHERE live_enabled = TRUE AND active = TRUE'` failed, `1 failed, 1 passed, 22 deselected`, exit=1 → green: `2 passed, 22 deselected`, `1828 passed`, `Total coverage: 91.88%`, `All checks passed!`, `143 files already formatted`, exit=0. The conftest grep shows only the existing `19:from tests.conftest import RecordingStub, real_live_loop`.
+- Tooling: `uv sync --extra dev` in services/xstockstrat-analysis (worktree-local .venv). Config-key wiring gate: not applicable.
+- Files modified: `services/xstockstrat-analysis/tests/test_entry_backfill.py`
+- Deviations: none
+
+### Step 3 — service: pure fingerprint helpers (`_formula_digest`, `_evidence_fingerprint`) [done]
+- Atomic unit Steps 3+4 (one red→green, one commit). Added `from typing import NamedTuple`; `_FormulaVersionUnknown(_GradeInputsUnknown)` after `_GradeInputsUnknown` (calls `Exception.__init__`, sets only `formula_id`); after `_definition_fingerprint`: the six `_FORMULA_*_FIELDS` frozensets, `_formula_digest`, `_UNREADABLE = object()`, `_FormulaRead(NamedTuple)` and `_evidence_fingerprint` (empty digests → `def_hash` unchanged; a non-`str` digest raises `ValueError`). Nothing calls them yet.
+- TDD: red with Step 3's symbols as `NotImplementedError` stubs and empty constants (`.sdd-logs/v-1.log`, exit=1): `26 failed in 2.58s` (`AssertionError: assert {'description', 'name'} == frozenset()`, `NotImplementedError`) → green (`.sdd-logs/v-2.log`, exit=0): the grep printed 5 hits (`286:class _FormulaVersionUnknown`, `7542:def _formula_digest`, `7561:_UNREADABLE = object()`, `7564:class _FormulaRead`, `7569:def _evidence_fingerprint`), `26 passed in 0.38s`, `All checks passed!`, `144 files already formatted`.
+- Config-key wiring gate: not applicable (no config key).
+- Files modified: `services/xstockstrat-analysis/app/handlers/servicer.py`
+- Deviations: none
+
+### Step 4 — test: digest classification, pin tests and fingerprint shape [done]
+- Atomic unit Steps 3+4. Created `tests/test_evidence_fingerprint.py` with inline formula literals (C-13): the descriptor walk over `FormulaDefinition`/`FormulaParameter`/`FormulaOutput`; 9 display pins (digest unchanged, `author` included); 7 behavioural pins (digest changes, parameter `min` unset vs `0.0` included); the `_evidence_fingerprint` byte-identity, shape, insertion-order, digest-change and `None`/`_UNREADABLE` → `ValueError` cases; the `_FormulaVersionUnknown("f-9")` subclass check.
+- TDD: AC-1 red: `FAILED tests/test_evidence_fingerprint.py::test_behavioural_edit_changes_digest[_set_source]` within `26 failed` (`.sdd-logs/v-1.log`, exit=1) → green (`.sdd-logs/v-3.log`, exit=0): `26 passed in 0.26s`, `11 passed, 399 deselected` (existing fingerprint/DeadSignalParams tests), the conftest grep printed no lines, `1854 passed`, `Total coverage: 91.92%`, `All checks passed!`, `144 files already formatted`.
+- Files modified: `services/xstockstrat-analysis/tests/test_evidence_fingerprint.py`
+- Deviations: none
+
+### Step 5 — service: carry formula digests on the existing single `GetFormula` read [done]
+- This is atomic unit Steps 5+6, with one red→green and one commit.
+- Added the `digests=None` keyword to `_formula_fundamentals`, `_declared_formula_warmup` and `_prefetch_formula_warmups`, and passed it through in the prefetch loop. Each digest is a hex string, `_UNREADABLE` (NOT_FOUND/PERMISSION_DENIED) or `None` (outage).
+- `_formula_fundamentals` cache values are now `_FormulaRead(metrics, digest)`. The return map is still `{fid: metrics}`.
+- In `_declared_formula_warmup`, digests are written only inside the `if formula_id not in cache` block. `cache` stays `dict[str, int]`.
+- Both `formula_fund_cache` owners are now annotated `dict[str, _FormulaRead]`. No caller passes `digests` yet.
+- Operator decision (2026-11-27, Option A, binding): expand scope to `tests/test_unreadable_formula.py`. Its four `SimpleNamespace(fundamental_inputs=[])` `GetFormula` mocks now return `indicators_pb2.FormulaDefinition()`, because `_formula_digest` needs a real proto.
+- TDD and verification (union of the Step 5 and Step 6 Verifications in one run):
+  - Red (`.sdd-logs/v-1.log`, exit=1): `TypeError: AnalysisServicer._formula_fundamentals() got an unexpected keyword argument 'digests'`, `9 failed, 1 passed`.
+  - First green run (`.sdd-logs/v-2.log`): `4 failed`, `AttributeError: 'types.SimpleNamespace' object has no attribute 'DESCRIPTOR'` in `tests/test_unreadable_formula.py`. The operator-approved fold above fixes this.
+  - Green (`.sdd-logs/v-3.log`, exit=0): 3 `digests=None` hits, 2 `formula_fund_cache: dict[str, _FormulaRead]` hits, `138 passed`, `10 passed`, `12 passed, 398 deselected`. The conftest grep printed no lines. Full suite: `1864 passed`, `Total coverage: 91.96%`, `All checks passed!`, `145 files already formatted`.
+- Config-key wiring gate: not applicable (no config key).
+- Files modified: `services/xstockstrat-analysis/app/handlers/servicer.py`, `services/xstockstrat-analysis/tests/test_unreadable_formula.py`
+- Deviations: `tests/test_unreadable_formula.py` mocks were made proto-real. Full detail is in the Deviation Log.
+
+### Step 6 — test: digests ride the single read (readable, refused, outage, cache hit) [done]
+- This is atomic unit Steps 5+6.
+- Created `tests/test_formula_digest_read.py`, with inline formulas and definitions and `make_servicer()` (C-13). It covers:
+  - a readable formula: the digest and the `_FormulaRead` cache value are set, and a cache hit issues no second `GetFormula`;
+  - a refusal (NOT_FOUND, PERMISSION_DENIED): the digest is `_UNREADABLE` and no failure is recorded;
+  - an outage: the digest is `None` and `failures[("formula","f-9")]` is UNKNOWN;
+  - the prefetch over three components on two formula ids: two `GetFormula` calls and both digests set, and a cached `_declared_formula_warmup` adds no RPC;
+  - warmup-read refusal and outage digests;
+  - AC-1 through the read: a `source` edit moves the digest and an `author` edit does not;
+  - without `digests`, the fundamentals map is unchanged.
+- TDD: AC-1 red: `FAILED tests/test_formula_digest_read.py::test_ac1_source_edit_moves_digest_through_the_read[FormulaDefinition-False]`, within `9 failed` (`.sdd-logs/v-1.log`, exit=1). Green: `10 passed` (`.sdd-logs/v-3.log`, exit=0).
+- Files modified: `services/xstockstrat-analysis/tests/test_formula_digest_read.py`
+- Deviations: none
+
+### Step 7 — service: owner-scoped `latest_formula_fingerprint` prefix read [done]
+- Atomic unit Steps 7+8 (one red→green, one commit). Added `BacktestRunSymbolsRepository.latest_formula_fingerprint(user_id, strategy_id, def_hash)` after `fetch_all_for_fingerprint`: one `fetchval` of `SELECT definition_fingerprint … WHERE user_id = $1 AND strategy_id = $2 AND starts_with(definition_fingerprint, $3) ORDER BY completed_at DESC LIMIT 1` with `$3 = def_hash + "."`. The docstring records the owner scope, the composite-only match, the O-20 index-prefix cost and the `completed_at` ordering limitation. `fetch_eligible` and `fetch_all_for_fingerprint` are unchanged. Nothing calls it yet (Step 11).
+- TDD: AC-3 red (`.sdd-logs/v-1.log`, Step 8 Verification): `AttributeError: 'BacktestRunSymbolsRepository' object has no attribute 'latest_formula_fingerprint'`, `5 failed, 6 passed`. The four real_pg tests built the table and inserted their rows before failing on the call. Green, Step 7 Verification (`.sdd-logs/v-2.log`, exit=0): both greps hit (`108:    async def latest_formula_fingerprint(`, `122: … starts_with(definition_fingerprint, $3)`), `11 passed`, `All checks passed!`, `146 files already formatted`.
+- Config-key wiring gate: not applicable (no config key).
+- Files modified: `services/xstockstrat-analysis/app/repositories/backtest_run_symbols.py`
+- Deviations: none
+
+### Step 8 — test: the prefix read against SQL shape and a real PostgreSQL [done]
+- Atomic unit Steps 7+8. Added `test_latest_formula_fingerprint_is_owner_scoped_prefix_read` (SQL fragments and args `("alice", "s1", "h.")`). Created `tests/test_backtest_run_symbols_real_pg.py` (`pytestmark = pytest.mark.real_pg`). It builds the table from the 007 `CREATE TABLE` statement, which the regex stops at the first `\n);` so the 007 `backtest_runs`/`strategy_scores` ALTERs never run, plus the 026 `user_id` ALTER line. Both are read from the migration files. Rows are inline (C-13), and each test uses its own `strategy_id` because `local_pg` is session-scoped. Cases: a bare `h` cell is never returned (AC-3); the newest composite wins; another owner, another strategy, the `hh.` prefix and a `NULL` fingerprint are all ignored; only bare cells → `None`.
+- TDD: red as in Step 7 → green (`.sdd-logs/v-3.log`, exit=0): `11 passed` with no skip lines under `-rs` (real_pg ran against PostgreSQL 16), the conftest grep printed no lines, `1869 passed`, `Total coverage: 91.96%`, `backtest_run_symbols.py 21 0 100%`, `All checks passed!`, `146 files already formatted`.
+- Files modified: `services/xstockstrat-analysis/tests/test_backtest_run_symbols_repo.py`, `services/xstockstrat-analysis/tests/test_backtest_run_symbols_real_pg.py`
+- Deviations: none
+
+### Step 9 — service: `_run_backtest` stamps the formula-aware fingerprint [done]
+- Atomic unit Steps 9+10 (one red→green, one commit). What changed in `_run_backtest`:
+  - The early `_definition_fingerprint` stamp is gone. Only the eligibility flag `stamps_fingerprint` is computed there.
+  - `formula_digests` is filled through `digests=` on the prefetch call and on the `_formula_fundamentals` call.
+  - After the formula-map build, `run_fingerprint = _evidence_fingerprint(...)` is set only when every digest is a `str`. An outage or a refusal leaves it `None`.
+  - `_FORMULA_VERSION_WARNING` (next to `_UNREADABLE`) is appended once, after the deleted-formula warnings. This happens only when `stamps_fingerprint` is set and some digest is `None` (outage only).
+  - The recompute gets `formula_cache=recompute_formulas`. Readable and refused fids are seeded as `_FormulaRead`; an outage fid is not seeded.
+  - A new `except _FormulaVersionUnknown` before `except _GradeInputsUnknown` logs "formula version unavailable — grade unchanged".
+- TDD: RED was run with only the `_FORMULA_VERSION_WARNING` constant pre-added, so the new test module imports cleanly and fails on behaviour (`.sdd-logs/v-1.log`, exit=1): `15 failed, 2 passed`. Failures included cells carrying the bare hash (`'ff76c34d9f52...31a6d51f4a37e' == 'ff76c34d9f52...5c10c0c44dbe7'`), `KeyError: 'formula_cache'` and `assert 2 == 1`. GREEN (`.sdd-logs/v-3.log`, exit=0): the bare-stamp grep printed nothing, the three new symbols grep hit, `521 passed`, `All checks passed!` and `147 files already formatted`.
+- Config-key wiring gate: not applicable (no config key).
+- Files modified: `services/xstockstrat-analysis/app/handlers/servicer.py`
+- Deviations: none
+
+### Step 10 — test: backtest stamp, outage warning and single formula read per run [done]
+- Atomic unit Steps 9+10. Created `tests/test_run_backtest_fingerprint.py`. Definitions and formulas are inline (C-13), and `make_servicer`, `_owned_ctx`, `_row_for` and `_windowed_req` are imported from `tests.test_analysis_servicer`. The prefixed and unprefixed paths are parametrized. Cases:
+  - AC-1 stamp: an edit to `source` moves the stamp; an edit to `author` does not.
+  - Outage: `None` stamp, and the warning appears exactly once.
+  - Refusal: `None` stamp, and no warning.
+  - Inline and id-mismatch runs: no warning.
+  - Recompute seed: readable fids are `_FormulaRead([], digest)` and the digest matches the stamp; a refused fid is `_FormulaRead([], _UNREADABLE)`; an outage fid is not seeded.
+  - Real recompute with the gate on: `GetFormula.await_count == 1` for the whole run.
+  - Duplicate components on one fid: the stamp carries the one-component digest map. The prefixed path read once.
+  - `_FormulaVersionUnknown` raised by the recompute: the run is OK and the new log line appears.
+- TDD: AC-1 red: `FAILED tests/test_run_backtest_fingerprint.py::test_ac1_registered_run_stamps_formula_aware_fingerprint[prefixed]`, within `15 failed, 2 passed` (`.sdd-logs/v-1.log`, exit=1). Green (`.sdd-logs/v-3.log`, exit=0): `17 passed`, the conftest grep printed no lines, `1886 passed`, `Total coverage: 91.99%`, `All checks passed!`, `147 files already formatted`.
+- `tests/test_analysis_servicer.py` needed no change. No existing assertion turned red, and the `GetFormula` count pins stayed green.
+- Files modified: `services/xstockstrat-analysis/tests/test_run_backtest_fingerprint.py`
+- Deviations: in the duplicate-component case the assertion compares the formula digest map, not the full stamp (each definition has its own `def_hash`). Full detail is in the Deviation Log.
+
+### Step 11 — service: `_fetch_and_aggregate` reads by the formula-aware fingerprint; `ScoreStrategy` messages [done]
+- Atomic unit Steps 11+12 (one red→green, one commit). Phase-2 gate (instruction 0): the O-18 acknowledgement is on record ("Session 2026-11-27 — operator ruling …", "B1 approve"); no new ask.
+- `_fetch_and_aggregate` gained `unreadable=None` and binds `formula_cache`/`failures`/`meta` once at the top; `_exclude_refused_cells` now receives those bound names (D-11). Without a CUSTOM_FORMULA component the fingerprint stays `def_hash`. With one, a single `_formula_fundamentals(..., digests=)` read runs before any cell read on both gate paths:
+  - a `None` digest raises `_FormulaVersionUnknown(<first sorted fid>)`;
+  - an `_UNREADABLE` digest resolves through `latest_formula_fingerprint`; a `None` result extends `unreadable` with the sorted refused fids and returns `None`;
+  - otherwise the fingerprint is `_evidence_fingerprint(...)`.
+- `ScoreStrategy`:
+  - `_FORMULA_VERSION_UNKNOWN_MSG = "formula version unavailable — grade unchanged"` is a single-line module assignment beside `_FORMULA_VERSION_WARNING` (the AGENT-10 pin for Step 17).
+  - A new `except _FormulaVersionUnknown`, placed before `except _GradeInputsUnknown`, aborts UNAVAILABLE: with the pinned `@AC-23` message when the gate is on, with the new message when it is off.
+  - A non-empty `unreadable` gives the distinct NOT_FOUND naming the formula, checked before `excluded`.
+  - `_recompute_headline*` and `recompute_unscored_pairs` are unchanged.
+- TDD:
+  - Red (`.sdd-logs/v-1.log`, Step 12 Verification on the pre-unit tree, exit=1): `10 failed, 6 deselected` (e.g. `assert (<StatusCode....n a backtest') == (<StatusCode....de unchanged')`). Full suite: `17 failed, 1885 passed`, and every failure is a new or amended test.
+  - Green, Step 11 Verification (`.sdd-logs/v-3.log`, exit=0): three grep hits (`2725: unreadable=unreadable,`, `2993: … latest_formula_fingerprint(`, `7660:_FORMULA_VERSION_UNKNOWN_MSG = …`), no bare-fingerprint hit, `529 passed`, `All checks passed!`, `148 files already formatted`.
+  - The earlier `.sdd-logs/v-2.log` run failed only `ruff format --check`, on this step's own lines; they were reformatted.
+- Config-key wiring gate: not applicable (an existing `backtest.fundamentals.enabled` read; no new key).
+- Files modified: `services/xstockstrat-analysis/app/handlers/servicer.py`
+- Deviations: none
+
+### Step 12 — test: AC-1 end to end, refusal fallback, gate-off outage, owner isolation [done]
+- Atomic unit Steps 11+12. Created `tests/test_evidence_grade_formula_aware.py` with an inline `_CellsRepo` (C-13, single consumer). It is keyed by fingerprint, implements `fetch_eligible`, `fetch_all_for_fingerprint`, `latest_formula_fingerprint` and `insert_many`, and records every fingerprint it is asked for. Cases:
+  - AC-1, gate on and off: v1 gives 3 symbols; an author-only edit still gives 3; a `source` edit gives NOT_FOUND `run a backtest`, the stale grade is cleared and all 3 rows are kept.
+  - AC-3, refusal (NOT_FOUND/PERMISSION_DENIED) × gate: the newest composite is read (1 symbol) and bare cells are never read. With only bare cells: NOT_FOUND naming `f-9` and containing `not readable`.
+  - AC-4: gate off aborts `"formula version unavailable — grade unchanged"`, gate on aborts `_UNKNOWN_MSG`. No cell is read, no delete or upsert runs, the grade is kept.
+  - O-19: with mixed refused and readable formulas, the newest composite is used as a whole.
+  - Boot-pass owner isolation, both owner orders × u1 readable or refused: each owner asks for its own fingerprint.
+  - Boot outage: the grade is kept and `boot recompute failed` is logged.
+- Amended `tests/test_grade_fundamentals_exclusion.py`: `test_ac23_refused_formula_score_strategy_succeeds_with_empty_trailer` and `test_boot_pass_refusal_for_one_owner_never_poisons_another` now mock `latest_formula_fingerprint` → `_BLEND_COMPOSITE` (`<def_hash>.x`), and the ac23 test also asserts `fetch_all_for_fingerprint` was awaited with it. The trailer and evidence assertions are unchanged (`@AC-23 @feature-289` PRESERVED). No other existing test needed a change.
+- TDD: red as in Step 11. Green, Step 12 Verification (`.sdd-logs/v-4.log`, exit=0): `10 passed, 6 deselected`, `30 passed`, the conftest grep printed no lines, `1902 passed`, `Total coverage: 91.99%`, `All checks passed!`, `148 files already formatted`.
+- Files modified: `services/xstockstrat-analysis/tests/test_evidence_grade_formula_aware.py`, `services/xstockstrat-analysis/tests/test_grade_fundamentals_exclusion.py`
+- Deviations: none
+
+### Step 13 — service: ManageStrategy UPDATE pops the grade only when the definition hash changes [done]
+- Atomic unit Steps 13+14 (one red→green, one commit). In the UPDATE branch, `locked_hash: list[str] = []` is declared before `_apply`. `_apply` writes `locked_hash[:] = [_definition_fingerprint(old_json)]` (the row `update_locked` locked, never `pre`). After `update_locked`, `changed = not locked_hash or locked_hash[0] != _definition_fingerprint(row["definition_json"])`, and the pop under the lock runs only `if changed`. The recompute and its `except Exception` are unchanged. The two-line comment now states the constraint. Line anchors drifted about +106 after Steps 9-12 (`_apply` `:3455`, comment/guard/pop/recompute block `:3505-3519`); every symbol matched.
+- TDD: AC-5 red (`.sdd-logs/v-3.log`, pre-unit servicer restored from a saved patch, exit=0 from the trailing ruff): `FAILED tests/test_update_grade_guard.py::test_ac5_rename_during_formula_outage_keeps_grade` (`KeyError: ('u1', 's1')`, the unconditional pop), `1 failed, 5 deselected`; also `3 failed, 494 passed`. That run's full-suite line died on `OSError: [Errno 28] No space left on device` (host disk full, 38M free) and was not used. Green (`.sdd-logs/v-4.log`, exit=0): 3 `locked_hash` hits (`3453`, `3457`, `3508`), `497 passed`, `All checks passed!`, `149 files already formatted`.
+- Config-key wiring gate: not applicable (no config key).
+- Files modified: `services/xstockstrat-analysis/app/handlers/servicer.py`
+- Deviations: none
+
+### Step 14 — test: a rename during a `GetFormula` outage keeps the grade [done]
+- Atomic unit Steps 13+14. Created `tests/test_update_grade_guard.py`, importing `_derivation_svc`, `_eligible_cell`, `_owned_ctx` and `_stub_update_repo` from `tests.test_analysis_servicer` and `_rpc_error` from `tests.test_grade_fundamentals_exclusion`. The CUSTOM_FORMULA (`f-9`) row and requests are inline (C-13). The row's `definition_json` carries `user_id`, as REGISTER persists it. Without it, the rename's `_row_to_strategy_definition` re-derives `user_id` from the column and moves the hash. Cases:
+  - AC-5: a masked rename with `GetFormula` UNAVAILABLE returns `Renamed`, the grade is the same object, and no delete or upsert runs.
+  - `pre` differing from the locked row: the rename still keeps the grade.
+  - The mirror, `pre` equal to the written definition with the locked row different: the grade pops.
+  - A behavioural `rhs` edit pops before the recompute (a recording wrapper sees no grade). With an outage the grade stays absent, the documented limitation. When the formula is readable, a new score is upserted.
+  - An unchanged hash with zero evidence: the grade is still held when the recompute starts, then `_recompute_headline_locked` clears it and deletes it.
+- TDD: AC-5 red as in Step 13 → green (`.sdd-logs/v-4.log`, exit=0): `1 passed, 5 deselected` (`-k ac5`), `29 passed, 387 deselected`. The conftest grep printed no lines. `1908 passed`, `Total coverage: 91.99%`, `All checks passed!`, `149 files already formatted`. The existing `test_update_keeps_db_grade_and_forwards_trio`, `test_update_clears_inmemory_even_when_delete_raises` and `test_update_recompute_no_deadlock` stayed green with no change.
+- Files modified: `services/xstockstrat-analysis/tests/test_update_grade_guard.py`
+- Deviations: none
+- Open item (pre-existing, not changed here): a row whose `definition_json` lacks `user_id` (a migrated row that carries its owner only on the column) changes hash on its first rename. The guard then pops, which is today's behaviour.
+
+### Step 15 — docs: ANALYSIS-3, ANALYSIS-7, `scoring.md` and the recorded limitations [done]
+- Instruction 5 precondition: the O-18 acknowledgement is on record ("Session 2026-11-27 — operator ruling …", "B1 approve"). Every symbol the docs name was re-grepped on the tree first (`_evidence_fingerprint`, `_formula_digest`, `_UNREADABLE`, `_FormulaRead`, `_FormulaVersionUnknown`, `_FORMULA_VERSION_WARNING`/`_UNKNOWN_MSG`, `latest_formula_fingerprint`, `locked_hash`, `entry_backfill.py:65` `list_live_enabled()`, the two Python-side gate checks, `readiness.py#is_readiness_row_fresh`).
+- ANALYSIS-3: the "Fingerprint blind spot" sentence is replaced by the formula-aware evidence fingerprint rule. Its Evidence/Example anchors are now symbol names without line numbers.
+- ANALYSIS-7: the "four sites / re-types the SQL literal" sentence now says that entry-backfill reads through `list_live_enabled`, and that the two Python-side checks are the only mirrors that do not use the constant. The row's other anchors are unchanged.
+- `scoring.md` changes:
+  - The "Fingerprint eligibility" bullet is rewritten for the composite fingerprint.
+  - "Recompute triggers" describes the locked-row hash-changed guard, both new `ScoreStrategy` outcomes and the `RunBacktest` run warning.
+  - A new `## Known limitations (feature 327)` section at the end of the file lists the seven limitations from instruction 4.
+- TDD: N/A (docs). Baseline (`.sdd-logs/v-1.log`, exit=1): `16:… **Fingerprint blind spot:**`, `20:… re-types the SQL literal`, `37:  UPDATE (which first **unconditionally clears**`. Green (`.sdd-logs/v-2.log`, exit=0): the three no-match greps printed nothing. The other two printed `16:| **ANALYSIS-3** …`, `20:| **ANALYSIS-7** …`, `58:… "formula version unavailable —`, `69:… "evidence not recorded: formula version unavailable — rerun"` and `114:## Known limitations (feature 327)`.
+- Config-key wiring gate: not applicable (no config key).
+- Files modified: `services/xstockstrat-analysis/docs/context-constitution.md`, `services/xstockstrat-analysis/docs/scoring.md`
+- Deviations: none
+
+### Step 16 — service: the agent allow-lists the new `ScoreStrategy` UNAVAILABLE message [done]
+- Atomic unit Steps 16+17 (one red→green, one commit). `_SCORE_UNAVAILABLE_PASS` now holds both analysis strings: `"fundamentals availability unknown — grade unchanged"` and `"formula version unavailable — grade unchanged"`, a byte-exact copy of `servicer.py#_FORMULA_VERSION_UNKNOWN_MSG` (Step 11), not an import. The `manage_strategy` score error sentence adds the "formula … is not readable" NOT_FOUND variant and names both verbatim UNAVAILABLE messages. No parameter, return shape or tool name changed. Discovery: Step 11's constant is at `servicer.py:7666`, its gate-off abort at `:2727-2734`; the existing `@AC-23` literal abort is still directly after `StatusCode.UNAVAILABLE,` at `:2738-2741`.
+- TDD: red as in Step 17. Green, Step 16 Verification (`.sdd-logs/v-2.log`, exit=0): the grep printed `245:        "formula version unavailable — grade unchanged",` and `1210:        unknown — grade unchanged' and 'formula version unavailable — grade unchanged' are passed`, then `185 passed`, `All checks passed!`, `79 files already formatted`.
+- Tooling: `uv sync --extra dev` in services/xstockstrat-agent (worktree-local .venv). Config-key wiring gate: not applicable (no config key).
+- Files modified: `services/xstockstrat-agent/app/tools.py`
+- Deviations: none
+
+### Step 17 — test: the new message survives the agent verbatim and is pinned to the analysis source [done]
+- Atomic unit Steps 16+17. `tests/test_tool_errors.py`: `_FORMULA_MSG` beside `_SCORE_MSG`; the assignment pin `_FORMULA_VERSION_UNKNOWN_MSG = "{_FORMULA_MSG}"` against the analysis source; the equality is now `frozenset({_SCORE_MSG, _FORMULA_MSG})`; a mapping-table row `unavail_pass_formula` with `{"pass_messages": tools._SCORE_UNAVAILABLE_PASS}`. `tests/test_tools.py` `test_server_detail_surfaces_in_error` gained the UNAVAILABLE row (327 AC-4) and a NOT_FOUND row carrying the Step 11 text for `f-9`, taken from `servicer.py:2759-2764`. Inline rows, no new fixture (C-13).
+- TDD: AC-4 red (`.sdd-logs/v-1.log`, Step 17 Verification on the pre-Step-16 tree): `FAILED tests/test_tool_errors.py::test_mapper_table[unavail_pass_formula]`, `FAILED tests/test_tool_errors.py::test_unavailable_pass_strings_match_backend_sources` (the equality; the assignment pin already held), `FAILED tests/test_tools.py::TestManageStrategyScore::test_server_detail_surfaces_in_error[UNAVAILABLE-formula version unavailable …]` with `'UNAVAILABLE: upstream unavailable; outcome unknown, verify before retrying'`, `3 failed, 182 passed`. The block's exit was 0 only because ruff runs last. Green (`.sdd-logs/v-3.log`, exit=0): `185 passed`, the `_FORMULA_MSG` grep hit lines 23/121/123/196/203, the fixture grep printed nothing, `834 passed`, `Total coverage: 88.47%`, `All checks passed!`, `79 files already formatted`.
+- The NOT_FOUND `f-9` row is green on both trees, as the spec expects: it documents the existing pass-through and is not the regression proof.
+- Files modified: `services/xstockstrat-agent/tests/test_tool_errors.py`, `services/xstockstrat-agent/tests/test_tools.py`
+- Deviations: none
+
+### Step 18 — docs: `mcp-tools.md` score errors and AGENT-10 [done]
+- `mcp-tools.md`: the `UNAVAILABLE` pass-through bullet now lists `formula version unavailable — grade unchanged` beside the fundamentals string (`manage_strategy` score). The score error table gained the NOT_FOUND "formula <ids> is not readable" row after the fundamentals-excluded row, and the gate-off `UNAVAILABLE: formula version unavailable — grade unchanged` row after the fundamentals-unknown row. AGENT-10 now says `_SCORE_UNAVAILABLE_PASS` carries two analysis strings, the second mirroring `servicer.py#_FORMULA_VERSION_UNKNOWN_MSG`; the site count stays N=3 (one allow-list per call site). Discovery: `_FORMULA_VERSION_UNKNOWN_MSG` at `servicer.py:7666`, the allow-list at `tools.py:242-247`, the NOT_FOUND text at `servicer.py:2759-2764`.
+- TDD: N/A (docs). Baseline (`.sdd-logs/v-1.log`, exit=1): all three greps printed nothing. Green (`.sdd-logs/v-2.log`, exit=0): `109:  \`formula version unavailable — grade unchanged\` (\`manage_strategy\` score) and`, `622:| \`score\` while a referenced formula's version cannot be read (fundamentals gate off) | …`, `620:| \`score\` when a referenced formula is not readable …`, `25:| **AGENT-10** | …`.
+- Config-key wiring gate (last step, `--final`): `node scripts/check-config-wiring.mjs --final` (`.sdd-logs/v-3.log`, exit=0); it printed only two `REPORTED:` baseline findings on keys this feature does not touch (`marketdata/fundamentals.provider`, `platform/trading_state`, `readers-disagree`).
+- All 18 steps done. Status `in-progress` → `code-completed`.
+- Files modified: `docs/runbooks/mcp-tools.md`, `services/xstockstrat-agent/docs/context-constitution.md`
+- Deviations: none
+
+## Session 2026-11-27 — sdd-batch-execute promotion plan (awaiting operator confirm)
+
+```sdd-batch-promotion-plan
+## Promotion plan — fix-analysis-evidence-dry (feature 327)
+
+Source: docs/roadmap/features/327-fix-analysis-evidence-dry/acceptance.feature, 5 scenarios (@AC-1..@AC-5). I read the working-tree copy, because I have no git access here. The caller should confirm it matches origin/feature/fix-analysis-evidence-dry before writing. I checked the other 327 artifacts (feature.md, design.md) and the analysis and platform suites.
+
+### Verdicts
+| @AC | target suite (path) | CREATE/APPEND | verdict | note |
+|---|---|---|---|---|
+| @AC-1 | /home/user/xstockstrat/services/xstockstrat-analysis/acceptance/fix-analysis-evidence-dry.feature | CREATE | NEW | Subject is ScoreStrategy and the evidence fingerprint, so it is analysis-owned. Nothing in any suite asserts formula-content-aware evidence eligibility. |
+| @AC-2 | same | CREATE (same file) | NEW | Subject is entry_backfill and StrategiesRepository.list_live_enabled, so it is analysis-owned. Features 262 and 193 cover the same backfill but assert other outcomes (owner scoping, blend universe). |
+| @AC-3 | same | CREATE (same file) | NEW | Subject is ScoreStrategy evidence resolution. See Notes for the interaction with @AC-23 @feature-289. |
+| @AC-4 | same | CREATE (same file) | NEW | The gate-off GetFormula outage is new. @AC-23/@AC-25 @feature-289 cover gate-on only. |
+| @AC-5 | same | CREATE (same file) | NEW | Subject is ManageStrategy UPDATE and the stored grade. Feature 194 @AC-2 is related but asserts a different outcome. |
+
+No service other than analysis owns any of these guarantees, and none spans services. Nothing goes to docs/sdd/business-rules/platform.feature.
+
+### Ready-to-write blocks
+--- /home/user/xstockstrat/services/xstockstrat-analysis/acceptance/fix-analysis-evidence-dry.feature (CREATE) ---
+# Promoted from docs/roadmap/features/327-fix-analysis-evidence-dry/acceptance.feature at launch
+# (Constitution C-16). Source-feature provenance is carried on every scenario's `@feature-327` tag.
+
+Feature: fix-analysis-evidence-dry (bug fix)
+  Regression guard for defect reports: evidence fingerprint ignores referenced formula content;
+  entry-backfill duplicates the live-enabled gate SQL.
+
+  # guards: docs/reports/2026-10-19-analysis-fingerprint-ignores-formula-version-defect.md
+  @AC-1 @regression @feature-327
+  Scenario: editing a referenced custom formula stops pre-edit evidence feeding the grade
+    Given a strategy with a CUSTOM_FORMULA component on formula F
+    And evidence cells from backtests of several symbols under F's current source
+    When UpdateFormula changes F's source materially
+    And ScoreStrategy runs for the strategy
+    Then the headline grade does not aggregate the evidence cells produced before the edit
+
+  # guards: docs/reports/2026-10-19-analysis-live-gate-sql-duplicated-defect.md
+  @AC-2 @regression @feature-327
+  Scenario: the boot entry-backfill selects strategies through LIVE_ENABLED_PREDICATE_SQL
+    Given strategies S1 (active, live_enabled), S2 (active, not live_enabled) and S3 (inactive, live_enabled)
+    When the boot entry-time backfill selects strategies
+    Then it selects exactly the strategies StrategiesRepository.list_live_enabled returns (S1)
+    And when a test narrows LIVE_ENABLED_PREDICATE_SQL so that S1 no longer matches, the backfill selects no strategy, with no edit to entry_backfill.py
+
+  # design.md step 7 (D-9): a score-time refusal resolves through the newest formula-aware fingerprint
+  @AC-3 @regression @feature-327
+  Scenario: a score-time formula refusal grades on the newest formula-aware evidence, never on pre-feature cells
+    Given a strategy "s-1" with a CUSTOM_FORMULA component on formula "f-9"
+    And evidence cells stamped with the bare definition hash "<def_hash>" (pre-feature) for AAPL and MSFT
+    And evidence cells stamped with the formula-aware fingerprint "<def_hash>.<suffix>" for AAPL
+    When GetFormula for "f-9" fails with NOT_FOUND and ScoreStrategy runs for "s-1"
+    Then the grade aggregates only the "<def_hash>.<suffix>" cells (evidence_symbols is 1)
+    And with no formula-aware cells at all it aborts NOT_FOUND with a message naming formula "f-9" as not readable
+
+  # design.md step 7 (D-10): the gate-off availability coupling, operator sign-off 2026-11-20
+  @AC-4 @regression @feature-327
+  Scenario: with the fundamentals gate off, a GetFormula outage aborts ScoreStrategy without touching the grade
+    Given analysis.backtest.fundamentals.enabled is false and strategy "s-1" has a CUSTOM_FORMULA component on formula "f-9"
+    And "s-1" holds a headline grade
+    When GetFormula for "f-9" fails with UNAVAILABLE and ScoreStrategy runs for "s-1"
+    Then it aborts UNAVAILABLE "formula version unavailable — grade unchanged"
+    And no evidence cell is read and the stored grade is neither deleted nor rewritten
+
+  # design.md step 6 (operator decision 2026-11-20): pop only when the definition hash changes
+  @AC-5 @regression @feature-327
+  Scenario: a rename during a GetFormula outage keeps the grade
+    Given a strategy "s-1" with a CUSTOM_FORMULA component on formula "f-9" and a headline grade
+    When ManageStrategy UPDATE renames "s-1" (update_mask display_name only) while GetFormula for "f-9" fails with UNAVAILABLE
+    Then the update succeeds and the headline grade of "s-1" is still served and is not deleted
+
+### Notes / ambiguities / conflicts
+- **Target file.** /home/user/xstockstrat/services/xstockstrat-analysis/acceptance/ already exists with many suites. A Glob for `*evidence*` found no file, so this is a CREATE. The name follows the source slug.
+- **No @FR tags.** The source scenarios carry no @FR-* tags, so none were added (inventing them would break verbatim promotion). Only @feature-327 was appended, after @regression. The `# guards:` and `# design.md` comment lines are kept above each tag line.
+- **@AC-3 versus @AC-23 @feature-289 (no CONFLICT).** @AC-23 is in /home/user/xstockstrat/services/xstockstrat-analysis/acceptance/block-fundamentals-strategy-on-etf.feature:97-102. It says that with the gate on, a refused formula (NOT_FOUND) no longer blocks ScoreStrategy, and a GetFormula outage still aborts "fundamentals availability unknown — grade unchanged".
+  - @AC-3 does not state the gate state in its Given. It reads as the gate-off or irrelevant path. design.md (§Existing Business Rules, around lines 218-248) explicitly records PRESERVE for @AC-23 @feature-289 and EXTEND for 327's @AC-3 and @AC-4, with operator sign-off on 2026-11-20 (context.md).
+  - I therefore treated these as complementary, not contradictory. A human may want a gate qualifier in @AC-3's Given. I did not change it, because promotion must be verbatim.
+- **@AC-4 versus @AC-25 @feature-289.** The existing @AC-25 (services/xstockstrat-analysis/acceptance/opportunity-compute-robustness.feature:162-166) and the UNAVAILABLE clause of @AC-23 both cover gate-on outages, with a different message and different surfaces. @AC-4 is gate-off with the message "formula version unavailable — grade unchanged". The outcomes are distinct, so this is not an OVERLAP.
+- **@AC-5 versus @AC-2 @feature-194.** That scenario (services/xstockstrat-analysis/acceptance/fix-strategy-signal-params-dead-keys.feature:18-23) says a rename leaves the fingerprint unchanged for a dirty strategy. @AC-5 asserts that the grade survives a rename while GetFormula is UNAVAILABLE. Related but not the same outcome, so I recorded no OVERLAP and made no consolidation recommendation.
+- **@AC-2 versus the backfill suites.** Feature 262 (services/xstockstrat-analysis/acceptance/fix-analysis-owner-scope.feature) and feature 193 (fix-blend-queue-fundamentals-universe.feature) cover the same module but assert other outcomes (owner scoping, blend universe). The grep for LIVE_ENABLED_PREDICATE_SQL and list_live_enabled in all .feature files matched only feature 327's own file.
+- **Platform suite.** I grepped docs/sdd/business-rules/platform.feature for feature-327 and evidence. There are no related hits, so no cross-cutting promotion is needed.
+
+### Coverage check
+- Source scenarios: 5 (@AC-1, @AC-2, @AC-3, @AC-4, @AC-5).
+- Planned: 5 NEW, 0 DUP, 0 OVERLAP, 0 CONFLICT.
+- Every @AC-* is accounted for and none were skipped. The counts match.
+```

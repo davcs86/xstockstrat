@@ -28,7 +28,9 @@ def compute_signal_score(
                 continue
             if valid_until and bar_ts > valid_until:
                 continue
-            conviction = sig.conviction if sig.conviction > 0 else 0.5
+            conviction = (
+                sig.conviction if (sig.conviction_provided or sig.conviction != 0.0) else 0.5
+            )
             if sig.direction == "buy":
                 buy_conviction += conviction * weight
             elif sig.direction == "sell":

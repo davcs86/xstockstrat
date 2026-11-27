@@ -382,6 +382,50 @@ func TestUpsertOrder_PersistsFeesPresence(t *testing.T) {
 	}
 }
 
+// TestUpsertOrder_RequiresApprovalFromStatus_F321_AC3 pins the requires_approval bind ($17) to the
+// insert-time status and the DO UPDATE SET list that keeps it out of the conflict update.
+func TestUpsertOrder_RequiresApprovalFromStatus_F321_AC3(t *testing.T) {
+	const fullUpdateSet = `(?s)ON CONFLICT \(order_id, created_at\) DO UPDATE SET\s+` +
+		`broker_order_id\s+= EXCLUDED\.broker_order_id,\s+status\s+= EXCLUDED\.status,\s+` +
+		`filled_qty\s+= EXCLUDED\.filled_qty,\s+filled_avg_price\s+= EXCLUDED\.filled_avg_price,\s+` +
+		`updated_at\s+= EXCLUDED\.updated_at,\s+account_id\s+= EXCLUDED\.account_id,\s+` +
+		`broker_type\s+= EXCLUDED\.broker_type,\s+filled_at\s+= EXCLUDED\.filled_at,\s+` +
+		`fees\s+= EXCLUDED\.fees\s*$`
+	cases := []struct {
+		status tradingv1.OrderStatus
+		want   bool
+		sql    string
+	}{
+		{tradingv1.OrderStatus_ORDER_STATUS_PENDING_APPROVAL, true, fullUpdateSet},
+		{tradingv1.OrderStatus_ORDER_STATUS_NEW, false, `INSERT INTO trading\.orders`},
+		{tradingv1.OrderStatus_ORDER_STATUS_FILLED, false, `INSERT INTO trading\.orders`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.status.String(), func(t *testing.T) {
+			mock, err := pgxmock.NewPool()
+			if err != nil {
+				t.Fatalf("pgxmock.NewPool: %v", err)
+			}
+			defer mock.Close()
+
+			args := make([]any, 23)
+			for i := range args {
+				args[i] = pgxmock.AnyArg()
+			}
+			args[16] = tc.want // $17 requires_approval
+			repo := &TradingRepo{db: mock}
+			mock.ExpectExec(tc.sql).WithArgs(args...).WillReturnResult(pgxmock.NewResult("INSERT", 1))
+
+			if err := repo.UpsertOrder(context.Background(), &tradingv1.Order{OrderId: "ord-a", Status: tc.status}); err != nil {
+				t.Fatalf("UpsertOrder: %v", err)
+			}
+			if err := mock.ExpectationsWereMet(); err != nil {
+				t.Errorf("unmet expectations: %v", err)
+			}
+		})
+	}
+}
+
 // TestScanOrder_FeesNullVsZero is the AC-18 broker-unset vs offline-set split on read-back.
 func TestScanOrder_FeesNullVsZero(t *testing.T) {
 	mock, err := pgxmock.NewPool()

@@ -296,3 +296,105 @@ func TestPositionCursorCodec(t *testing.T) {
 		}
 	}
 }
+
+// TestGetSnapshot_UsesMockableDB realizes @AC-1 (feature 323): GetSnapshot must read through the
+// mockable db handle, since NewPortfolioRepoWithDB leaves pool nil.
+func TestGetSnapshot_UsesMockableDB(t *testing.T) {
+	at := time.Date(2026, 11, 20, 15, 0, 0, 0, time.UTC)
+	snapCols := []string{"portfolio_id", "snapshot_time", "equity", "cash", "day_pnl", "open_positions"}
+
+	t.Run("row returned", func(t *testing.T) {
+		mock, err := pgxmock.NewPool()
+		if err != nil {
+			t.Fatalf("pgxmock.NewPool: %v", err)
+		}
+		defer mock.Close()
+		repo := NewPortfolioRepoWithDB(mock)
+
+		mock.ExpectQuery(`FROM portfolio.snapshots`).
+			WithArgs("pf-1", at).
+			WillReturnRows(mock.NewRows(snapCols).AddRow("pf-1", at, 1250.5, 300.25, 12.75, int32(4)))
+
+		snap, err := repo.GetSnapshot(context.Background(), "pf-1", at)
+		if err != nil {
+			t.Fatalf("GetSnapshot: %v", err)
+		}
+		if snap.PortfolioId != "pf-1" || snap.Equity != 1250.5 || snap.Cash != 300.25 ||
+			snap.DayPnl != 12.75 || snap.OpenPositions != 4 {
+			t.Fatalf("unexpected snapshot: %+v", snap)
+		}
+		if err := mock.ExpectationsWereMet(); err != nil {
+			t.Fatalf("pgxmock expectations unmet: %v", err)
+		}
+	})
+
+	t.Run("mock error", func(t *testing.T) {
+		mock, err := pgxmock.NewPool()
+		if err != nil {
+			t.Fatalf("pgxmock.NewPool: %v", err)
+		}
+		defer mock.Close()
+		repo := NewPortfolioRepoWithDB(mock)
+
+		mock.ExpectQuery(`FROM portfolio.snapshots`).
+			WithArgs("pf-1", at).
+			WillReturnError(pgx.ErrNoRows)
+
+		snap, err := repo.GetSnapshot(context.Background(), "pf-1", at)
+		if !errors.Is(err, pgx.ErrNoRows) {
+			t.Fatalf("expected an error wrapping pgx.ErrNoRows, got %v", err)
+		}
+		if snap != nil {
+			t.Fatalf("expected a nil snapshot, got %+v", snap)
+		}
+		if err := mock.ExpectationsWereMet(); err != nil {
+			t.Fatalf("pgxmock expectations unmet: %v", err)
+		}
+	})
+}
+
+func TestCountPositions_UsesMockableDB(t *testing.T) {
+	mock, err := pgxmock.NewPool()
+	if err != nil {
+		t.Fatalf("pgxmock.NewPool: %v", err)
+	}
+	defer mock.Close()
+	repo := NewPortfolioRepoWithDB(mock)
+
+	mock.ExpectQuery(`FROM portfolio.positions`).
+		WithArgs("user-1", commonv1.TradingMode_TRADING_MODE_PAPER.String()).
+		WillReturnRows(mock.NewRows([]string{"count"}).AddRow(3))
+
+	got, err := repo.CountPositions(context.Background(), "user-1", commonv1.TradingMode_TRADING_MODE_PAPER)
+	if err != nil {
+		t.Fatalf("CountPositions: %v", err)
+	}
+	if got != 3 {
+		t.Fatalf("count = %d, want 3", got)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("pgxmock expectations unmet: %v", err)
+	}
+}
+
+func TestUpdatePositionBracket_UsesMockableDB(t *testing.T) {
+	mock, err := pgxmock.NewPool()
+	if err != nil {
+		t.Fatalf("pgxmock.NewPool: %v", err)
+	}
+	defer mock.Close()
+	repo := NewPortfolioRepoWithDB(mock)
+
+	mock.ExpectExec(`UPDATE portfolio.positions`).
+		WithArgs("user-1", "AAPL", commonv1.TradingMode_TRADING_MODE_PAPER.String(), "acc-1", "stop-1", "tp-1").
+		WillReturnResult(pgxmock.NewResult("UPDATE", 1))
+
+	err = repo.UpdatePositionBracket(context.Background(), "user-1", "AAPL",
+		commonv1.TradingMode_TRADING_MODE_PAPER.String(), "acc-1", "stop-1", "tp-1")
+	if err != nil {
+		t.Fatalf("UpdatePositionBracket: %v", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("pgxmock expectations unmet: %v", err)
+	}
+}

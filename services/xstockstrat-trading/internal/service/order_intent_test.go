@@ -172,11 +172,27 @@ func TestStaleThreshold_UsesLiveConfigDefaults(t *testing.T) {
 	cfgW := &config.Watcher{} // zero-Watcher -> every GetFloat/GetInt default
 	got := staleThreshold(cfgW)
 	floorMs := int64(5000) // trading.broker.timeout_ms default
-	if int64(broker.IBKRRequestTimeout/time.Millisecond) > floorMs {
-		floorMs = int64(broker.IBKRRequestTimeout / time.Millisecond)
+	if int64(broker.IBKRDefaultHandshakeTimeout/time.Millisecond) > floorMs {
+		floorMs = int64(broker.IBKRDefaultHandshakeTimeout / time.Millisecond)
 	}
 	want := computeStaleThreshold(floorMs, 3.0) // trading.order_intent.stale_multiplier default
 	if got != want {
 		t.Errorf("staleThreshold(zero-Watcher) = %v, want %v (the documented defaults)", got, want)
+	}
+}
+
+// PRESERVE 347 @AC-27: the 10 s floor holds under a shorter live broker.timeout_ms.
+func TestStaleThreshold_FloorKept_F321(t *testing.T) {
+	for _, tc := range []struct {
+		timeoutMs, multiplier float64
+		want                  time.Duration
+	}{
+		{1000, 3.0, 30 * time.Second},
+		{10000, 3.0, 30 * time.Second},
+		{10000, 4.0, 40 * time.Second},
+	} {
+		if got := staleThreshold(rateLimitWatcher(tc.timeoutMs, tc.multiplier, nil)); got != tc.want {
+			t.Errorf("staleThreshold(%v ms x%v) = %v, want %v", tc.timeoutMs, tc.multiplier, got, tc.want)
+		}
 	}
 }

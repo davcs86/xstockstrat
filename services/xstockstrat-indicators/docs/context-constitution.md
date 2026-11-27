@@ -34,7 +34,7 @@ rules (see `## Pointers`).
 
 | Candidate | Why suspected | What would confirm it |
 |---|---|---|
-| Sandbox failure classification by stderr substring-match is a fixed contract | `app/services/sandbox.py#is not allowed in sandbox` (~L809-812) matches `"is not allowed in sandbox"` and the `#_MEMORY_EXHAUSTED_MARKERS` (~L544) `"MemoryError"`/`"OpenBLAS error: Memory allocation still failed"` | a maintainer ruling (a formula printing those strings is mis-tagged — see findings open question) |
+| Sandbox failure class is carried by the per-run nonce status line, not by stderr substrings (feature 310) | `app/services/sandbox.py#_split_status` (~L692) reads the class from the status line; the `#_MEMORY_EXHAUSTED_MARKERS` (~L545) `"MemoryError"`/`"OpenBLAS error: Memory allocation still failed"` stderr check survives only as the no-status fallback, which keeps `acceptance/fix-indicators-sandbox-matrix.feature` @AC-4 (feature 228) | ruled by operator ruling O-3 (2026-11-20, quoted in `docs/roadmap/features/310-fix-sandbox-result-contract/context.md`): stderr-substring classification is not the contract |
 
 ## Pointers (already documented or CI-enforced — not restated here)
 

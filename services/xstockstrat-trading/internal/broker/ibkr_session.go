@@ -31,10 +31,12 @@ type IBKRTiming struct {
 	ReauthMinInterval time.Duration
 }
 
+const IBKRDefaultHandshakeTimeout = 10 * time.Second
+
 // defaultIBKRTiming applies only when IBKRConfig.Timing is nil (tests); production always passes Timing.
 var defaultIBKRTiming = IBKRTiming{
 	LSTRefreshMargin:  60 * time.Second,
-	HandshakeTimeout:  10 * time.Second,
+	HandshakeTimeout:  IBKRDefaultHandshakeTimeout,
 	ReauthMinInterval: 30 * time.Second,
 }
 
@@ -445,7 +447,9 @@ func ibkrFinalAuthErr(op string, req *http.Request, code int) error {
 
 func (c *IBKRClient) sendSigned(req *http.Request, lst []byte) (*http.Response, []byte, error) {
 	req.Header.Set("Authorization", c.authorize(req, lst))
-	resp, err := c.httpClient.Do(req)
+	ctx, cancel := context.WithTimeout(req.Context(), callTimeout(c.timeoutFn))
+	defer cancel()
+	resp, err := c.httpClient.Do(req.WithContext(ctx))
 	if err != nil {
 		return nil, nil, err
 	}

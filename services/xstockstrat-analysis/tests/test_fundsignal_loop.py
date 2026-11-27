@@ -262,6 +262,72 @@ class TestScoreDirection:
         assert 0.0 <= loop._builtin_score(f) <= 1.0
 
     @pytest.mark.asyncio
+    async def test_ac2_lone_low_scoring_symbol_is_not_buy(self):
+        """@AC-2 @feature-309"""
+        loop = _identity_loop(
+            {"fundsignal.universe_source": "explicit", "fundsignal.explicit_symbols": "AAPL"}
+        )
+        row = _fund(
+            "AAPL", pe_ratio=40.0, roe=0.0, eps=-1.0, missing=("pb_ratio", "debt_to_equity")
+        )
+        loop._marketdata.GetFundamentalsMulti = AsyncMock(
+            return_value=SimpleNamespace(fundamentals=[row])
+        )
+        await loop.run_once()
+
+        (call,) = loop._ingest.of("IngestSignal")
+        assert call[1].signal.symbol == "AAPL"
+        assert call[1].signal.direction != "buy"
+
+    @pytest.mark.parametrize(
+        ("score", "expected"),
+        [(0.05, "sell"), (0.9, "buy"), (0.5, "hold"), (0.51, "buy"), (0.49, "sell")],
+    )
+    def test_lone_score_follows_its_side(self, score, expected):
+        assert FundamentalsSignalLoop._map_directions({"A": score}, 0.80, 0.20) == {"A": expected}
+
+    @pytest.mark.parametrize("n", [2, 3, 4])
+    def test_small_cross_sections_take_the_degenerate_branch(self, n):
+        scores = {f"S{i}": 0.10 + 0.05 * i for i in range(n)}
+        directions = FundamentalsSignalLoop._map_directions(scores, 0.80, 0.20)
+        assert "buy" not in directions.values()
+
+    def test_min_cross_section_calibrated_to_default_quantiles(self):
+        def quantile_labels(values):
+            ordered = sorted(values)
+            buy_cut = fundsignal_module._quantile(ordered, 0.80)
+            sell_cut = fundsignal_module._quantile(ordered, 0.20)
+            return ["buy" if s >= buy_cut else "sell" if s <= sell_cut else "hold" for s in values]
+
+        def holds_and_bounded_buys(labels):
+            return "hold" in labels and labels.count("buy") / len(labels) <= 0.40
+
+        for n in range(5, 51):
+            values = [(i + 1) / (n + 1) for i in range(n)]
+            labels = quantile_labels(values)
+            scores = {f"S{i}": v for i, v in enumerate(values)}
+            mapped = FundamentalsSignalLoop._map_directions(scores, 0.80, 0.20)
+            assert [mapped[f"S{i}"] for i in range(n)] == labels, n
+            assert holds_and_bounded_buys(labels), n
+        assert not holds_and_bounded_buys(quantile_labels([0.2, 0.4, 0.6, 0.8]))
+        assert fundsignal_module._MIN_CROSS_SECTION == 5
+
+    @pytest.mark.parametrize(
+        "kw",
+        [
+            {},
+            {"missing": ("pe_ratio", "roe")},
+            {"missing": ("pb_ratio", "debt_to_equity", "eps")},
+            {"pe_ratio": -5.0, "pb_ratio": 100.0, "roe": 5.0, "debt_to_equity": -1.0, "eps": -3.0},
+            {"pe_ratio": 1.0, "pb_ratio": 0.1, "roe": -2.0, "debt_to_equity": 50.0, "eps": 1e9},
+            {"missing": BUILTIN_SCORER_METRICS},
+        ],
+    )
+    def test_builtin_score_stays_in_unit_range(self, kw):
+        s = FundamentalsSignalLoop._builtin_score(_fund("R", **kw))
+        assert s is None or 0.0 <= s <= 1.0
+
+    @pytest.mark.asyncio
     async def test_below_min_conviction_dropped(self):
         loop = _make_loop({"fundsignal.min_conviction_to_emit": 1.1})
         await loop.run_once(override_symbols=["AAPL", "MSFT"])
@@ -685,7 +751,9 @@ def _identity_loop(overrides=None, author="system", ingest_responses=None):
     loop._indicators = RecordingStub(
         {
             "GetFormula": get_formula,
-            "ExecuteFormula": SimpleNamespace(success=True, output={"composite": 0.7}),
+            "ExecuteFormula": SimpleNamespace(
+                success=True, output={"composite": 0.7}, exit_reason=0
+            ),
         }
     )
     return loop
@@ -946,7 +1014,24 @@ class TestUnscoredSymbols:
         assert insert.args[4] == pytest.approx(0.30, abs=1e-9)
 
     @pytest.mark.asyncio
+    async def test_zero_score_emits_explicit_zero_conviction(self):
+        loop = _identity_loop()
+        rows = {
+            "NIL": fundamentals_row(
+                "NIL", pe_ratio=40.0, roe=0.0, eps=-1.0, missing=("pb_ratio", "debt_to_equity")
+            )
+        }
+        _serve_rows(loop, rows)
+        await loop.run_once(override_symbols=["NIL"])
+
+        (_m, req, _meta), *rest = loop._ingest.of("IngestSignal")
+        assert rest == []
+        assert req.signal.conviction == 0.0
+        assert req.signal.conviction_provided is True
+
+    @pytest.mark.asyncio
     async def test_ac3_formula_all_missing_skipped_partial_scored(self):
+        """@AC-1 @feature-309: the formula input carries only the present metrics."""
         loop = _identity_loop({"fundsignal.scoring_formula_id": _SYSTEM_FORMULA})
         rows = {
             "NODATA": fundamentals_row(
@@ -963,14 +1048,26 @@ class TestUnscoredSymbols:
         assert len(executed) == 1
         _m, req, meta = executed[0]
         inputs = dict(req.input_data)
+        assert set(inputs) == {"dividend_yield"}
         assert inputs["dividend_yield"] == pytest.approx(0.013)
-        assert inputs["pe_ratio"] == 0.0
         _assert_system_identity(meta)
         ingested = loop._ingest.of("IngestSignal")
         assert [r.signal.symbol for _m, r, _meta in ingested] == ["DIVONLY"]
         inserts = _emitted_inserts(loop)
         assert [c.args[1] for c in inserts] == ["DIVONLY"]
         assert inserts[0].args[4] == pytest.approx(0.7)
+
+    @pytest.mark.asyncio
+    async def test_formula_partial_row_matches_strategy_omit_absent(self):
+        loop = _identity_loop({"fundsignal.scoring_formula_id": _SYSTEM_FORMULA})
+        _serve_rows(loop, {"PART": _fund("PART", pe_ratio=0.0, roe=0.0, missing=("pe_ratio",))})
+        await loop.run_once(override_symbols=["PART"])
+
+        (_m, req, _meta), *rest = loop._indicators.of("ExecuteFormula")
+        assert rest == []
+        inputs = dict(req.input_data)
+        assert set(inputs) == {"pb_ratio", "dividend_yield", "roe", "debt_to_equity", "eps"}
+        assert inputs["roe"] == 0.0
 
     @pytest.mark.asyncio
     async def test_formula_exception_skip_not_counted_unscored(self, caplog):
@@ -1367,7 +1464,9 @@ class TestRetryStability:
         assert FundamentalsSignalLoop._map_directions(
             {"AAPL": 0.10}, 0.80, 0.20, reference_scores=[0.90, 0.70, 0.50]
         ) == {"AAPL": "sell"}
-        assert FundamentalsSignalLoop._map_directions({"AAPL": 0.10}, 0.80, 0.20) == {"AAPL": "buy"}
+        assert FundamentalsSignalLoop._map_directions({"AAPL": 0.10}, 0.80, 0.20) == {
+            "AAPL": "sell"
+        }
 
     @pytest.mark.asyncio
     async def test_ac10_force_keeps_now_anchored_valid_until(self):

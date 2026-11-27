@@ -14,6 +14,7 @@ import asyncio
 import json
 import logging
 import time
+import uuid
 from datetime import UTC, datetime
 from typing import Any
 
@@ -92,6 +93,7 @@ def _build_external_signal(slug: str, item: dict) -> ingest_pb2.ExternalSignal:
         symbol=item["symbol"],
         direction=item["direction"],
         conviction=item["conviction"],
+        conviction_provided=True,
     )
     if item.get("headline"):
         signal.headline = item["headline"]
@@ -153,10 +155,11 @@ async def poll_one_source(
         ingested = 0
         skipped = 0
         first_err: Exception | None = None
+        trace_id = str(uuid.uuid4())
         for item in parsed:
             try:
                 _sid, dedup = await servicer._ingest_external_signal(
-                    _build_external_signal(slug, item), owner=owner
+                    _build_external_signal(slug, item), owner=owner, trace_id=trace_id
                 )
                 _record_signal_outcome("mcp_poll", "deduplicated" if dedup else "ingested")
                 ingested += 1

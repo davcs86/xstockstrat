@@ -8,7 +8,7 @@ Config changes propagate live to all services via `xstockstrat-config`'s `WatchC
 
 ## Config Architecture Recap
 
-```
+```text
 Author (agent / API / CLI)
     │
     ▼ SetConfig RPC
@@ -34,7 +34,7 @@ A key is `<category>.<key>` stored under the namespace `<service>`. The FQN `<se
 config-ui and the agent show; send the relative key (with the namespace) to `SetConfig`/`set_config`/`create_key` —
 a key that begins with its namespace is rejected `INVALID_ARGUMENT`.
 
-```
+```text
 namespace / key            (FQN, display only)
 
 Examples:
@@ -45,7 +45,8 @@ Examples:
 ```
 
 Secret values use the `secret.` prefix within their category:
-```
+
+```text
   identity.secret.jwt_key   (value is a secret reference, e.g. "vault://prod/jwt-secret")
 ```
 
@@ -66,6 +67,7 @@ Secret values use the `secret.` prefix within their category:
 ## Step 1 — Preview the Change
 
 Query current value before changing:
+
 ```bash
 # via grpcurl
 grpcurl -plaintext \
@@ -173,6 +175,25 @@ for key, value in [
     )
 ```
 
+### Cross-key deadline order (feature 314)
+
+`SetConfig` refuses (code 3, no write) a global write that would invert either PLAT-13 deadline pair
+(`CROSS_KEY_ORDERING`, strict `>`):
+
+| Greater key (must stay above) | Lesser key(s) |
+|---|---|
+| `portfolio` / `marketdata.quote_timeout_ms` | max(`marketdata` / `quotes.batch_timeout_ms`, `marketdata` / `quotes.mark_timeout_ms`) |
+| `analysis` / `opportunity.live_enrich_timeout_ms` | `marketdata` / `price.batch_timeout_ms` |
+
+- When a change moves both sides, **raise the greater key first**, then raise the lesser key. Lowering
+  goes the other way: lower the lesser key first, then the greater one. The rejection message names
+  both keys, the stored sibling value and the remedy.
+- The gate covers **global writes only**, compared with the global siblings in the same environment. Per-user
+  writes skip it, because every reader watches global config.
+- Two concurrent writes, one to a greater key and one to its lesser key, can each pass against the other's
+  old value (accepted residual). Apply them one after the other, never in parallel.
+- The rule is not shown by `ListKeys` or config-ui; this table is its operator-facing record.
+
 ---
 
 ## Step 4 — Verify Propagation
@@ -193,6 +214,7 @@ for snap in stream:
 ```
 
 Or check the config audit log in the database:
+
 ```sql
 SELECT namespace, key, old_value, new_value, changed_by, reason, changed_at
 FROM config.config_audit
@@ -205,10 +227,12 @@ LIMIT 10;
 ## Step 5 — Monitor Service Behaviour
 
 After rolling out sandbox limit changes to `indicators`:
+
 - Monitor `indicators.sandbox.timeout` alert frequency in xstockstrat-notify
 - Monitor `indicators.sandbox.memory_exceeded` alerts
 
 After rolling out `trading.approval.*` changes:
+
 - Monitor pending approval queue size
 - Check ledger events for `order.approval_requested`
 
@@ -227,6 +251,47 @@ environment** (`staging`, then `production`) through the same path its reader us
 
 Record the per-key, per-environment result in the feature's `context.md`.
 
+## Rollout — `*_mcp_deadline_budget` migration (feature 314)
+
+The migration seeds `agent` / `extract.call_budget_seconds` = `35` and clamps global
+`agent` / `opportunities.read_timeout_seconds` rows above `44` down to `44`. It sends its own
+`pg_notify('config_changed')`, so running agents pick both up without a restart.
+
+1. **Pre-deploy**, on the staging and the production database (access → `docs/runbooks/operator-db-access.md`),
+   run these read-only queries:
+   ```sql
+   SELECT environment, user_id IS NULL AS global, value_type, value_data, updated_by,
+          value_data ~ '^[+-]?([0-9]{1,30}(\.[0-9]{0,30})?|\.[0-9]{1,30})([eE][+-]?[0-9]{1,3})?$' AS matches_numeric
+   FROM config.config_values
+   WHERE namespace = 'agent' AND key = 'opportunities.read_timeout_seconds'
+   ORDER BY environment, global DESC;
+
+   SELECT environment, namespace, key, value_data
+   FROM config.config_values
+   WHERE user_id IS NULL
+     AND (namespace, key) IN (('portfolio', 'marketdata.quote_timeout_ms'),
+                              ('marketdata', 'quotes.batch_timeout_ms'),
+                              ('marketdata', 'quotes.mark_timeout_ms'),
+                              ('analysis', 'opportunity.live_enrich_timeout_ms'),
+                              ('marketdata', 'price.batch_timeout_ms'))
+   ORDER BY environment, namespace, key;
+   ```
+   - A global row above 44 will be clamped; confirm that is acceptable.
+   - A global row with `matches_numeric = false` is skipped by the clamp; fix it with `SetConfig` before
+     deploy.
+   - Per-user rows above 44 are reported only and never rewritten (the agent does not read them).
+   - Note every inverted pair: quote ≤ max(batch, mark), or enrich ≤ price.
+2. **Inverted pairs** are fixed with ordered `SetConfig` once the new config image is live — raise the
+   greater key first (§ Step 3, Cross-key deadline order). Never fix them with SQL.
+3. **Post-rollout**, once each environment runs the new config image, re-run the first query. Every global row
+   must match and be ≤ 44. The old config image still accepts 45–55 between the db-migrator run and the new
+   image going live, so a row at 45–55 was written in that window; lower it with `SetConfig`.
+4. Read back both keys per § Step 6.
+
+**Sign-off.** Record the query results and the operator's sign-off in the feature's `context.md`. If the
+queries cannot be run before deploy, the migration still ships (the clamp is defensive), and the sign-off is
+recorded as "unenumerated"; run the queries after the rollout instead.
+
 ## Config Inventory (DO console, read-only)
 
 `services/xstockstrat-indicators/app/maintenance/config_inventory.py` (feature 295 Steps 2/5) prints
@@ -240,29 +305,98 @@ transaction:
 4. `--report` prints `config.config_heal_report_041` (per-user ids hashed); `--reveal <request.json>`
    prints plaintext only for global, non-secret rows and exits 2 for anything else.
 
+## Operator sweep: orphaned `mcp_credential` secrets (feature 328)
+
+**What and why.** The agent and the config-ui write a signal source's bearer secret first, as a per-user
+`ingest` / `mcp_credential.<uuid>` secret, and register the source second. When the register or instantiate
+fails, the secret stays behind with no source pointing at it. Nothing deletes it automatically: config has no
+delete RPC and no scheduler runs a reclaim. This sweep is the only reclaim. **Cadence:** run it on demand, and
+before each `main-dev` → `main` promotion. Orphans accumulate between runs.
+
+**Reclaim rule.** A key that no source **of the same owner** references for longer than `grace_hours`
+(default 24, floor 1) is deleted. This includes a key staged with `set_config` and meant to be attached later
+through an explicit `credentials_ref`: a source later pointed at a swept key reads "bearer not configured"
+(GetSecret `found=false`). Deletion is not reversible (no snapshot is taken); the owner re-enters the bearer.
+
+**Prerequisites.**
+
+- psql 10 or later (the scripts use `\if` and `:{?var}`): `brew install libpq` (other: the distro
+  `postgresql-client` package), per [`operator-db-access.md`](operator-db-access.md) § Prerequisites.
+- A checkout at the deployed commit, so the two scripts match what runs in the environment.
+- The DB-owner connection from [`operator-db-access.md`](operator-db-access.md) over the **direct** port
+  (DO `:25060`, homelab `:5432`). Never the pooler (`:25061` / `:6432`), never an app-console `DATABASE_URL`.
+
+**Target databases** (operator-confirmed 2026-11-27, staging only):
+
+| Database | Environment | How to connect |
+|---|---|---|
+| DO dev cluster `xstockstrat`, database `xstockstrat-staging` (`.do/app.dev.yaml`) | staging | `doctl databases connection <cluster-id> --format URI` (direct `:25060`), § Connection details |
+| homelab `xstockstrat-staging` on `db.ts.natanddavehouse.com` | staging | tailnet only, role `xstockstrat_staging`, direct `:5432`, § Homelab database |
+| DO prod (`.do/app.yaml`) | production | not swept: production out of scope (never launched; standing operator ruling) |
+| homelab production (any) | production | not swept: production out of scope (never launched; standing operator ruling) |
+
+**Procedure.** Every command carries `-v ON_ERROR_STOP=1`. `<uri>` is the direct connection URI above (for
+the homelab, pass the keyword DSN with `PGPASSWORD` as in `operator-db-access.md`).
+
+1. Privilege pre-check. The one query must return three `t`:
+   ```sql
+   SELECT has_table_privilege(current_user, 'ingest.signal_sources', 'SELECT'),
+          has_table_privilege(current_user, 'config.config_values', 'DELETE'),
+          has_table_privilege(current_user, 'config.config_audit', 'INSERT');
+   ```
+2. Confirm the database is one of the swept rows in the table above:
+   ```sql
+   SELECT current_database();
+   ```
+3. Preview (read-only). Read the rows and `total`:
+   ```bash
+   psql "<uri>?sslmode=require" -v ON_ERROR_STOP=1 -f scripts/config-heal/mcp-credential-orphan-sweep-preview.sql
+   # optional: add -v grace_hours=N before -f
+   ```
+4. Sweep. Same command with the sweep script and the same `grace_hours`; `deleted` must equal the preview's
+   `total` (or be lower if a source registered in between):
+   ```bash
+   psql "<uri>?sslmode=require" -v ON_ERROR_STOP=1 -f scripts/config-heal/mcp-credential-orphan-sweep.sql
+   ```
+5. Re-preview with the same `grace_hours`. Expect 0 rows (PLAT-N1).
+
+**Audit query.** Each deleted key has one audit row under the sweep's actor:
+
+```sql
+SELECT changed_at, user_id, key, environment
+  FROM config.config_audit
+ WHERE changed_by = 'system:config-heal-mcp-credential-sweep'
+ ORDER BY changed_at DESC;
+```
+
+**If the pre-check returns `f`:** stop. The role lacks the cross-schema rights the sweep needs. Record it in
+the feature's `context.md` and escalate; do not grant ad hoc.
+
 ## Recovery: dirty `041_heal_config_keys_to_reader_catalog`
 
 **Precondition:** valid only while 041 is config's highest up-file —
 `ls services/xstockstrat-config/migrations/*.up.sql | tail -1` must print `041_…`. Otherwise stop.
 
-Since feature 296 config has a contract floor of 40 (the rename migration's `-- contract-of:` header names
-`040_config_markers`), so `scripts/db-migrate.sh up` on a config database dirty at a version ≥ 40 exits 3
-instead of running `force 0`: **dirty at a version ≥ 40 means `force <n-1>`, never `force 0`.** The probe
-below reads tables, not the version.
+`scripts/db-migrate.sh up` on a dirty config database exits 1 and prints the recovery; **dirty means the
+printed `force <prev>`, never `force 0`.** The probe below reads tables, not the version.
 
 1. Probe (read-only):
+
    ```sql
    SELECT to_regclass('config.config_markers') IS NOT NULL AS markers_present;
    SELECT to_regclass('config.config_heal_report_041') IS NOT NULL
           AND EXISTS (SELECT 1 FROM config.config_heal_report_041 WHERE action = 'latch') AS latched;
    ```
+
    (Run the second `EXISTS` only when the report table is present.)
 2. Force the version below 041 with golang-migrate directly — **never** `scripts/db-migrate.sh force`,
    which forces the highest file and would mark an unapplied 041 as applied:
+
    ```bash
    migrate -path services/xstockstrat-config/migrations \
      -database "$DB_URL&x-migrations-table=config_schema_migrations" force 40   # force 39 if markers_present is false
    ```
+
    (Use `?x-migrations-table=…` when `DB_URL` has no query string.)
 3. Run `scripts/db-migrate.sh up`. A present latch makes 041 a no-op; without it 041 re-runs in full.
 4. Repeat Step 6 (read-back) and `config_inventory --report`.
@@ -466,6 +600,7 @@ stub.SetConfig(
 ## Emergency: Platform Maintenance Mode
 
 To halt all trading operations immediately:
+
 ```python
 stub.SetConfig(
     config_pb2.SetConfigRequest(

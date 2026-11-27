@@ -1023,3 +1023,201 @@ ENV node=v24.22.1 grpc-js=1.14.7 dir=/home/user/xstockstrat/node_modules/.pnpm/@
 - [ ] No evidence was found that feature 324 touches a notify file, although design.md's Open Risks names it — target: before `/sdd-execute` (re-check once 324 has an implementation spec).
 - [ ] If `origin/main-dev` moves past `fb52065c` before Step 1 runs, line numbers drift again — target: `/sdd-execute` Phase 1 (re-grep each anchor by symbol).
 - [ ] Earlier threads still open and unchanged by this review: the grpc-js status path is verified on 1.14.7 only; `^1.14.7` can float; a renamed `writableLength` fails open (Steps 6 and 8); the four accepted residuals have no step.
+
+## Session 2026-11-26 — sdd-execute sequential (sdd-batch-execute)
+
+**Up-front confirmation** (operator-approved record, binding, verbatim):
+
+```json
+{"mainDev":"2b2dec92afa14123ac1d796846632db713bbd9dc","dev":"7540f38f58eb3f880a60e82f6009a4ff27deb391","specHash":"25bd5ee919603c8ae19a151a1d19056b88bd631a","directive":"conditional","pending":[1,2,3,4,5,6,7,8],"mismatches":[{"n":1,"detail":"Codebase Evidence is out of date. The spec expects the feature branch to pin `\"@grpc/grpc-js\": \"^1.14.5\"` at package.json:21 and pnpm-lock.yaml:378-380 (`specifier: ^1.14.5` / `version: 1.14.5`), and to be 168 commits behind main-dev. At the branch tip 7540f38f it already pins `^1.14.7` and lock `1.14.7`, because the earlier merge c0f0757b (\"merge main-dev into feature branch (pre-execute sync)\") brought it in. The branch is 21 commits behind origin/main-dev 2b2dec92, not 168. `git diff --stat 2b2dec92...7540f38f` shows only docs/roadmap/ledger/fails.md (+5); the feature directory is identical on both sides. After the local `-X ours` merge (HEAD 8675aede, two parents), package.json:21 is `^1.14.7`, the importer block at :378-380 is `^1.14.7`/`1.14.7`, and `git diff 2b2dec92 HEAD --stat` shows only fails.md. Step 1's target state already holds, so its evidence and its premise that grpc-js still needs bumping are stale. The Files paths (services/xstockstrat-notify/package.json, pnpm-lock.yaml) exist."},{"n":2,"detail":"Wrong line cite: the Evidence puts the AlertSeverity enum names at `packages/proto/notify/v1/notify.proto:57-63`. They are at :65-70: `enum AlertSeverity` at :65, UNSPECIFIED=0 at :66, INFO=1 at :67, CRITICAL=4 at :70. Lines :57-63 are Alert message fields (acknowledged, correlation_id, read, read_at). All other Step 2 anchors in notifyServiceImpl.test.ts and notifyServiceImpl.ts match. The Files path exists."}]}
+```
+
+- Branch sync: `origin/main-dev` `2b2dec92` merged as `6bc876bb` (clean auto-merge of `docs/roadmap/ledger/fails.md`; merge-train resolver and ledger-guard both clean).
+- Tooling setup (steps 1–8): node ✓ v24.22.3 (`/opt/node24`; default PATH node is v22.23.5) · pnpm ✓ 9.15.9 · linked notify `node_modules` grpc-js ✓ 1.14.7.
+- Re-spec commits (`respec(fix-notify-stream-contract)` in `git log --first-parent origin/main-dev..HEAD`):
+  - `08d357b8` respec(fix-notify-stream-contract): align steps 1,2 with current codebase — Step 1 is now a verify-only gate (no in-step merge, no `pnpm install`, ancestry check instead of the two-parent check); Step 2's AlertSeverity cite moved to `notify.proto:65-70`.
+- Status: `implementation-ready` → `in-progress`.
+
+```sdd-batch-setup
+{"mainDev":"2b2dec92afa14123ac1d796846632db713bbd9dc","date":"2026-11-26"}
+```
+
+## Session 2026-11-26 — operator ruling on Step 1 Verification, recorded by the orchestrator (verbatim)
+
+**Question** (verbatim): "316 (notify-stream-contract) Step 1 blocker: the spec's Verification block is defective — its first `cd` persists in the same subshell so the second `cd ... && pnpm run test` fails and silently skips the suite, and its last `grep -c` check exits 1 exactly when it prints the expected 0. Every substantive expectation holds (grpc-js ^1.14.7, main-dev is an ancestor of the branch, only the feature dir changed, and a separate run of the notify suite passed 416/416). How should Step 1 be closed?"
+
+**Answer** (verbatim, option selected): "Re-spec the Verification first" — option text: "A separate respec commit rewrites the block with one subshell per cd and a non-failing count check, then Step 1 re-runs verbatim. Slightly slower, spec stays clean."
+
+**Old Step 1 Verification block** (defective lines only; the other lines are unchanged):
+
+```bash
+cd services/xstockstrat-notify && pnpm ls @grpc/grpc-js --depth 0
+cd services/xstockstrat-notify && pnpm run test
+git diff origin/main-dev HEAD -- docs/roadmap/ledger/fails.md | grep -c '^-[^-]'
+# expect: 0 (the fails.md resolution kept every main-dev line; this branch only adds)
+```
+
+**New Step 1 Verification block** (full):
+
+```bash
+grep -n '"@grpc/grpc-js"' services/xstockstrat-notify/package.json
+# expect: "@grpc/grpc-js": "^1.14.7"
+grep -n -A8 "^  services/xstockstrat-notify:" pnpm-lock.yaml
+# expect, inside that importer block: '@grpc/grpc-js' / specifier: ^1.14.7 / version: 1.14.7
+(cd services/xstockstrat-notify && pnpm ls @grpc/grpc-js --depth 0)
+# expect: @grpc/grpc-js 1.14.7
+(cd services/xstockstrat-notify && pnpm run test)
+# expect: exit 0 (the synced tree is green before any step edits it)
+git merge-base --is-ancestor origin/main-dev HEAD; echo "rc=$?"
+# expect: rc=0 (the branch contains origin/main-dev)
+git diff origin/main-dev HEAD --stat
+# expect: only docs/roadmap/features/316-fix-notify-stream-contract/ and docs/roadmap/ledger/fails.md
+test "$(git diff origin/main-dev HEAD -- docs/roadmap/ledger/fails.md | grep -c '^-[^-]')" = 0
+# expect: exit 0 (zero removed lines: the fails.md resolution kept every main-dev line; this branch only adds)
+```
+
+**Same defects fixed in other steps** (no substantive expectation changed):
+
+- Steps 2, 3, 5, 7: each `cd services/xstockstrat-notify && …` line is now its own `( … )` subshell (`pnpm run lint` and `pnpm run test:coverage && pnpm exec c8 check-coverage --lines 40`; Step 5 also the `tsc && node --test … "AC-32"` line). Step 4 and Step 8 have no `cd`.
+- Step 6: the `tsc && node --test … "real grpc-js"` line and the 10-run `for` loop line are each wrapped in `( … )`, as are its `lint` and `test:coverage` lines.
+- Step 2: the trailing `grep -n "__tests__/fixtures" …` (exit 1 on its expected no-match, since the file imports `./fixtures/…`) became `test "$(grep -c "__tests__/fixtures" …)" = 0`, expect exit 0.
+- Not changed: mid-block `grep` lines whose expectation is "no output" (Steps 4, 5, 7, 8) exit 1 by design; none is the last command of its block, and each is judged on its printed output, as in Step 1's `git diff --stat`.
+
+## Session 2026-11-26 — sdd-execute sequential (sdd-batch-execute), Step 1
+
+- Tree: detached @ `origin/feature/fix-notify-stream-contract` `6837cf03`; `origin/main-dev` is now `f802b184` (moved past `2b2dec92`), already contained via merge `d368f1f0` (parents `9098c847`, `f802b184`), so Instruction 2's stop condition did not apply.
+- Tooling: node v24 (`/opt/node24/bin` prefixed on PATH for the run; default PATH node is v22.23.5) · pnpm 9.15.9 · linked notify `node_modules` grpc-js 1.14.7. No install run.
+
+### Step 1 — docs: branch sync gate — notify on grpc-js 1.14.7 (design.md "Step 0") [done]
+- Verify-only gate passed (re-specced Verification block, run verbatim once): `package.json:21` `^1.14.7`; lock importer `:378-380` `^1.14.7`/`1.14.7`; `pnpm ls` → `@grpc/grpc-js 1.14.7`; notify suite `tests 416 / pass 416 / fail 0`; `merge-base --is-ancestor` `rc=0`; `git diff origin/main-dev HEAD --stat` shows only this feature's directory and `docs/roadmap/ledger/fails.md` (+5); zero removed `fails.md` lines; `exit=0`. TDD: N/A (branch sync; no executable logic).
+- Files modified: none (verify-only); `implementation-spec.md` Step 1 status → done, `context.md`.
+- Deviations: none.
+
+## Session 2026-11-26 — sdd-execute sequential (sdd-batch-execute), Step 2
+
+- Tree: detached @ `origin/feature/fix-notify-stream-contract` `058fc06b`. Tooling: node v24 (`/opt/node24/bin` prefixed on PATH for the runs) · pnpm 9.15.9 · linked notify `node_modules`. No install run.
+- Discovery confirmed: `makeAlert` `severity: 2` `:120`; numeric test `:696-701`; `describe('streamAlerts')` `:722`; filter `notifyServiceImpl.ts:392`; registration `:162`; enum `notify.proto:65-70`.
+
+### Step 2 — test: AC-1 string-enum severity filter test, and string-form severity fixtures [done]
+- Added `@AC-1: a subscriber filtered to WARNING and CRITICAL receives a CRITICAL alert and not an INFO alert` in `describe('streamAlerts')` (through `streamAlerts` + `emitAndFlush`/`REQ`); converted the `makeAlert` default to `'ALERT_SEVERITY_WARNING'` and the severity-filter test to `'ALERT_SEVERITY_ERROR'` vs `['ALERT_SEVERITY_INFO', 'ALERT_SEVERITY_WARNING']` (still `false`); `rowToAlert` rows left numeric.
+- AC-1 mutation red (never committed): `notifyServiceImpl.ts:392` temporarily compared `alertSeverityToNumber(alert.severity)`. Verification run `.sdd-logs/v-1.log`: `✖ @AC-1: a subscriber filtered to WARNING and CRITICAL receives a CRITICAL alert and not an INFO alert` with `AssertionError [ERR_ASSERTION]: Expected values to be strictly equal: 0 !== 1` (the "receives the alert" assert); `ℹ tests 417` / `ℹ pass 416` / `ℹ fail 1`; `ELIFECYCLE  Command failed with exit code 1.`
+- Old numeric test under the mutation (same run, pre-edit form `severity: 3` / `severities: [1, 2]`): `✔ filters by severity when severities array is set` — it cannot detect the type/runtime mismatch.
+- Reverted green: mutation reverted (`git diff -- services/xstockstrat-notify/src/grpc/notifyServiceImpl.ts` empty) and fixtures converted. Run `.sdd-logs/v-2.log`: lint `✖ 384 problems (0 errors, 384 warnings)`; `✔ @AC-1: …` and `✔ filters by severity when severities array is set`; `ℹ tests 417` / `ℹ pass 417` / `ℹ fail 0`; `All files | 90.7` lines; `c8 check-coverage --lines 40` passed silently; the numeric-severity grep lists only DB rows (`:138`, `:160`, `:834`, `:921`, `:927`, `:933`, `:949`, `:974`); `__tests__/fixtures` count 0; `exit=0`.
+- The block's `exit=` reflects only its last command; lint and test were judged from their log lines (no `ELIFECYCLE` in the green log).
+- Files modified: `services/xstockstrat-notify/src/__tests__/notifyServiceImpl.test.ts`; `implementation-spec.md` Step 2 status → done, `context.md`.
+- Deviations: none.
+
+## Session 2026-11-26 — sdd-execute sequential (sdd-batch-execute), Step 3
+
+- Tree: detached @ `origin/feature/fix-notify-stream-contract` `0dadf38b`. Tooling: node v24 (`/opt/node24/bin` prefixed on PATH for the run; default PATH node is v22.23.5) · pnpm 9.15.9 · linked notify `node_modules`. No install run.
+- Discovery confirmed: import `notifyServiceImpl.ts:3`; `severities: number[]` `:31` inside `interface StreamSubscriber`; registration `:162`; filter `:392`; reuse pattern `src/fanout/fanout.ts:6`.
+
+### Step 3 — service: type `StreamSubscriber.severities` as `AlertSeverity[]` [done]
+- Added `AlertSeverity` to the `@xstockstrat/proto/notify/v1/notify` import at `:3` and typed `:31` as `severities: AlertSeverity[];`; `:162` and `:392` unchanged.
+- TDD: red N/A — no behavior change (type-only); covered by Step 2's AC-1 mutation red.
+- Green run `.sdd-logs/v-1.log`: lint `✖ 384 problems (0 errors, 384 warnings)`; `ℹ tests 417` / `ℹ pass 417` / `ℹ fail 0`; `All files | 90.7` lines; `c8 check-coverage --lines 40` passed silently; grep hits `31:  severities: AlertSeverity[];` and `392:    if (sub.severities.length > 0 && !sub.severities.includes(alert.severity)) {`; `exit=0`.
+- Files modified: `services/xstockstrat-notify/src/grpc/notifyServiceImpl.ts`; `implementation-spec.md` Step 3 status → done, `context.md`.
+- Deviations: none.
+
+## Session 2026-11-26 — sdd-execute sequential (sdd-batch-execute), Step 4
+
+- Tree: detached @ `origin/feature/fix-notify-stream-contract` `57492722`. Tooling: none needed (docs step; Verification is `grep`/`head`). No install run.
+- Discovery confirmed: notify `CLAUDE.md:4` banner phrase; `context-constitution-findings.md:24` row under `## Latent bugs` (`:20`); `## Resolved` `:46`; report row `:72`; sidecar `triaged` / `ref: feature:316-fix-notify-stream-contract`; Steps 2–3 landed (`notifyServiceImpl.ts:31` `severities: AlertSeverity[];`, `@AC-1` test at `notifyServiceImpl.test.ts:723`). `services/xstockstrat-notify/docs/context-constitution.md` has no `severities`/`number[]` text, so it needs no edit.
+
+### Step 4 — docs: retire the severity-mismatch records and flip that report's sidecar [done]
+- Removed ", `severities` type/runtime mismatch" from the `CLAUDE.md:4` banner; deleted the findings `## Latent bugs` row; added a `RESOLVED 2026-11-26` entry at the top of `## Resolved` naming feature `316-fix-notify-stream-contract`; appended "— **resolved (feature 316)**, see the Resolved section" to the report row; sidecar line 1 → `resolved` (D-8), line 2 kept.
+- TDD: N/A (docs).
+- Verification run `.sdd-logs/v-1.log`: the `CLAUDE.md` grep printed nothing; the findings grep's only hit is `47:- **RESOLVED 2026-11-26 — Severity filter type/runtime mismatch (latent bug), by feature \`316-fix-notify-stream-contract\`.** …` (under `## Resolved` at `:45`, none under `## Latent bugs`); sidecar `resolved` / `ref: feature:316-fix-notify-stream-contract`; `exit=0`.
+- Files modified: `services/xstockstrat-notify/CLAUDE.md`, `services/xstockstrat-notify/docs/context-constitution-findings.md`, `docs/reports/2026-10-19-notify-severities-type-runtime-mismatch-defect.status`; `implementation-spec.md` Step 4 status → done, `context.md`.
+- Deviations: none. The `CLAUDE.md:4` banner line is still a likely textual conflict with feature 323 (keep both removals).
+
+## Session 2026-11-26 — sdd-execute sequential (sdd-batch-execute), Steps 5+6+7 (atomic unit)
+
+- Tree: detached @ `origin/feature/fix-notify-stream-contract` `a166348e`. Tooling: node v24 (`/opt/node24/bin` prefixed on PATH for the runs; default PATH node is v22.23.5) · pnpm 9.15.9 · linked notify `node_modules` (grpc-js 1.14.7). No install run.
+- Discovery confirmed (lines +22 after Step 2): module constants `notifyServiceImpl.ts:14-17`; loop `:121-133` in `persistAndBroadcast` `:79`; listeners `:174-181`; `StreamEvictionReason` `telemetry.ts:380`; `withLogs` `fanout.test.ts:242-256` (only `transports` uses `:13`, `:245`, `:246`, `:253`); `@AC-32` test now at `notifyServiceImpl.test.ts:775`; `createNotifyServiceDefinition` `serviceDefinition.ts:4`; notify `CLAUDE.md:125`; `acceptance.feature:16`.
+- Config-key wiring gate: not applicable (no config/migration step; product-spec.md has no `## Config Key Changes` list).
+- RED (tree without Step 7), `.sdd-logs/v-2.log` (`exit=1`): the spec's capture `--test-name-pattern="AC-2"` plus `"feature 316"`, no `error TS` line. `✖ @AC-2: a subscriber with 1024 queued alerts is evicted on the next matching alert` — `AssertionError [ERR_ASSERTION]: the evicting alert is not written` `actual: 1025, expected: 1024`; `✖ @AC-5: a throwing teardown never fails EmitAlert` (`actual: 1, expected: 0`, subscribers.size); `✖ a repeated stream error on one subscriber counts stream_error once` (`actual: 2, expected: 1`); `✖ @AC-2: a paused http2 client is evicted at 1024 queued alerts and gets grpc-status 8 after it resumes` — `AssertionError [ERR_ASSERTION]: the stalled subscriber was evicted` (`actual: 1, expected: 0`); `✔ a subscriber whose write returns false but whose queue stays empty is never evicted` (characterization); `ℹ tests 5` / `ℹ pass 1` / `ℹ fail 4`. (An earlier RED, `v-1.log`, was discarded: `fanout.test.ts` lacked the `withLogs` import, `error TS2304`.)
+- GREEN, the unit's union Verification (Steps 5, 6, 7 blocks verbatim, in order), `.sdd-logs/v-3.log` (`exit=0`): lint `✖ 407 problems (0 errors, 407 warnings)` ×3; `ℹ tests 422` / `ℹ pass 422` / `ℹ fail 0` ×3; `All files | 90.93` lines; `c8 check-coverage --lines 40` silent; `AC-32` pattern `ℹ tests 1` / `ℹ pass 1` (`✔ AC-32: a throwing write evicts …`); `real grpc-js` pattern `ℹ tests 1` / `ℹ pass 1`; 10-run repeat printed no `run N failed`; fanout `withLogs`/`Console.prototype.log` grep empty; both test files import `./fixtures/withLogs.js`; `MAX_QUEUED_ALERTS` at `:19` (= 1024) and `:126`; destroy/end/grpc-js/drain grep empty; `'backpressure'` at `telemetry.ts:380` and `notifyServiceImpl.ts:129-130`; `CLAUDE.md:125` reason list; `acceptance.feature:16` amended Given, `@AC-` count 2.
+
+### Step 5 — test: AC-2 mock unit tests for the bounded queue and the status-path eviction [done]
+- Unit 5+6+7. Moved `withLogs` verbatim to `src/__tests__/fixtures/withLogs.ts` (fanout.test.ts imports it; its `winston` import dropped). Added `describe('StreamAlerts backpressure eviction (feature 316)')` with a stalled-call mock (`stalledCall`) and a promise wrapper (`emitOnce`): the 1024/1025/1026 exact-count `@AC-2` test (emit spy, map-size-at-emit 0, warn record, `delivered: 0`, guarded `'cancelled'`), the negative case, the `@AC-5` throwing-teardown test and the guarded-`'error'` test. The `@AC-32` test is unedited; the guarded-`'error'` test is not tagged `AC-32` so the Step 5 `AC-32` check still runs exactly 1 test.
+- TDD: AC-2 red → green (see RED/GREEN above).
+- Files modified: `services/xstockstrat-notify/src/__tests__/notifyServiceImpl.test.ts`, `services/xstockstrat-notify/src/__tests__/fixtures/withLogs.ts` (new), `services/xstockstrat-notify/src/__tests__/fanout.test.ts`.
+- Deviations: none.
+
+### Step 6 — test: real-grpc-js eviction test — spike conditions (f) and (g) [done]
+- Unit 5+6+7. Added `describe('StreamAlerts backpressure over real grpc-js (feature 316)')`: in-process insecure `grpc.Server` with the real `createNotifyServiceDefinition()`, a paused raw `node:http2` client, asserts (f) (highest and current `writableLength` ≤ 1024, no write after eviction, no trailers after a 100 ms hold) and (g) (frame count = writes at eviction, `grpc-status` `'8'`, `grpc-message` `'slow%20consumer%20evicted'`, `backpressure` 1, `stream_error` 0). Bounds unchanged from the spec (3000 emits, 100 ms, 5 s); the 10-run repeat passed.
+- TDD: AC-2 red ("the stalled subscriber was evicted", `actual: 1`) → green.
+- Files modified: `services/xstockstrat-notify/src/__tests__/notifyServiceImpl.test.ts`.
+- Deviations: none.
+
+### Step 7 — service: bounded StreamAlerts queue with a `RESOURCE_EXHAUSTED` status-path eviction [done]
+- Unit 5+6+7. `MAX_QUEUED_ALERTS = 1024`; in the fan-out loop, `writableLength >= MAX_QUEUED_ALERTS` → map delete, `recordStreamEviction('backpressure')`, warn, `try { emit('error', { code: 8, details: 'slow consumer evicted' }) } catch { warn 'StreamAlerts eviction teardown failed' }`, `continue`. Both listeners act only when `Map.delete` returns true. `StreamEvictionReason` gains `'backpressure'`; notify `CLAUDE.md` § Observability reason list + one status-8 line; AC-2 Given amended.
+- TDD: red = Steps 5 and 6 failing above; green = union Verification.
+- Files modified: `services/xstockstrat-notify/src/grpc/notifyServiceImpl.ts`, `services/xstockstrat-notify/src/telemetry.ts`, `services/xstockstrat-notify/CLAUDE.md`, `docs/roadmap/features/316-fix-notify-stream-contract/acceptance.feature`.
+- Deviations: none.
+
+## Session 2026-11-27 — sdd-execute sequential (sdd-batch-execute), Step 8
+
+- Tree: detached @ `origin/feature/fix-notify-stream-contract` `36280988`. Tooling: none needed (docs step; Verification is `grep`/`head`). No install run.
+- Discovery confirmed: rules table header `context-constitution.md:12`, last rule `NOTIFY-17` `:29`, next free ID `NOTIFY-18`; findings open question `:37`, `## Resolved` `:46`, report row `:73`; sidecar `triaged` / `ref: feature:316-fix-notify-stream-contract`; Step 7 code `notifyServiceImpl.ts:19` (`MAX_QUEUED_ALERTS = 1024`), `:126` (check), `:132` (`emit('error', { code: 8, … })`); real-grpc-js test `describe` at `notifyServiceImpl.test.ts:934`; grpc-js 1.14.7 `server-call.js:121-124` (`'error'` → `pendingStatus` + `end()`) and `:152-156` (`_final` → `sendStatus`). Instruction 5 pre-check: the lockfile importer block still reads `^1.14.7` / `1.14.7`, and `git diff --quiet origin/main-dev -- pnpm-lock.yaml` printed `rc=0`.
+
+### Step 8 — docs: add the `NOTIFY-*` grpc-js status-path invariant, retire the backpressure records, flip that report's sidecar [done]
+- Added `NOTIFY-18` after `NOTIFY-17` (map delete then `emit('error', { code: 8, details })`; the grpc-js `'error'` → `end()` → `_final` → `sendStatus` chain; why `destroy()`/bare `end()`/a late write fail; verified on 1.14.7 only; a grpc-js bump must re-run the spike). Deleted the findings backpressure open question, added a `RESOLVED 2026-11-27` entry at the top of `## Resolved` naming feature `316-fix-notify-stream-contract`, and appended "— **resolved (feature 316)**, see the Resolved section" to the report row. Sidecar line 1 → `resolved`, line 2 kept.
+- TDD: N/A (docs).
+- Verification: first run `.sdd-logs/v-1.log` (`exit=0`) showed no findings-grep hit at all, because the Resolved entry was worded "ignored"; reworded it to "Fan-out ignores `call.write()` backpressure" so it matches the spec's expectation, then re-ran. `.sdd-logs/v-2.log` (`exit=0`): lock `378:      '@grpc/grpc-js':` / `379:        specifier: ^1.14.7` / `380:        version: 1.14.7`; `30:| **NOTIFY-18** | …` (names `sendStatus`); findings hit only `46:- **RESOLVED 2026-11-27 — Fan-out ignores \`call.write()\` backpressure …` (under `## Resolved` `:44`, none under `## Open questions` `:34`); sidecar `resolved` / `ref: feature:316-fix-notify-stream-contract`.
+- Last step: `node scripts/check-config-wiring.mjs --final` `.sdd-logs/v-3.log` `exit=0`. It reports two baseline lines from outside this feature: `REPORTED: services/xstockstrat-analysis/app/engine/fundsignal_loop.py:marketdata/fundamentals.provider:readers-disagree` and `REPORTED: services/xstockstrat-trading/internal/service/trading.go:platform/trading_state:readers-disagree`. Status `in-progress` → `code-completed`.
+- Files modified: `services/xstockstrat-notify/docs/context-constitution.md`, `services/xstockstrat-notify/docs/context-constitution-findings.md`, `docs/reports/2026-10-19-notify-stream-ignores-backpressure-defect.status`; `implementation-spec.md` Step 8 status → done, `feature.md`, `status.md`, `context.md`.
+- Deviations: none.
+
+## Session 2026-11-27 — sdd-batch-execute promotion plan (awaiting operator confirm)
+
+````sdd-batch-promotion-plan
+## Promotion plan — fix-notify-stream-contract (feature 316)
+
+Source: docs/roadmap/features/316-fix-notify-stream-contract/acceptance.feature, read from the local working tree. Affected service per feature.md Reviewers: xstockstrat-notify only.
+
+### Verdicts
+| @AC | target suite (path) | CREATE/APPEND | verdict | note |
+|---|---|---|---|---|
+| AC-1 | /home/user/xstockstrat/services/xstockstrat-notify/acceptance/fix-notify-stream-contract.feature | CREATE | NEW | The subject is the StreamAlerts `severities[]` filter. No notify suite asserts it. pwa-notifications, fix-push-untargeted-broadcast and notify-external-fanout cover the push and fanout severity gates, which are a different subject. |
+| AC-2 | /home/user/xstockstrat/services/xstockstrat-notify/acceptance/fix-notify-stream-contract.feature | CREATE | NEW | The subject is eviction of a subscriber whose `call.write` returns false and never drains. signal-map-instrumentation.feature (feature 294 @AC-32) covers a write that throws, so the trigger and outcome differ. Not an OVERLAP. |
+
+No CONFLICT. No existing scenario carries @feature-316, so there are no DUPs. The `acceptance/` directory already exists. platform.feature has nothing on StreamAlerts severity filtering or backpressure (its stream hits concern ledger, config and the otel guard), and neither scenario spans services, so nothing routes there.
+
+### Ready-to-write blocks
+--- /home/user/xstockstrat/services/xstockstrat-notify/acceptance/fix-notify-stream-contract.feature (CREATE) ---
+```gherkin
+# Promoted from docs/roadmap/features/316-fix-notify-stream-contract/acceptance.feature (C-16). Verbatim; do not edit by hand.
+Feature: fix-notify-stream-contract (notify)
+  Regression guard for clustered defect reports: StreamAlerts severity filtering works with the wire's string
+  enums, and a subscriber that stops reading is evicted instead of buffered without bound.
+
+  # guards: docs/reports/2026-10-19-notify-severities-type-runtime-mismatch-defect.md
+  @AC-1 @regression @feature-316
+  Scenario: a severity-filtered subscriber receives alerts matched by the string enum form
+    Given a StreamAlerts subscriber with severities ["ALERT_SEVERITY_WARNING", "ALERT_SEVERITY_CRITICAL"]
+    When EmitAlert is called with severity "ALERT_SEVERITY_CRITICAL"
+    Then the subscriber receives the alert
+    And an alert with severity "ALERT_SEVERITY_INFO" is not delivered to it
+
+  # guards: docs/reports/2026-10-19-notify-stream-ignores-backpressure-defect.md
+  @AC-2 @regression @feature-316
+  Scenario: a subscriber whose stream stops draining is evicted
+    Given a StreamAlerts subscriber whose call.write returns false and never emits drain
+    When EmitAlert is called repeatedly past the backpressure threshold
+    Then the subscriber is removed from the fan-out set or its stream is ended
+    And further EmitAlert calls do not write to it
+```
+
+### Notes / ambiguities / conflicts
+- The source scenarios have no @FR-* tags, because this is a bug fix with no FR list. product-spec.md also defines no FR ids. I added none, since inventing them would break the verbatim rule. Each scenario keeps its `@AC-n` and `@regression` tags and gains `@feature-316`.
+- The `# guards:` comment lines are kept as provenance. They are paths to defect reports under docs/reports/. If the archiver prunes those reports, the comments become dangling pointers, and a human can decide whether to drop them then.
+- File name `fix-notify-stream-contract.feature` follows the convention of the existing notify suites (fix-push-untargeted-broadcast.feature and others). The header comment follows the style of signal-map-instrumentation.feature.
+- Adjacent to 294 @AC-32 (/home/user/xstockstrat/services/xstockstrat-notify/acceptance/signal-map-instrumentation.feature, line 12). That scenario asserts eviction when a write throws, with the `notify.stream.evictions{reason=write_error}` metric. AC-2 asserts eviction on backpressure with no metric clause. They are complementary. A human could later check whether the backpressure eviction should also emit an eviction reason, but that is outside this promotion.
+- Source: services/xstockstrat-notify/CLAUDE.md and its docs/context-constitution-findings.md already record the `severities` type/runtime mismatch defect that AC-1 guards. This is a context note only, not a dedup hit.
+- I could not run `git show origin/feature/fix-notify-stream-contract:...` because my tools are read-only and have no git. I read acceptance.feature from the working tree, which should match the branch. The caller should confirm the working-tree copy equals the branch copy before writing.
+
+### Coverage check
+- Source scenarios: 2 (AC-1, AC-2). Planned (NEW+DUP+OVERLAP): 2 (2 NEW, 0 DUP, 0 OVERLAP, 0 CONFLICT). Every @AC-* is accounted for and none were skipped.
+````

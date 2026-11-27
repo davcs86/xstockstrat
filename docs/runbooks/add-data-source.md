@@ -355,12 +355,13 @@ message ExternalSignal {
   string source     = 1;   // "unusual_whales" | "marketwatch" | "dividendology" | "pure_power_picks" | "simply_wall_st"
   string symbol     = 2;   // ticker
   string direction  = 3;   // "buy" | "sell" | "hold" | "watchlist"
-  double conviction = 4;   // 0.0 – 1.0 (0.0 if not provided by source)
+  double conviction = 4;   // 0.0 – 1.0; a 0.0 with conviction_provided unset means "not given"
   google.protobuf.Timestamp valid_from  = 5;
   google.protobuf.Timestamp valid_until = 6;  // omit for open-ended
   string headline   = 7;
   string raw_url    = 8;
   repeated string tags = 9;
+  bool conviction_provided = 12;  // set whenever conviction is given, including an explicit 0.0
 }
 
 message IngestSignalRequest {
