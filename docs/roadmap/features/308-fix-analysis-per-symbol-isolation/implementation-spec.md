@@ -1365,7 +1365,7 @@ grep -n "readiness-evaluation-failed" e2e/fixtures/INVENTORY.md
 
 ### Step 23 — docs: amended durable scenarios, contract sentences, sentinel text, follow-ups
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `services/xstockstrat-analysis/acceptance/`, `services/xstockstrat-analysis/docs/`, `docs/runbooks/`, `services/xstockstrat-ui/docs/`
 **Files**:
 - `services/xstockstrat-analysis/acceptance/opportunity-compute-robustness.feature` — modify
@@ -1830,3 +1830,25 @@ _Populated by /sdd-execute as implementation proceeds._
       failing in this worktree.
 - **Disposition**: CI-equivalent fallback for `tsc`. The e2e failures are pre-existing or
   environmental, shown against the baseline. No file outside Step 22's **Files** is committed.
+
+### Step 23: anchor drift, two placements the spec left open, and the run-script paren (2026-11-27)
+
+- **Expected**: Instruction 3 edits `docs/opportunities.md:7` and `:36`. Instruction 4 adds one
+  sentence to `mcp-tools.md` after line 1230. Instruction 5 adds one findings-log row, and the step
+  names no section for it. The Verification block runs verbatim inside `( … )`.
+- **Actual**:
+  - `opportunities.md`: the `:7` sentence and floor-clause list are still on line 7. The `-1` scope
+    note has moved to line 70 (the `GetWatchlistReadiness` bullet). Both were edited by symbol.
+  - `mcp-tools.md`: the `formula_unreadable` block now starts at line 1230, and its provenance-marker
+    line (`:1235`) sits inside the first bullet of a list. The sentence went in as its own paragraph
+    after that bullet list (`:1243`), so the list is not split.
+  - Findings log: the instruction-5 row went into `## Latent bugs`, beside the instruction-6 row. It is
+    the only table in the file with `Issue | Impact | Evidence` columns that fits an unresolved gap.
+    `## Open questions` is a bullet list.
+  - The Verification block's last line ends in a `#` comment, so the closing `)` of the run wrapper
+    went on its own line. Otherwise it would have been commented out. The block itself is unchanged.
+  - Verification (`.sdd-logs/v-2.log`, `exit=0`): both "expect no output" greps printed nothing, and
+    the other five greps hit. RED baseline (`.sdd-logs/v-1.log`): only the two "expect no output"
+    greps printed, matching the old lines.
+- **Disposition**: in-scope placement and anchor drift. No file outside Step 23's **Files** was
+  changed.

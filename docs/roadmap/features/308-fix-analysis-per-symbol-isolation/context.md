@@ -956,3 +956,44 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 
 ### Open Threads
 - [ ] `position-detail.spec.ts` `the readiness strategy picker excludes non-live strategies (feature 083/125)` fails on the host harness in this worktree with and without this step's edit (it passed in Step 21's full run). CI's Docker e2e is the arbiter; triage separately from 308 if it fails there.
+
+## Session 2026-11-27 — sdd-execute sequential (sdd-batch-execute), step 23
+
+- Tooling: none needed (docs step; the Verification block is greps only) · hook check hook=0. No install was run. Lockfile gate: not applicable (no manifest change).
+- Discovery: the advisory digest read the main checkout's pre-re-spec spec, where this docs step is Step 17. At `origin/feature/fix-analysis-per-symbol-isolation@63143858`, Step 23 exists and every anchor was re-grepped there:
+  - `@AC-10` at `opportunity-compute-robustness.feature:108-112` and `@AC-13` at `readiness-caching-poll-discipline.feature:94-98`.
+  - `opportunities.md:7` (the "still propagates" parenthetical and the floor-clause list). The `-1` scope note is now at `:70`.
+  - The `formula_unreadable` block at `mcp-tools.md:1230-1240`.
+  - The "Formula-unreadable row (289)" bullet at `opportunities-shell.md:12-22`.
+  - The code symbols: `_kick_readiness_refresh` `servicer.py:4299`, its `get_by_owner_and_id` `:4329`, `_materialize_readiness_for_owner` `:6346`, `_load_benchmark_bars_windowed` `:2010`, `_formula_fundamentals` `:1928`, `log_isolation_tally` `isolation.py:15`, `unavailable_readiness_row` `readiness.py:110`.
+  - The C-16 sign-off in this file ("Operator (2026-11-20, design gate, option A)").
+
+### Step 23 — docs: amended durable scenarios, contract sentences, sentinel text, follow-ups [done]
+- Durable suites:
+  - Feature-289 `@AC-10` is retitled "A formula execution timeout degrades only its candidate". Its Then is now: the recompute completes, the timed-out candidate's row is `data_unavailable` (`unavailable`), and the others are materialized.
+  - `@AC-13` is retitled "A formula execution timeout degrades only its symbol in EvaluateReadiness". Its Then is now: OK, an empty 0-of-0 `SymbolReadiness` without the unreadable marker, nothing staged.
+  - Both keep their ids and tags and gain `@feature-308`. These are the C-16 CHANGEs signed off on 2026-11-20.
+- `opportunities.md`:
+  - The "`FormulaExecutionError` still propagates" parenthetical is replaced by the new rule: a timeout or RpcError gives `unavailable`; any other failure gives the structural, floor-exempt `evaluation_failed`, which clears on the next recompute and is exposed through `provenance` only.
+  - The floor-clause list gains `OR provenance ? 'evaluation_failed'`.
+  - The `-1` scope note now names the kick and the materializer (`unavailable_readiness_row`) and the empty, unstaged `EvaluateReadiness` symbol.
+- `mcp-tools.md`: one paragraph on the `"evaluation_failed"` marker (`data_unavailable` stays false).
+- `opportunities-shell.md` (C-10): an "Evaluation-failed row (308)" bullet with the four test ids and the second required `SignalItem` field `evaluationFailed`.
+- Analysis findings log, `## Latent bugs`, two rows:
+  - No alert covers a sustained degraded rate. The signal is the tally line and `<site>.degraded_count`. Follow-up: `analysis-isolation-degraded-counter`.
+  - The per-strategy setup in `_kick_readiness_refresh` / `_materialize_readiness_for_owner` is not isolated, so defect report 3 is only partly met.
+- TDD: N/A (docs).
+- Verification:
+  - RED baseline (`.sdd-logs/v-1.log`): only the two "expect no output" greps printed. They matched the old `@AC-10`/`@AC-13` titles and `opportunities.md:7`.
+  - GREEN (`.sdd-logs/v-2.log`, `exit=0`): those two printed nothing, and the other five hit: `opportunities-shell.md:27-31`, `@feature-308` at `:108`/`:94`, `evaluation_failed` at `opportunities.md:7` and `mcp-tools.md:1243`, and findings rows `:27`/`:28`.
+- Config-wiring gate:
+  - Step-time: not applicable (no config key, no migration).
+  - Final (last step, `.sdd-logs/v-3.log`): `node scripts/check-config-wiring.mjs --final` exit=0. It printed two `REPORTED:` `readers-disagree` lines for keys outside this feature (`marketdata/fundamentals.provider`, `platform/trading_state`).
+- Status: `in-progress` → `code-completed` (all 23 steps done). No insights-ledger entry: nothing new generalizes beyond the existing isolation-helper and fake-mirroring entries.
+- Files modified: `services/xstockstrat-analysis/acceptance/opportunity-compute-robustness.feature`, `services/xstockstrat-analysis/acceptance/readiness-caching-poll-discipline.feature`, `services/xstockstrat-analysis/docs/opportunities.md`, `services/xstockstrat-analysis/docs/context-constitution-findings.md`, `docs/runbooks/mcp-tools.md`, `services/xstockstrat-ui/docs/opportunities-shell.md`
+- Deviations: anchor drift, the `mcp-tools.md` paragraph placement, the instruction-5 row's section, and the run-script paren (Deviation Log "Step 23").
+
+### Open Threads
+- [ ] `feature.md` § Next Action still says to run `/sdd-review … impl-spec` and then `/sdd-execute`. The next action is now the integration PR into `main-dev`, which promotes this feature's `acceptance.feature` scenarios into the durable suites (C-16). This step did not edit that section.
+- [ ] The stale comment above `sym_unavailable` in `_row_for` (Steps 11+12 Open Threads) is still unaddressed. Step 23's **Files** do not include `servicer.py`, so it is left for the integration PR.
+- [ ] The service `CLAUDE.md` "Fundamentals-skip (feature 215) and formula-unreadable (289) rows" pointer (`services/xstockstrat-ui/CLAUDE.md`) does not mention the 308 evaluation-failed row or `evaluationFailed`. It is outside Step 23's **Files**.

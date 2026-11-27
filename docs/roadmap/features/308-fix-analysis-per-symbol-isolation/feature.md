@@ -5,7 +5,7 @@
 **GitHub Issue**: none (Issues disabled) — reports: `docs/reports/2026-10-21-analysis-opportunities-row-gather-no-per-symbol-isolation-defect.md`, `docs/reports/2026-10-21-analysis-readiness-gather-no-per-symbol-isolation-defect.md`, `docs/reports/2026-11-05-analysis-readiness-batch-loss-on-indicator-outage-defect.md`
 **Severity**: SEV-2
 **Created**: 2026-11-10
-**Last Updated**: 2026-11-26
+**Last Updated**: 2026-11-27
 
 ---
 
@@ -18,6 +18,7 @@
 | 2026-11-20 | `spec-ready` → `design-approved` | /sdd-design | Design debated (3 rounds, full) and approved; recon.md + debate.md + design.md written |
 | 2026-11-20 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 17 steps |
 | 2026-11-21 | `implementation-ready` → `in-progress` | /sdd-execute | → in-progress (sdd-batch-execute setup); steps 2 and 16 re-specced against `985d694c` |
+| 2026-11-27 | `in-progress` → `code-completed` | /sdd-execute | All 23 steps done (Step 23 docs, sdd-batch-execute); `check-config-wiring.mjs --final` exit=0 |
 
 ---
 

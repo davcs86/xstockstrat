@@ -105,11 +105,11 @@ Feature: opportunity-compute-robustness (analysis-service guarantees)
     When "admin-1" computes opportunities
     Then the "s-1" row for "MYSZ" has data_unavailable true and no unreadable-formula marker
 
-  @AC-10 @FR-5 @characterization @feature-289
-  Scenario: A formula execution timeout still fails the opportunities recompute
+  @AC-10 @FR-5 @characterization @feature-289 @feature-308
+  Scenario: A formula execution timeout degrades only its candidate
     Given indicators ExecuteFormula for a component of "s-2" responds success=false with error "Formula execution timed out after 5000ms" (not an RPC deadline)
     When "admin-1" computes opportunities
-    Then the recompute fails (warning "opportunity recompute failed"), and the previously stored rows are retained, exactly as before feature 289
+    Then the recompute completes, the timed-out candidate's row has data_unavailable true (provenance "unavailable"), and the other candidates are materialized
 
   @AC-15 @FR-1 @FR-6 @regression @feature-289
   Scenario: A NOT_FOUND refusal of a referenced formula also yields the marker
