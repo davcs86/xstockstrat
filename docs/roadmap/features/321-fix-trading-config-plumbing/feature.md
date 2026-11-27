@@ -5,7 +5,7 @@
 **GitHub Issue**: none (Issues disabled) — reports: docs/reports/2026-10-19-trading-ibkr-timeout-hardcoded-defect.md, docs/reports/2026-10-19-trading-config-accessor-type-mismatch-defect.md, docs/reports/2026-10-19-trading-requires-approval-always-false-defect.md, docs/reports/2026-11-06-trading-broker-paper-env-derived-default-unseedable-defect.md
 **Severity**: SEV-2
 **Created**: 2026-11-10
-**Last Updated**: 2026-11-26
+**Last Updated**: 2026-11-27
 
 ---
 
@@ -19,6 +19,7 @@
 | 2026-11-20 | `spec-ready` → `design-approved` | /sdd-design | Design debated (3 rounds, full) and approved; recon.md + debate.md + design.md written |
 | 2026-11-20 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 13 steps |
 | 2026-11-26 | `implementation-ready` → `in-progress` | /sdd-execute | → in-progress (sdd-batch-execute setup); main-dev `f802b184` merged, steps 1, 3, 6, 8, 12, 13 re-specced (conditional) |
+| 2026-11-27 | `in-progress` → `code-completed` | /sdd-execute | All 13 steps done (Step 13: staging pre-deploy re-check recorded); `check-config-wiring.mjs --final` exit 0 |
 
 ---
 

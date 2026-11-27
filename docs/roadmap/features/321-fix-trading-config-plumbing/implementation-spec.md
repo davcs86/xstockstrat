@@ -950,7 +950,7 @@ python3 scripts/check-context-map.py                # exit 0
 
 ### Step 13 — config: operator-only stored-state check before the integration PR leaves draft
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading` (config values held by `xstockstrat-config`)
 **Files**:
 - `docs/roadmap/features/321-fix-trading-config-plumbing/context.md` — modify (the record; no other file)

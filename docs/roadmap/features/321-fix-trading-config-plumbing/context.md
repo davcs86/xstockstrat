@@ -58,7 +58,7 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 
 ## Open Threads
 
-- [ ] Pre-deploy operator action: staging deployments done and recorded 2026-11-20 (production is out, operator ruling). Re-check the stored values just before the integration PR leaves draft — implementation-spec Step 13.
+- [x] Pre-deploy operator action: staging deployments done and recorded 2026-11-20 (production is out, operator ruling). Re-check the stored values just before the integration PR leaves draft — implementation-spec Step 13. Done 2026-11-27 (Step 13 entry below).
 - [ ] Production first launch: bring `trading` `broker.timeout_ms` to >= 10000 and `order_intent.stale_multiplier` to >= 4.0 before trading goes live there (seeds are 5000 / 3.0) — production launch checklist.
 - [ ] Migration 056 is provisional (feature 317's spec also claims 056); regenerate `scripts/config-wiring-stored.json` after each main-dev merge — U4+U5 and integration PR.
 - [ ] IBKR call chain (40 s) equals S = 40 s with no margin; conid-lookup timeout leaves the order PENDING — known gap, not widened.
@@ -292,3 +292,15 @@ Operator pasted the A8 result from the **DO staging** database, 6 rows (`config.
 - ids 1572 / 1571 (`order_intent.stale_multiplier`, production / staging) and 1557 / 1556 (`broker.timeout_ms`, production / staging): `system:config-migration-044` "feature 296: renamed from trading.…", 2026-11-08 07:51:52+00, old = new (3 and 5000).
 
 Step 13 read-back summary (both environments, staging only; production out of scope): DO staging and homelab staging each hold `broker.timeout_ms` = 10000 (int, >= 10000) and `order_intent.stale_multiplier` = 4.0 (float, >= 4.0) per the main-session `get_config` read-back of 2026-11-27, and each value equals the `new_value` of that environment's latest audit row (DO staging ids 1668/1669, homelab staging ids 873/874, both 2026-11-20). Pass condition met on both; no value was reverted, so no SetConfig re-apply is needed.
+
+## Session 2026-11-27 — sdd-execute sequential (sdd-batch-execute), Step 13
+
+- Tree: detached at `origin/feature/fix-trading-config-plumbing@b86076cc`. Discovery: the 2026-11-20 pre-deploy record (`## Session 2026-11-20 — pre-deploy operator action`), the production-out ruling, and the three 2026-11-27 read-back / audit entries above are present; `SetConfig` upsert `configServiceImpl.ts:839-851` (`DO UPDATE SET` omits `value_type`); stored `broker.timeout_ms` rows now at `config-wiring-stored.json:4564`/`:4576` (spec `:4546`/`:4558`, drift from the Steps 6–9 regeneration).
+- Tooling (step 13): node ✓ (wiring gate only) · hook check hook=0. No install.
+
+### Step 13 — config: operator-only stored-state check before the integration PR leaves draft [done]
+- Stored-state pre-deploy re-check (D-13 / D-16 / D-20, staging only; operator-authorized read-back): at 2026-11-27T03:13Z the main session's read-only `get_config` (namespace `trading`, global scope) read, on **DO staging** (`xstockstrat_staging`) and **homelab staging** (`xstockstrat_homelab_staging`): `broker.timeout_ms` = 10000 (int) and `order_intent.stale_multiplier` = 4.0 (float). Audit rows (operator A8): DO staging ids 1668 (`broker.timeout_ms` 5000 → 10000, 2026-11-20 13:59:10Z) / 1669 (`order_intent.stale_multiplier` 3 → 4, 13:59:12Z); homelab staging ids 873 (13:59:38Z) / 874 (13:59:39Z). Each current value equals its latest audit `new_value`: nothing reverted, no SetConfig re-apply. Pass condition met on both (each at the boundary). Production not checked (never launched; Open Thread kept).
+- Files modified: `docs/roadmap/features/321-fix-trading-config-plumbing/context.md`
+- Deviations: none
+- TDD: N/A (config, operator-only). Config-key wiring gate (step-time, `--declared-from product-spec.md`): exit=0, no findings printed. `--final` (last step): exit=0, only the two pre-existing `REPORTED:` readers-disagree lines (`fundsignal_loop.py:marketdata/fundamentals.provider`, `trading.go:platform/trading_state`); `broker.paper` count `0`.
+- All 13 steps done → status `code-completed`. Integration PR opens as a draft; this entry satisfies its draft gate.
