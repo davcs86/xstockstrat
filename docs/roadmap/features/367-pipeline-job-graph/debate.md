@@ -2,7 +2,7 @@
 
 **State**: in-debate
 **Mode**: full (round cap lifted by operator override, context.md 2026-11-27)
-**Rounds run**: 3
+**Rounds run**: 4
 
 ## Rounds
 
@@ -11,6 +11,7 @@
 | 1 | 2026-11-27 | /sdd-design | 15 | 8 | 0 | 19 | 0 | yes |
 | 2 | 2026-11-27 | /sdd-design | 13 | 7 | 16 | 15 | 0 | yes |
 | 3 | 2026-11-27 | /sdd-design | 12 | 3 | 27 | 14 | 0 | yes |
+| 4 | 2026-11-27 | /sdd-design | 5 | 0 | 5 | 5 | 0 | yes |
 
 ## Settled Decisions
 
@@ -57,6 +58,11 @@
 | D-38 | 3 | Settle repeats while a batch comes back full (up to 20 batches of 500 per maintenance tick, each its own transaction) and takes the verdict from the failed child with the lowest id. The prune runs one DELETE per finished state with a constant cutoff and no ordering, on index `(state, finished_at) WHERE finished_at IS NOT NULL`; terminal rows are kept at least as long as succeeded ones. Maintenance steps stay separate transactions. A child-driven settle is recorded for program feature 3 with its trigger. | O-30 | settled |
 | D-39 | 3 | One histogram `analysis.pipeline.db.duration{step, phase=wait\|total, outcome}` with explicit buckets replaces the two of D-26; both measurements and their revisit thresholds remain. Label keys `lane`, `step`, `phase` are added to the allow-list test. Refines D-26. | `app/telemetry.py:341-351`; `tests/test_telemetry_allowlist.py:16-46` | settled |
 | D-40 | 3 | Measurements named for program feature 3's shadow run: attempts per second against the slope of `ready_depth`, handler gate wait p95, claim and report duration p99, settle duration p95, dead-tuple ratio on `pipeline_jobs`. Each has a stated threshold that triggers a revisit of the handler gate, `DB_POOL_MAX`, the settle mechanism or autovacuum settings. | `fails.md:3803-3805` | settled |
+| D-41 | 4 | Ready depth and age are computed over rows with `state = 'ready' AND next_attempt_at <= now()`; age is `now() − min(next_attempt_at)` per lane. Enqueue and wake both set `next_attempt_at = now()`. Jobs in backoff are not backlog. | FR-8; `@AC-13` | settled |
+| D-42 | 4 | The settle loop also stops once it has spent 8 s in a tick. The worst-case takeover bound is `lease_seconds` + 22 + 40 × (`worker_concurrency` + 2) s (322 s at defaults), which counts a whole maintenance tick. This corrects the worst-case figure in D-34; the normal-latency figure stands. | `app/supervision.py:58,68` | settled |
+| D-43 | 4 | The handler-DB gate is released exactly once (block exit, abort or expiry, through a per-block flag and an `on_terminate` callback). A database block has stages `gate`, `acquire`, `txn`; a stop terminates only at `txn` and cancels otherwise. The limiter slot is released by a done-callback on the handler task. The engine wrapper catches `Exception` and `AttemptStopped`. Refines D-30 and D-31. | `app/config/live_limits.py:67-72`; `app/supervision.py:27-33` | settled |
+| D-44 | 4 | `lease_seconds` is read once per heartbeat tick and once per claim, and that value sets the SQL expiry, the fence and the period. The "ensured today" marker is set only after a committed ensure. Enqueue retries its insert once if the conflicting row was pruned in between. `max_attempts` is compared with `>=` at report and reap time. An existing job keeps its `run_id` and lane when enqueued or declared again. | FR-1, FR-2, FR-6 | settled |
+| D-45 | 4 | No alert ships in this feature. `services/xstockstrat-analysis/docs/pipeline-jobs.md` carries the manual recovery SQL and the signals to watch. Handlers running work in executor threads are not forbidden by the contract test; that case is recorded for program feature 3. | `docs/patterns/observability.md:46-48` | settled |
 
 ## Rejected Alternatives (locked)
 
@@ -135,6 +141,11 @@
 | O-46 | 3 | The tolerated event-loop lag of 2 s is not measured. | no | closed @ round 3 (timer lateness logged, D-32; accepted risk) |
 | O-47 | 3 | Idle claim backoff changes what `poll_interval_ms` means; the product spec and the analysis `CLAUDE.md` row say "delay between claim polls". Operator wording. | no | open |
 | O-48 | 3 | `@AC-17` needs "a second ready job exists" for "no further job is claimed" to be observable. | no | closed @ round 3 (wording added to the amended scenario) |
+| O-49 | 4 | Decisions needed by `/sdd-spec` existed only in session scratch files: value sets, the tick-record throttle, stats cadence, failure modes, child `run_id`/lane, heartbeat details, limiter wiring, the contract-test rules, the test list, the recovery SQL. C-01. | yes | closed @ round 4 (written into design.md) |
+| O-50 | 4 | Ready depth and age were undefined, as was whether a wake resets `next_attempt_at`. FR-8. | yes | closed @ round 4 (D-41) |
+| O-51 | 4 | The worst-case takeover bound left out the rest of the maintenance tick, so "170 s at defaults" was not an upper bound. | yes | closed @ round 4 (D-42) |
+| O-52 | 4 | Adoptions did not fit together: the gate could be released twice; "inside a database block" was ambiguous for a stop; no step owned the slot release; `AttemptStopped` escaping the handler task would log an ERROR. | no | closed @ round 4 (D-43) |
+| O-53 | 4 | Text corrections: control-pool statement cache, `spawn` for runner tasks, enqueue-versus-prune race, lowered `max_attempts`, no alert shipped, the overstated contract-test guard, named doc lines, conditional `@AC-17`. | no | closed @ round 4 (design.md amended; D-44, D-45) |
 
 ## Reopen Petitions
 
