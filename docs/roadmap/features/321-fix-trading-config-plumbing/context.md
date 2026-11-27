@@ -283,3 +283,12 @@ Operator pasted the A8 result (`config.config_audit`, namespace `trading`, keys 
 - ids 766 / 765 (`order_intent.stale_multiplier`, production / staging) and 751 / 750 (`broker.timeout_ms`, production / staging): `system:config-migration-044` "feature 296: renamed from trading.…", 2026-11-10 08:22:20+00, old = new (3 and 5000).
 
 Read against the main-session `get_config` read-back of 2026-11-27 (homelab staging `broker.timeout_ms` = 10000, `order_intent.stale_multiplier` = 4.0): the current staging values equal the new_value of the latest audit row for each key, so no later write has reverted them. Production rows were not touched by this feature (production out of scope). Outstanding for Step 13: the same A8 query result from **DO staging**.
+
+## Session 2026-11-27 — Step 13 audit rows, DO staging, supplied by the operator (verbatim)
+
+Operator pasted the A8 result from the **DO staging** database, 6 rows (`config.config_audit`, namespace `trading`):
+- id 1669, staging, `order_intent.stale_multiplier`: 3 → 4, changed_by `80880990-2b79-4d85-8761-d8d9102c2efb`, reason "Feature 321 fix-trading-config-plumbing pre-deploy operator action (D-20): S = 40 s so Alpaca 429 retry and pacing are kept at broker.timeout_ms = 10000.", 2026-11-20 13:59:12.271171+00.
+- id 1668, staging, `broker.timeout_ms`: 5000 → 10000, same changed_by, reason "Feature 321 fix-trading-config-plumbing pre-deploy operator action (D-13/D-20): keep IBKR signed requests at 10 s once they honour this key.", 2026-11-20 13:59:10.841901+00.
+- ids 1572 / 1571 (`order_intent.stale_multiplier`, production / staging) and 1557 / 1556 (`broker.timeout_ms`, production / staging): `system:config-migration-044` "feature 296: renamed from trading.…", 2026-11-08 07:51:52+00, old = new (3 and 5000).
+
+Step 13 read-back summary (both environments, staging only; production out of scope): DO staging and homelab staging each hold `broker.timeout_ms` = 10000 (int, >= 10000) and `order_intent.stale_multiplier` = 4.0 (float, >= 4.0) per the main-session `get_config` read-back of 2026-11-27, and each value equals the `new_value` of that environment's latest audit row (DO staging ids 1668/1669, homelab staging ids 873/874, both 2026-11-20). Pass condition met on both; no value was reverted, so no SetConfig re-apply is needed.
