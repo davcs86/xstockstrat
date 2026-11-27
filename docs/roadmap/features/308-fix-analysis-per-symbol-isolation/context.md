@@ -886,3 +886,27 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 
 ### Open Threads
 - [ ] `position-detail.spec.ts` tests `renders the risk-framed header …` and `a position with no resting stop …` fail on the host harness in this worktree both with and without Step 19. CI (Docker e2e, the branch's own proto dist) is the arbiter; if they fail there, triage them separately from 308.
+
+## Session 2026-11-27 — sdd-execute sequential (sdd-batch-execute), step 20
+
+- Tooling: pnpm 9.15.9 ✓ · chromium ✓ (`/opt/pw-browsers`) · hook check hook=0. No install was run. Lockfile gate: `git diff --quiet origin/main-dev -- pnpm-lock.yaml` rc=0.
+- Discovery: the advisory digest read the main checkout's pre-re-spec spec, which ends at Step 17. At `origin/feature/fix-analysis-per-symbol-isolation@8f5b11c8`, Step 20 exists and everything it needs is in place: the feature-289 describe, `fulfillJson` and `watchlist` in `position-detail.spec.ts`, `MYSZ_EVALUATION_FAILED_OPPORTUNITY` (re-exported by `e2e/fixtures/index.ts:22`), its catalog row at `INVENTORY.md:45`, and Step 19's `detail-evaluation-failed` at `page.tsx:1051,1059`.
+
+### Step 20 — test: Playwright assertion for the Signal-detail `evaluation_failed` header [done]
+- `position-detail.spec.ts` imports `MYSZ_EVALUATION_FAILED_OPPORTUNITY` from `'../fixtures'` and adds the in-file helper `routeEvaluationFailedRow(page)`, which Step 22 reuses. The helper answers only the null-guarded `symbol === 'MYSZ'` `ListOpportunities` request with the row, converting `validUntil` to an ISO string; every other request falls through. A new describe, `Signal-detail evaluation failed (feature 308)`, asserts that `detail-evaluation-failed` is visible and contains `evaluation failed`, and that `detail-formula-unreadable` has count 0. `INVENTORY.md` has the Signal-detail header cue added to the consumer column of the Step 16 row. No new fixture (C-12).
+- TDD:
+  - RED (`.sdd-logs/v-1.log`): run with `page.tsx` checked out at the pre-Step-19 commit `062b7194`, then restored. `getByTestId('detail-evaluation-failed')` gave `element(s) not found`, with the routed row's Opportunity card rendered (`1 failed`).
+  - GREEN (`.sdd-logs/v-5.log`): the new test passed in the full spec run (`59 passed`).
+- Verification:
+  - The verbatim block (`.sdd-logs/v-2.log`) printed exit=0, but that status comes from the last grep.
+    - Lint passed, with warnings in untouched files only.
+    - vitest: `Tests  748 passed | 2 skipped (750)`, `Statements   : 81.13%`.
+    - Both greps hit.
+  - tsc failed on `BackfillSymbolOutcome.INCOMPLETE`, because the linked proto dist is stale. Against this branch's dist it exited 0 and compiled `position-detail.spec.ts` (`.sdd-logs/v-3.log`).
+  - The warmup timed out at 10 s. One re-run hit `EADDRINUSE 127.0.0.1:9091` from the previous run's teardown (`.sdd-logs/v-4.log`). The next, with `--timeout=240000`, gave `4 failed, 59 passed` (`.sdd-logs/v-5.log`). All four failures are in untouched tests: the two AAPL tests and `@AC-5 INCOMPLETE-only` seen in Step 19, plus `INSUFFICIENT_DATA inline`, which fails the same way with the spec file at `HEAD` (`.sdd-logs/v-7.log`).
+- Config-wiring gate: not applicable (no config key, no migration).
+- Files modified: `services/xstockstrat-ui/e2e/trader/position-detail.spec.ts`, `services/xstockstrat-ui/e2e/fixtures/INVENTORY.md`
+- Deviations: a targeted RED run, the stale linked proto dist and three baseline-failing tests (Deviation Log "Step 20").
+
+### Open Threads
+- [ ] `position-detail.spec.ts` `a backtest over a data-less symbol surfaces INSUFFICIENT_DATA inline …` also fails on the host harness in this worktree with and without this feature's edits. As with the two AAPL tests (Step 19), CI's Docker e2e is the arbiter; triage separately from 308 if it fails there.

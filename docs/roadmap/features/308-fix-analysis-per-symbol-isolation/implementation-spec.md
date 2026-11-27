@@ -1177,7 +1177,7 @@ grep -rn "'evaluation_failed'" src | grep -v "src/lib/readinessCue.ts"   # expec
 
 ### Step 20 — test: Playwright assertion for the Signal-detail `evaluation_failed` header
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/trader/position-detail.spec.ts` — modify
@@ -1732,3 +1732,32 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Disposition**: CI-equivalent fallback for `tsc`; the e2e failures are pre-existing or environmental,
   shown against the baseline. No file outside Step 19's **Files** is committed. Step 20 still adds the
   permanent Playwright test and its own RED as specced.
+
+### Step 20: targeted RED run, stale linked proto dist and three baseline-failing tests (2026-11-27)
+
+- **Expected**: Instruction 4 takes RED with `page.tsx` checked out at the pre-Step-19 commit. The
+  Verification block (`lint`, `tsc --noEmit`, the spec, `test:coverage`, two greps) passes as written.
+- **Actual**:
+  - RED: `page.tsx` was checked out at `062b7194` and restored before GREEN. The new test was run alone
+    (`-g "evaluation-failed cue"`, `--project=chromium --no-deps --timeout=240000`).
+    `getByTestId('detail-evaluation-failed')` gave `element(s) not found`, with the routed row's
+    Opportunity card rendered (`1 failed`).
+  - The verbatim block exited 0, but that status comes from its last grep.
+    - Lint passed, with warnings in untouched files only.
+    - vitest: `Tests  748 passed | 2 skipped (750)`, `Statements   : 81.13%`.
+    - Both greps hit.
+    - `tsc` reported `BackfillSymbolOutcome.INCOMPLETE` in two untouched files (stale linked proto dist).
+      Against this branch's dist, through a `paths` override under `.sdd-logs/`, it exited 0 and
+      compiled `position-detail.spec.ts`.
+    - The Playwright warmup timed out at 10 s (`62 did not run`).
+  - A re-run with only `--timeout=240000` added first hit `EADDRINUSE 127.0.0.1:9091` (the previous
+    run's teardown). The next re-run gave `4 failed, 59 passed`, and the new test passed. None of the
+    failures is in a test this step touches:
+    - the two AAPL `Single Position page` tests, already shown failing at the pre-Step-19 baseline
+      (Step 19 entry);
+    - `@AC-5 an INCOMPLETE-only partial …` (the stale proto dist at runtime, as in Step 19);
+    - `a backtest over a data-less symbol surfaces INSUFFICIENT_DATA inline …`
+      (`backtest-insufficient` not found in 10 s). It fails the same way with this spec file at
+      `HEAD`, without the Step 20 edit (`1 failed`), so it was already failing in this worktree.
+- **Disposition**: CI-equivalent fallback for `tsc`. The e2e failures are pre-existing or environmental,
+  shown against the baseline. No file outside Step 20's **Files** is committed.
