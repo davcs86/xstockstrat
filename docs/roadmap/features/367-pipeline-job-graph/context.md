@@ -71,3 +71,17 @@
 - **OPERATOR OVERRIDE: "I override the round cap. Getting a sound high quality design is more
   important."** — the 5-round hard cap of `/sdd-design` does not apply to this feature. Rounds
   continue while they make progress; the no-progress detector still applies.
+
+## Session 2026-11-27 — sdd-design gate after round 4
+
+- Rounds 1–4 run (full; cap lifted). Register: 45 decisions, 18 rejected alternatives, 53
+  objections, 3 open at the gate. No Floor breach, no C-16 regression. design.md is a draft.
+- **OPERATOR DECISION (O-12): "30-day window"** — succeeded jobs pruned after `retention_days`;
+  `failed`/`dead`/`blocked` jobs kept `max(30, retention_days)` days, not tunable; no requeue in
+  this feature (program feature 4 owns it); manual recovery SQL in a runbook page. This changes
+  FR-7, which said dead and blocked jobs are kept.
+- **OPERATOR DECISION (O-47): "Busy delay, idle backoff"** — `pipeline.poll_interval_ms` is the
+  delay between claims while work flows; idle polling backs off to `max(poll_interval_ms, 5 s)`.
+- **OPERATOR (O-34): "Show me the exact text first"** — spec and scenario amendments NOT applied.
+  The before/after text was shown in session; awaiting the answer.
+- **OPERATOR (design gate): "Run another round"** — round 5 started. Not approved.
