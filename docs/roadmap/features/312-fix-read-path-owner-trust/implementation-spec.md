@@ -773,7 +773,7 @@ cd services/xstockstrat-notify \
 
 ### Step 11 — test: notify ListAlerts owner scope
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-notify`
 **Files**:
 - `services/xstockstrat-notify/src/__tests__/notifyServiceImpl.test.ts` — modify

@@ -650,3 +650,12 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Config-key wiring gate: does not apply, because no config key is declared.
 - Files modified: `services/xstockstrat-notify/src/grpc/notifyServiceImpl.ts`
 - Deviations: none
+
+### Step 11 — test: notify ListAlerts owner scope [done]
+- Added `describe('listAlerts — owner scope (feature 312)', …)` after the feature-203 `listAlerts` block, with three cases on `seqPool` + `metaCall`: a headerless `metaCall(null, {})` call gets `code 3` and runs no query; `metaCall('user-a', { userId: 'user-b' })` binds `'user-a'` as `params[0]` of both queries and `'user-b'` reaches neither; and neither SQL string matches `/\$1::text IS NULL/` while both match `/a\.target_user_id = \$1 OR a\.target_user_id IS NULL/` (untargeted alerts stay visible, PRESERVE notify `@AC-2` @feature-203). The test names say the proof is at the parameter and predicate level, because the pool is a fake. `user-a` / `user-b` stay inline (C-13).
+- TDD: AC-3 red → green.
+  - RED: the step Verification ran with the new tests against the pre-Step-10 `notifyServiceImpl.ts` (`82e3a73d`), restored temporarily and then reverted. Result: exit=1 (`.sdd-logs/v-1.log`), `# tests 419` / `# fail 2`. Headerless: `undefined !== 3`. Predicate: `The input was expected to not match the regular expression /\$1::text IS NULL/` on `WHERE ($1::text IS NULL OR a.target_user_id = $1 OR a.target_user_id IS NULL)`. The body-ignored case passed on the pre-fix tree, because the old chain already preferred the header over the body when both were present. The pre-fix exposure was the headerless body fallback and the unscoped branch, which the other two cases cover.
+  - GREEN: the same Verification gave exit=0 (`.sdd-logs/v-2.log`) with `# tests 419`, `# pass 419`, `# fail 0`, all three new subtests `ok`, `All files | 90.71 |` lines (c8 `--lines 40` passed), and `✖ 396 problems (0 errors, 396 warnings)`. The 14 new warnings are `no-explicit-any` on the new cases, which follow the file's existing `any`-typed callback style.
+- Config-key wiring gate: does not apply, because no config key is declared.
+- Files modified: `services/xstockstrat-notify/src/__tests__/notifyServiceImpl.test.ts`
+- Deviations: none
