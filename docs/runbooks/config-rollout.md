@@ -8,7 +8,7 @@ Config changes propagate live to all services via `xstockstrat-config`'s `WatchC
 
 ## Config Architecture Recap
 
-```
+```text
 Author (agent / API / CLI)
     │
     ▼ SetConfig RPC
@@ -34,7 +34,7 @@ A key is `<category>.<key>` stored under the namespace `<service>`. The FQN `<se
 config-ui and the agent show; send the relative key (with the namespace) to `SetConfig`/`set_config`/`create_key` —
 a key that begins with its namespace is rejected `INVALID_ARGUMENT`.
 
-```
+```text
 namespace / key            (FQN, display only)
 
 Examples:
@@ -45,7 +45,8 @@ Examples:
 ```
 
 Secret values use the `secret.` prefix within their category:
-```
+
+```text
   identity.secret.jwt_key   (value is a secret reference, e.g. "vault://prod/jwt-secret")
 ```
 
@@ -66,6 +67,7 @@ Secret values use the `secret.` prefix within their category:
 ## Step 1 — Preview the Change
 
 Query current value before changing:
+
 ```bash
 # via grpcurl
 grpcurl -plaintext \
@@ -193,6 +195,7 @@ for snap in stream:
 ```
 
 Or check the config audit log in the database:
+
 ```sql
 SELECT namespace, key, old_value, new_value, changed_by, reason, changed_at
 FROM config.config_audit
@@ -205,10 +208,12 @@ LIMIT 10;
 ## Step 5 — Monitor Service Behaviour
 
 After rolling out sandbox limit changes to `indicators`:
+
 - Monitor `indicators.sandbox.timeout` alert frequency in xstockstrat-notify
 - Monitor `indicators.sandbox.memory_exceeded` alerts
 
 After rolling out `trading.approval.*` changes:
+
 - Monitor pending approval queue size
 - Check ledger events for `order.approval_requested`
 
@@ -245,24 +250,26 @@ transaction:
 **Precondition:** valid only while 041 is config's highest up-file —
 `ls services/xstockstrat-config/migrations/*.up.sql | tail -1` must print `041_…`. Otherwise stop.
 
-Since feature 296 config has a contract floor of 40 (the rename migration's `-- contract-of:` header names
-`040_config_markers`), so `scripts/db-migrate.sh up` on a config database dirty at a version ≥ 40 exits 3
-instead of running `force 0`: **dirty at a version ≥ 40 means `force <n-1>`, never `force 0`.** The probe
-below reads tables, not the version.
+`scripts/db-migrate.sh up` on a dirty config database exits 1 and prints the recovery; **dirty means the
+printed `force <prev>`, never `force 0`.** The probe below reads tables, not the version.
 
 1. Probe (read-only):
+
    ```sql
    SELECT to_regclass('config.config_markers') IS NOT NULL AS markers_present;
    SELECT to_regclass('config.config_heal_report_041') IS NOT NULL
           AND EXISTS (SELECT 1 FROM config.config_heal_report_041 WHERE action = 'latch') AS latched;
    ```
+
    (Run the second `EXISTS` only when the report table is present.)
 2. Force the version below 041 with golang-migrate directly — **never** `scripts/db-migrate.sh force`,
    which forces the highest file and would mark an unapplied 041 as applied:
+
    ```bash
    migrate -path services/xstockstrat-config/migrations \
      -database "$DB_URL&x-migrations-table=config_schema_migrations" force 40   # force 39 if markers_present is false
    ```
+
    (Use `?x-migrations-table=…` when `DB_URL` has no query string.)
 3. Run `scripts/db-migrate.sh up`. A present latch makes 041 a no-op; without it 041 re-runs in full.
 4. Repeat Step 6 (read-back) and `config_inventory --report`.
@@ -466,6 +473,7 @@ stub.SetConfig(
 ## Emergency: Platform Maintenance Mode
 
 To halt all trading operations immediately:
+
 ```python
 stub.SetConfig(
     config_pb2.SetConfigRequest(

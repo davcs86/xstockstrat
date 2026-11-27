@@ -733,3 +733,12 @@ Question (Step 11 blocker): "Step 11's Verification ends with markdownlint-cli2 
 Operator answer (2026-11-27): "B3 fix the lint".
 
 Effect: option A — expand Step 11 scope to fix the 17 pre-existing findings in the two files, re-run Verification for exit=0, log the expansion in the Deviation Log. 318 is no longer suspended: it resumes at Step 11.
+
+## Session 2026-11-27 — sdd-execute sequential (sdd-batch-execute)
+
+### Step 11 — docs: forward-only rule, refuse-all recovery and the gate verdicts [done]
+- `docs/patterns/database.md`: forward-only rule and next-free-NNN-at-merge under "Adding a new migration" item 1 (narrows insights.md:900), the modify/delete ban under item 3, the `force 0` sentence replaced (up never recovers, exits 1), "the printed `migrate force <prev>`" in the `migration-rerun` bullet, a new `migration-order-gate` CI bullet with the O-4 verdicts, cost and stale-base race, Guard and Recovery rewritten as the ratchet (Floor rule deleted; `000`-based `force 0` paragraph, D-13; O-1 accepted-cost paragraph), Ahead rule reworded. `script-tooling.md` R0 tests cell and ported list, `config-rollout.md` floor sentence, `context-constitution.md:82` CI list updated.
+- TDD: N/A (docs). Pre-edit baseline `.sdd-logs/v-1.log` `exit=1` (`Floor rule` and `contract floor of 40` still present; `Summary: 17 issues in 2 files`) → Verification `.sdd-logs/v-2.log` `exit=0`: all three positive greps match, both `!` greps empty, `Summary: 0 issues in 0 files`.
+- Config-key wiring gate: N/A (no config key, no config migration).
+- Files modified: `docs/patterns/database.md`, `docs/patterns/script-tooling.md`, `docs/runbooks/config-rollout.md`, `docs/context-constitution.md`
+- Deviations: scope expanded to fix 17 pre-existing markdownlint findings in config-rollout.md and context-constitution.md (operator decision 2026-11-27, option A; Deviation Log)

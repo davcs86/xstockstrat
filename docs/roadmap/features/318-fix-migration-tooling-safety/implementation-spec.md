@@ -760,7 +760,7 @@ Coverage threshold: none applies (`scripts/` has no coverage gate — `ci.yml:89
 
 ### Step 11 — docs: forward-only rule, refuse-all recovery and the gate verdicts
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/patterns/`, `docs/runbooks/`
 **Files**:
 - `docs/patterns/database.md` — modify
@@ -984,3 +984,16 @@ _Populated by /sdd-execute as implementation proceeds._
   The Step 10 body is not edited (F-09); Step 10 executes against this entry.
 - **Disposition**: operator decision (2026-11-26, "10 spaces"), raised as a Step 9 blocker. The Step 9
   red run already used the corrected 10-space strings.
+
+### Step 11 — 17 pre-existing markdownlint findings fixed (2026-11-27)
+- **Spec said**: Instructions 9 and 10 edit one passage of `docs/runbooks/config-rollout.md` and one
+  row of `docs/context-constitution.md`. The Verification ends with `markdownlint-cli2` over all four
+  docs, which exited 1 on 17 findings already on lines the step did not touch (config-rollout.md 13,
+  context-constitution.md 4).
+- **Actually done**: scope expanded to fix all 17 in those two files (both already in Step 11's
+  **Files**). config-rollout.md: `text` language on three bare fences (MD040), blank lines around
+  eight fences (MD031) and two lists (MD032). context-constitution.md: the `keys|keyPrefixes` pipe in
+  the `:33` code span escaped as `keys\|keyPrefixes` (MD038 + MD056, the table cell split), and the
+  closing `_..._` footer emphasis changed to `*...*` (MD049, `:92-93`). No wording changed.
+- **Disposition**: operator decision (2026-11-27, "B3 fix the lint" → option A), raised as a Step 11
+  blocker. Verification re-run: `Summary: 0 issues in 0 files`, `exit=0`.
