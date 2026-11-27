@@ -182,3 +182,7 @@
   were missing from the document were added. The adversary's sweep of every numeric and
   "never / at most" claim found three that depended on unstated conditions; all corrected.
 - No Floor breach, no register violation, no petition. FR-1..FR-9 and `@AC-1`..`@AC-18` PASS.
+
+## Session 2026-11-27 — sdd-design gate after round 10
+
+- **OPERATOR (design gate): "Run a full round 11"** — round 11 started. Not approved.
