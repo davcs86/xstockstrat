@@ -5,7 +5,7 @@
 **GitHub Issue**: none (Issues disabled) — reports: docs/reports/2026-10-19-orphaned-code-defect.md
 **Severity**: SEV-3
 **Created**: 2026-11-10
-**Last Updated**: 2026-11-20
+**Last Updated**: 2026-11-27
 
 ---
 
@@ -17,6 +17,8 @@
 | 2026-11-10 | `draft` → `spec-ready` | /sdd-review | Product spec approved (3 warnings) |
 | 2026-11-20 | `spec-ready` → `design-approved` | /sdd-design | Design debated (3 rounds, full) and approved; recon.md + debate.md + design.md written |
 | 2026-11-20 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 9 steps |
+| 2026-11-26 | `implementation-ready` → `in-progress` | /sdd-execute sequential | → in-progress (sdd-batch-execute setup); steps 1,3,4,5,6,8 re-spec'd (conditional) |
+| 2026-11-27 | `in-progress` → `code-completed` | /sdd-execute (steps 7-9 by hand) | All 9 steps done; integration PR and C-16 promotion left to the batch runner |
 
 ---
 
@@ -27,31 +29,32 @@
 - [Recon](recon.md) — grounded codebase dossier
 - [Debate Register](debate.md) — settled decisions, rejected alternatives, objections
 - [Design](design.md) — approved approach, open risks, rules touched
-- [Implementation Spec](implementation-spec.md) — 9 numbered steps with codebase evidence
+- [Implementation Spec](implementation-spec.md) — 9 numbered steps with codebase evidence (re-spec 2026-11-26: former Step 9 split by consumer surface; `signal_extraction.md` and `noop.py` kept per operator rulings O-1, O-2)
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
 
 ## Summary
 
-Ten orphaned modules, scripts, dependencies and code paths across nine services have no runtime caller;
-one (portfolio `r.pool` stragglers) nil-panics under pgxmock and blocks unit testing.
+Ten orphaned modules, scripts, dependencies and code paths across nine services were reported as having no runtime
+caller; one (portfolio `r.pool` stragglers) nil-panics under pgxmock and blocks unit testing. Two were later kept
+(agent `signal_extraction.md`, ingest `noop.py`, since feature 355 depends on both), so eight are removed.
 
 ## Reviewers
 
-_Snapshot finalized by /sdd-spec on 2026-11-20 from the per-step **Reviewers**. Re-run /sdd-spec if the registry changes._
+_Snapshot finalized by /sdd-spec on 2026-11-20 from the per-step **Reviewers**; step numbers refreshed at the 2026-11-26 re-spec. Re-run /sdd-spec if the registry changes._
 
 | Role | Review Focus |
 |---|---|
 | Service owner `xstockstrat-portfolio` | P&L calculation accuracy, position snapshot consistency, concurrent write safety (steps 1-2) |
-| Service owner `xstockstrat-config` | Config key naming, environment / global-per-user scoping, secret encryption + redaction, WatchConfig stream stability (steps 3, 4, 9) |
-| Service owner `xstockstrat-ledger` | Append-only invariant, event ordering (steps 4, 9) |
-| Service owner `xstockstrat-identity` | JWT expiry and rotation, API key scoping, secret store integration (steps 4, 9; `package.json` only) |
-| Service owner `xstockstrat-notify` | Stream delivery guarantees, backpressure handling, alert deduplication (steps 4, 9) |
-| Service owner `xstockstrat-marketdata` | OHLCV ingestion integrity, TimescaleDB hypertable partitioning, Alpaca feed idempotency (steps 5, 9) |
-| Service owner `xstockstrat-ingest` | Signal normalization correctness, idempotent ingestion, newsletter source schema stability (steps 6, 9) |
-| Service owner `xstockstrat-agent` | MCP tool contract stability and `docs/runbooks/mcp-tools.md` parity (steps 7, 9) |
-| Service owner `xstockstrat-ui` | Trading UI correctness, analytics display accuracy (step 8) |
+| Service owner `xstockstrat-config` | Config key naming, environment / global-per-user scoping, secret encryption + redaction, WatchConfig stream stability (steps 3, 4, 7) |
+| Service owner `xstockstrat-ledger` | Append-only invariant, event ordering (steps 4, 7) |
+| Service owner `xstockstrat-identity` | JWT expiry and rotation, API key scoping, secret store integration (steps 4, 7; `package.json` only) |
+| Service owner `xstockstrat-notify` | Stream delivery guarantees, backpressure handling, alert deduplication (steps 4, 7) |
+| Service owner `xstockstrat-marketdata` | OHLCV ingestion integrity, TimescaleDB hypertable partitioning, Alpaca feed idempotency (steps 5, 7) |
+| Service owner `xstockstrat-ingest` | Signal normalization correctness, idempotent ingestion, newsletter source schema stability (steps 6, 7) |
+| Service owner `xstockstrat-agent` | MCP tool contract stability and `docs/runbooks/mcp-tools.md` parity (step 8) |
+| Service owner `xstockstrat-ui` | Trading UI correctness, analytics display accuracy (step 9) |
 
 No Proto Reviewer or DBA applies: the feature has no proto and no migration step.
 

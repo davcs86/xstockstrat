@@ -32,7 +32,6 @@ Last refreshed 2026-11-15 (`main-dev` @ `d5de836`).
 
 | What | Why it looks dead | Evidence |
 |---|---|---|
-| `AlpacaAsset` struct "kept for backward compatibility" | zero references in-repo | `internal/alpaca/client.go#AlpacaAsset (~L560-568)` |
 | `Watcher.tradingMode` field + `resolveTradingMode` function | write-only — `tradingMode` assigned (`config.go#NewWatcher` ~L74) but never read; `resolveTradingMode` exists only to feed it (still unit-tested at `config_test.go#TestResolveTradingMode` ~L291); the `#newWatcher` request (~L79-91) no longer sends `trading_mode` (feature 147) | `internal/config/config.go` (field ~L59, `#resolveTradingMode` ~L103) — action: remove, or document as test-only vestige |
 
 ## Open questions (unresolved *why* — needs a maintainer)
@@ -55,6 +54,7 @@ Last refreshed 2026-11-15 (`main-dev` @ `d5de836`).
 - **RESOLVED 2026-11-10 — dead `marketdata.retention.ohlcv_years` key**: the key is gone from `CLAUDE.md` and no code or config migration names it (row removed by commit `adf411c3`, #1504; grep `ohlcv_years` over the service code and `services/xstockstrat-config/migrations` = 0).
 - **RESOLVED 2026-11-16 — EDGAR `shares` was first-seen per (metric, unit)** (feature 348, derivation version 3): a period's share count is now the share fact of the filing that supplies its values with the latest date on or before that filing's date, the `dei` fact winning on equal dates (`internal/edgar/edgar_client.go#addShares`).
 - **RESOLVED 2026-11-16 — stored `period_end` could be a cover-page date** (feature 348, derivation version 3): `period_end` is the filing's latest balance-sheet anchor on or before its filing date and a share fact never moves it (`internal/edgar/edgar_client.go#ownPeriod`); stored rows are corrected by the backfill reconcile (`internal/reconcile/plan.go#Build`).
+- **RESOLVED (feature 323)** 2026-11-27 — **`AlpacaAsset` struct "kept for backward compatibility" had zero references in-repo**: the type is deleted from `internal/alpaca/client.go`; `git grep -n "AlpacaAsset" -- '*.go' '*.ts' '*.py'` is empty.
 
 
 ## Filed as defect reports (2026-10-19)

@@ -813,13 +813,3 @@ func (c *Client) ListAssets(ctx context.Context, assetClass string) ([]*commonv1
 	}
 	return assets, nil
 }
-
-// AlpacaAsset is kept for backward compatibility.
-type AlpacaAsset struct {
-	Symbol       string
-	Name         string
-	Exchange     string
-	AssetClass   string
-	Tradable     bool
-	Fractionable bool
-}
