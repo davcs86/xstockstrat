@@ -618,3 +618,17 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - [ ] Possible follow-up feature: make `_MIN_CROSS_SECTION` a config key or derive it from the quantiles. Not in scope here.
 - [ ] Steps 16 and 17 have offline greps only; their real check is CI `migration-rerun` on the integration PR. Record that result here.
 - Earlier threads still open: `buf breaking` verdict (Step 1); post-deploy check per environment (O-18); EDGAR self-heal review against the list (Step 16).
+
+## Session 2026-11-26 — sdd-execute sequential (sdd-batch-execute)
+
+- **Up-front confirmation (binding, verbatim operator-approved record):**
+  `{"mainDev":"f802b184b13bd899d858c4b0349a616e9981b9d9","dev":"bfb2f32d0bf13476dad027a76c8a84e70b935ebc","specHash":"1e90132e7b12edf9e5665d315ab6273556f7ac50","directive":"conditional","pending":[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18],"mismatches":[{"n":4,"detail":"Line drift only; every symbol and Files path exists. In tests/test_fundsignal_loop.py the `assert inputs[\"pe_ratio\"] == 0.0` is at :967, not :966 (:966 is the dividend_yield approx assertion; `inputs = dict(req.input_data)` is still at :965). tests/test_fundam"},{"n":9,"detail":"services/xstockstrat-ingest/app/handlers/servicer.py has moved about 109 lines; the symbols are all present. `_ingest_external_signal` is at :1346 (spec :1237). The \"0.0 passes and is stored as NULL\" comment is at :1365 (spec :1255-1256). The write sentinel `c"},{"n":10,"detail":"services/xstockstrat-ingest/tests/test_ingest_servicer.py has moved about 59 lines. TestQuerySignals is at :1947 (spec :1888) and test_populates_ingested_at is at :1961 (spec :1902). TestIngestSignal._make_signal_req is at :1666 (spec :1608), with `conviction = 0"},{"n":11,"detail":"scoring.py anchors match (:10, :15, :31, :39) and screener.py:285 matches. app/handlers/servicer.py: the `_compute_signal_score = scoring.compute_signal_score` alias is at :97 (:96 is its comment). The literal `sig.conviction` readers have moved: :5115-5116, :"},{"n":12,"detail":"tests/test_analysis_helpers.py has 16 `_make_signal(` call sites (:208..:358), not 17. The file has 17 occurrences only if you count the def at :182. The other anchors match: _make_signal :182-194 MagicMock, test_zero_conviction_uses_default_half :235, real Ex"},{"n":16,"detail":"The reader filter `(valid_until IS NULL OR valid_until >= ${idx})` is at services/xstockstrat-ingest/app/handlers/servicer.py:1589, not :1480. The other evidence holds. The last ingest migration is 018 on both the merged tree and origin/main-dev, so 019 is fre"}]}`
+- Merged `main-dev` `f802b184` into the branch (`ca2cd4ad`; resolver: nothing to resolve; ledger-guard clean).
+- Re-spec commits (`git log --first-parent origin/main-dev..HEAD`):
+  - `6c83e236` respec(fix-fundsignal-scoring-correctness): align steps 4,9,10,11,12,16 with current codebase. Only line anchors changed, re-grepped on the merged tree. Step 12's call-site count went from 17 to 16. Step 16 also re-anchors the servicer `user_id` bind (`:1415`).
+- Tooling detection (steps 1-18): uv ✓ 0.11.32 · python ✓ 3.13 · go ✓ · buf ✗ on host → Docker codegen path (`dockerd` is present but not running; start it at Step 2) · migration steps need none.
+- The Step 3/6/11 anchors (Open Threads) were re-grepped after the merge: Step 11 matches (`_emit_signal :643`, `scoring.py:31`). Steps 3 and 6 were not in the mismatch set.
+
+```sdd-batch-setup
+{"mainDev":"f802b184b13bd899d858c4b0349a616e9981b9d9","date":"2026-11-26"}
+```
