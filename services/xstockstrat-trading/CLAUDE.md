@@ -36,13 +36,17 @@ so a caller cannot place, cancel, replace, confirm, or snapshot on another user'
 internal bracket-flatten path is unaffected (it calls `submitOrder` directly, not `PlaceOrder`). The
 warn-only `checkPortfolioRisk` gate also reads the header. When trading calls **`xstockstrat-portfolio`** (`ListPositions`/`GetPosition`) from a
 background context with no inbound header (reconciliation, flatten), it injects `x-user-id` explicitly
-via `metadata.AppendToOutgoingContext`. **Exception:** `ListOrders` and `StreamOrderUpdates` keep
-their body `user_id` — there it is a **cross-user filter/subscription selector** (empty = all users,
-for trusted internal callers), not the caller's own identity, so it is not deprecated.
-`StreamOrderUpdates`' live broadcast (`broadcastOrder`) now delivers each order update **only** to
-subscribers whose selector matches the order's owner (`orderSubscriber.userID`; empty = all users),
-so a scoped subscriber never receives another user's live order updates (2026-09-16 security audit,
-H-1) — the initial snapshot already applied this filter.
+via `metadata.AppendToOutgoingContext`. **Order reads are scoped to the header:** `GetOrder`,
+`ListOrders` and `StreamOrderUpdates` resolve the owner from `x-user-id` (`ResolveOrderOwner`); their
+body `user_id` is deprecated and ignored for every scope, ADMIN included. A headerless call returns
+`PermissionDenied`; `GetOrder` for another user's order returns `NotFound`, identical to an absent
+order; no RPC returns cross-user orders. `StreamOrderUpdates`' live broadcast (`broadcastOrder`)
+delivers each order update **only** to the subscriber whose resolved owner matches the order's owner
+(`orderSubscriber.userID`), and the initial snapshot applies the same filter.
+**Broker-account owner gate:** `RegisterBrokerAccount`, `UpdateBrokerAccountCredentials`,
+`ListBrokerAccounts` and `DeregisterBrokerAccount` return `PermissionDenied` for a missing caller before
+any read or write. `LoadBrokerPool` skips an owner-less (`user_id = ''`) account with a WARN, so it never
+enters the broker pool.
 
 ## Docker Build Pattern
 

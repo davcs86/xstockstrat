@@ -1054,7 +1054,7 @@ cd services/xstockstrat-analysis \
 
 ### Step 17 — docs: service CLAUDE.md files and context constitutions
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs` (trading, notify, portfolio, proto, root constitution)
 **Files**:
 - `services/xstockstrat-trading/CLAUDE.md` — modify
