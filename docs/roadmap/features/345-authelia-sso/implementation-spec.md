@@ -1420,7 +1420,7 @@ grep -n "helpers/auth" src/lib/ssoTxn.test.ts
 
 ### Step 36 — service: Typed auth metrics, error codes, logout verify and the logout rewrite
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/bffMetrics.ts` — modify

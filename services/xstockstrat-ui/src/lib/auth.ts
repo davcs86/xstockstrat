@@ -1,6 +1,6 @@
-import { errors, jwtVerify } from 'jose';
+import { errors, jwtVerify, type JWTPayload } from 'jose';
 import type { NextRequest, NextResponse } from 'next/server';
-import { recordAuthEvent } from '@/lib/bffMetrics';
+import { recordAuthEvent, type JwtRejectReason, type LogoutReason } from '@/lib/bffMetrics';
 
 export interface JwtClaims {
   user_id: string;
@@ -20,19 +20,39 @@ export const REMEMBER_ME_MAX_AGE_SECONDS = 1_209_600; // 14 days
 // so it's the only persistence signal. Gates persistence only, not authorization — needs no signing.
 export const REMEMBER_ME_COOKIE = 'remember_me';
 
-export async function verifyAccessToken(token: string): Promise<JwtClaims | null> {
+export type SessionJwtResult =
+  | { ok: true; payload: JwtClaims }
+  | { ok: false; kind: JwtRejectReason; payload?: JWTPayload };
+
+// Records nothing; callers choose which event (if any) a rejection counts as.
+export async function verifySessionJwt(token: string): Promise<SessionJwtResult> {
+  const secret = process.env.JWT_SECRET;
+  if (!secret) return { ok: false, kind: 'no_secret' };
   try {
-    const secret = process.env.JWT_SECRET;
-    if (!secret) {
-      recordAuthEvent('jwt_rejected', 'no_secret');
-      return null;
-    }
     const { payload } = await jwtVerify(token, new TextEncoder().encode(secret));
-    return payload as unknown as JwtClaims;
+    return { ok: true, payload: payload as unknown as JwtClaims };
   } catch (err) {
-    recordAuthEvent('jwt_rejected', err instanceof errors.JWTExpired ? 'expired' : 'invalid');
-    return null;
+    // jose checks the signature before exp, so a JWTExpired payload is signature-valid (D-61).
+    if (err instanceof errors.JWTExpired)
+      return { ok: false, kind: 'expired', payload: err.payload };
+    return { ok: false, kind: 'invalid' };
   }
+}
+
+export async function verifyAccessToken(token: string): Promise<JwtClaims | null> {
+  const result = await verifySessionJwt(token);
+  if (result.ok) return result.payload;
+  recordAuthEvent('jwt_rejected', result.kind);
+  return null;
+}
+
+// Never records jwt_rejected. An expired token still verifies within the remember-me window (D-61).
+export async function verifyAccessTokenForLogout(token: string): Promise<LogoutReason> {
+  const result = await verifySessionJwt(token);
+  if (result.ok) return 'verified';
+  if (result.kind !== 'expired' || typeof result.payload?.exp !== 'number') return 'unverified';
+  const expiredFor = Math.floor(Date.now() / 1000) - result.payload.exp;
+  return expiredFor <= REMEMBER_ME_MAX_AGE_SECONDS ? 'verified' : 'expired_too_old';
 }
 
 export async function getSessionFromRequest(req: NextRequest): Promise<JwtClaims | null> {
