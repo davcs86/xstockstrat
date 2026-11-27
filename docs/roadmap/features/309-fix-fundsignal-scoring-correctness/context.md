@@ -801,3 +801,109 @@ Operator rulings, recorded verbatim by the orchestrator:
 2. Question: confirm O-14 (stored wrong-direction `buy` rows from degenerate days expire naturally up to `fundsignal.valid_days`, 90; no step retracts them), O-15 (opportunity rows built from retracted signals stay readable up to about 24 h, `opportunity.valid_window_hours`; no recompute step) and the `@AC-5` wording (added by /sdd-review impl-spec with no operator in the loop)? Operator answer: **"Confirm all three (Recommended)"**.
 
 Re-spec applied (`implementation-spec.md`): Steps 16-18 removed from the step list and recorded in `## Dropped Steps` plus a Deviation Log entry; Total Steps 18 → 15; Operator Gates 1-4 answered or moot; the O-18 post-deploy checks withdrawn. `@AC-4` has no covering step: it is closed by the two zero-row Operator Gate 1 results (entry above) and is not guarded by an automated test. The operator is to be asked about that C-15/C-16 exception before promotion. `feature.md` and `product-spec.md` carry a one-line note; `acceptance.feature` and `design.md` are untouched (C-15; design is a historical record).
+
+## Session 2026-11-27 — sdd-batch-execute promotion plan (awaiting operator confirm)
+
+```sdd-batch-promotion-plan
+## Promotion plan — fix-fundsignal-scoring-correctness (feature 309)
+
+Source: docs/roadmap/features/309-fix-fundsignal-scoring-correctness/acceptance.feature. I read it from the working tree, not from origin/feature/fix-fundsignal-scoring-correctness, because I have no git access. The caller should confirm the working-tree copy matches the branch. Affected suites checked: xstockstrat-analysis, xstockstrat-ingest, and docs/sdd/business-rules/platform.feature. No `@feature-309` tag exists anywhere yet, so this is a first promotion.
+
+### Verdicts
+| @AC | target suite (path) | CREATE/APPEND | verdict | note |
+|---|---|---|---|---|
+| @AC-1 | services/xstockstrat-analysis/acceptance/fix-fundsignal-scoring-correctness.feature | CREATE | NEW (gated, see Notes 1) | Subject is the producer's ExecuteFormula input, which lives in analysis. Related to `@AC-3 @feature-246` and `@AC-8 @feature-201`, both amended by this feature. |
+| @AC-2 | services/xstockstrat-analysis/acceptance/fix-fundsignal-scoring-correctness.feature | CREATE | NEW | Subject is the direction on the emitted signal. No existing small-cross-section rule found. |
+| @AC-3 | services/xstockstrat-analysis/acceptance/fix-fundsignal-scoring-correctness.feature | CREATE | NEW | Subject is `compute_signal_score` in the analysis screener and backtest. No existing explicit-zero-conviction rule found. |
+| @AC-4 | services/xstockstrat-ingest/acceptance/fix-fundsignal-scoring-correctness.feature | CREATE | NEW | Subject is `ingest.newsletter_signals.valid_until` and QuerySignals. No existing retraction rule found. |
+| @AC-5 | services/xstockstrat-ingest/acceptance/fix-fundsignal-scoring-correctness.feature | CREATE | NEW | Subject is the mcp_client ingest of conviction 0.0. It is distinct from `@AC-4 @feature-166` (conviction 0.72), so it is not a DUP or OVERLAP. See Notes 3. |
+
+### Ready-to-write blocks
+
+--- /home/user/xstockstrat/services/xstockstrat-analysis/acceptance/fix-fundsignal-scoring-correctness.feature (CREATE) ---
+# Promoted from docs/roadmap/features/309-fix-fundsignal-scoring-correctness/acceptance.feature at launch
+# (Constitution C-16). Source-feature provenance is carried on every scenario's `@feature-309` tag.
+# Durable business rules xstockstrat-analysis guarantees for fundamentals-signal scoring: absent metrics
+# are never fed to the formula as zeros, a lone scored symbol is not labelled buy, and an explicit
+# conviction of 0.0 stays 0.0 — a rule enters only by promotion, never by hand-authoring.
+
+Feature: fix-fundsignal-scoring-correctness (bug fix)
+  Regression guard for clustered defect reports: fundamentals signals are scored from present data
+  only, directions reflect the score, and explicit zero conviction stays zero.
+
+  # guards: docs/reports/2026-10-21-analysis-fundsignal-formula-partial-row-wire-zero-defect.md
+  @AC-1 @regression @feature-309
+  Scenario: The formula-path producer omits absent metrics from the formula input
+    Given analysis.fundsignal.scoring_formula_id is the system "value_quality" formula
+    And a symbol whose fundamentals row lists "pe_ratio", "pb_ratio", "roe", "debt_to_equity" and "eps" in missing_metrics
+    And its dividend_yield is 0.013
+    When a producer cycle scores that symbol
+    Then the ExecuteFormula input contains only "dividend_yield" with value 0.013
+    And no pb or debt_to_equity sub-score of 1.0 contributes to the composite
+
+  # guards: docs/reports/2026-10-21-analysis-fundsignal-small-cross-section-quantile-defect.md
+  @AC-2 @regression @feature-309
+  Scenario: A lone low-scoring symbol is not labelled buy
+    Given analysis.fundsignal.universe_source is "explicit" with one symbol
+    And that symbol's fundamentals are pe_ratio 40, roe 0.0 and eps -1
+    And no fundamentals scores are stored for the day
+    When a non-dry-run producer cycle runs
+    Then the emitted signal for that symbol does not carry direction "buy"
+
+  # guards: docs/reports/2026-10-21-analysis-zero-conviction-read-as-neutral-defect.md
+  @AC-3 @regression @feature-309
+  Scenario: An explicit conviction of 0.0 is scored as 0.0
+    Given an ExternalSignal with direction "buy" and conviction 0.0 is ingested for a weighted source
+    When compute_signal_score scores that source's signals for a screener or backtest
+    Then the signal adds 0.0 to buy_conviction, not 0.5 times the source weight
+
+--- /home/user/xstockstrat/services/xstockstrat-ingest/acceptance/fix-fundsignal-scoring-correctness.feature (CREATE) ---
+# Promoted from docs/roadmap/features/309-fix-fundsignal-scoring-correctness/acceptance.feature at launch
+# (Constitution C-16). Source-feature provenance is carried on every scenario's `@feature-309` tag.
+# Durable business rules xstockstrat-ingest guarantees: pre-246 fabricated fundamentals signals are not
+# active, and an explicit mcp_client conviction of 0.0 is stored as 0 — a rule enters only by promotion,
+# never by hand-authoring.
+
+Feature: fix-fundsignal-scoring-correctness (bug fix)
+  Regression guard for clustered defect reports: pre-246 fabricated signals are no longer active, and
+  explicit zero conviction stays zero on ingest.
+
+  # guards: docs/reports/2026-10-21-ingest-fundsignal-fabricated-signals-not-retracted-defect.md
+  @AC-4 @regression @feature-309
+  Scenario: Pre-246 fabricated fundamentals signals for data-less symbols are no longer active
+    Given ingest.newsletter_signals holds a row with user_id "system", source "fundamentals", symbol "SPY", conviction 0.5 and a future valid_until
+    And "SPY" is confirmed data-less in the marketdata fundamentals cache
+    When the retraction runs for that environment
+    Then the row's valid_until is no later than the retraction time
+    And QuerySignals with an active window no longer returns it
+    And a real computed 0.5 signal for a symbol with fundamentals data stays active
+
+  # guards: docs/reports/2026-10-21-analysis-zero-conviction-read-as-neutral-defect.md
+  # extends: services/xstockstrat-ingest/acceptance/mcp-client-signal-source.feature @AC-4 @feature-166 (design.md § Business Rules Touched)
+  @AC-5 @regression @feature-309
+  Scenario: An mcp_client item with an explicit conviction of 0.0 is ingested as 0.0
+    Given an active "mcp_client" source whose tool returns one item with symbol "AAPL", direction "buy" and conviction 0.0
+    When xstockstrat-ingest runs a query cycle for that source
+    Then IngestSignal is invoked with an ExternalSignal of conviction 0.0 and conviction_provided true
+    And the signal is stored with conviction 0, not NULL
+
+### Notes / ambiguities / conflicts
+1. **GATE on @AC-1 (potential CONFLICT).** On the tree I read, `services/xstockstrat-analysis/acceptance/fix-fundsignal-neutral-score.feature:42` (`@AC-3 @feature-246`) still says "with dividend_yield 0.013 and pe_ratio 0.0". That contradicts 309 `@AC-1`.
+   - Design § Business Rules Touched records a signed-off CHANGE (user, 2026-11-20, option A), and implementation-spec step 4 rewrites that Then to "dividend_yield 0.013 as its only input".
+   - Write the @AC-1 block only after confirming on the feature branch that this amendment landed and no `pe_ratio 0.0` remains in that file. If it did not land, treat @AC-1 as CONFLICT, do not write it, and escalate to a human.
+   - Once the amendment lands, @AC-1 is NEW but semantically close to the amended `@AC-3 @feature-246`. It is a consolidation candidate for a human to decide. Nothing should be deleted.
+2. **Other signed-off amendments in the same files** (spec step 5, tag IDs unchanged). These are not promotions, so I plan no write for them. The sdd-execute step applies them in the feature PR.
+   - `services/xstockstrat-analysis/acceptance/fundamentals-formula-inputs.feature`: `@AC-8 @feature-201` is retitled and its second Then changed, and the "diverges" comment near line 39 is removed.
+   - `@AC-4 @feature-201` is a full-row parity rule that is preserved.
+3. **@AC-5 placement.** The design says "EXTEND" `services/xstockstrat-ingest/acceptance/mcp-client-signal-source.feature:34`.
+   - Under the one-scenario-one-target, slug-named-file policy I put it in the new `fix-fundsignal-scoring-correctness.feature` and carry the `# extends:` comment.
+   - If the human prefers to append it to the 166 file, the scenario block is identical. The `@feature-309` tag keeps provenance either way.
+4. **@AC-4 service attribution.** The retraction is a one-off data migration (ingest `019`) that reads `marketdata.fundamentals`, and marketdata owner acknowledged that read. The `Then` outcome (`valid_until`, QuerySignals) lives in ingest, so it goes to the ingest suite rather than platform.feature.
+5. **Tags.** The source file has no `@FR-*` tags, so none are added. Each scenario keeps its original `@AC-n @regression` and gains `@feature-309`. The `# guards:` and `# extends:` comments are kept verbatim. The "Background" used by the 246 suite is not needed here.
+6. **No platform.feature write.** No scenario spans services or the deploy surface.
+7. **OVERLAP and DUP.** None, apart from the @AC-1 closeness in note 1.
+
+### Coverage check
+- Source scenarios: 5 (@AC-1 through @AC-5). Planned (NEW+DUP+OVERLAP): 5 NEW, 0 DUP, 0 OVERLAP. @AC-1 is gated on note 1.
+- Every @AC-* is accounted for and none were skipped. Two files are created: 3 scenarios in analysis and 2 in ingest. Neither directory needs creating, since `acceptance/` already exists for both services.
+```
