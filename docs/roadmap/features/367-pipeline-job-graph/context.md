@@ -31,3 +31,17 @@
 - Author inference, not an operator statement: `analysis.pipeline.worker_enabled` now defaults to
   `true`, because a prune that needs an operator step would not exercise the core. Flagged in
   product-spec Open Questions for confirmation at `/sdd-review`.
+
+## Session 2026-11-27 — sdd-review product-spec (FAIL, round 1)
+
+- Tree: ccr-fe135a59-nyslbm@7766822, which is origin/main-dev@50e5021 plus docs-only commits.
+  Deviation from `docs/sdd/tree-freshness.md`: the tree was not switched to `main-dev`, because the
+  feature directory exists only on the harness branch until PR #1634 merges.
+- Overlap: CLEAN. Analysis migration `031` and config migration `060` are free; re-check at spec.
+- Criteria: FAIL on criterion 6 (config readers and seed number not stated) and criterion 9
+  (six unchecked Open Questions). No Floor breach. Status stays `draft`.
+- Fixed in the spec after the review: reader and seed migration named; five design-deferred
+  questions restated as `## Design Constraints`; FR-2, FR-3, FR-6 and FR-7 tightened; `@AC-4`,
+  `@AC-5` and `@AC-15` wording made concrete (IDs unchanged).
+- Still open: the worker default (`worker_enabled` = `true`) needs the operator. Re-run the review
+  after that answer.

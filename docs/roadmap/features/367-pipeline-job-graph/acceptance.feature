@@ -30,6 +30,7 @@ Feature: pipeline-job-graph
   @AC-4 @FR-2
   Scenario: A stale worker cannot complete a job it lost
     Given worker A lost its lease on a job to worker B
+    And worker B reports the job as succeeded
     When worker A reports the job as succeeded
     Then the report is rejected
     And the job's recorded result is worker B's
@@ -39,7 +40,7 @@ Feature: pipeline-job-graph
     Given a job whose handler raises a transient error on attempt 1
     When the attempt fails
     Then the job is ready again with attempt count 1 recorded
-    And no worker can claim it before its next-attempt time
+    And no worker can claim it within 5 seconds of the failure
 
   @AC-6 @FR-3
   Scenario: A permanent failure is not retried
@@ -106,7 +107,7 @@ Feature: pipeline-job-graph
   @AC-15 @FR-7 @FR-1
   Scenario: The daily prune runs once across instances
     Given 2 analysis instances are running on 2026-11-27 (UTC)
-    When both instances ensure the day's prune job
+    When both instances run a claim poll
     Then exactly 1 job of kind "pipeline.retention_prune" exists for epoch "2026-11-27"
     And it finishes in state "succeeded"
 
