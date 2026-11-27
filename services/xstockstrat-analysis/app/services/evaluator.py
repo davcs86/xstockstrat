@@ -111,11 +111,12 @@ class FormulaExecutionError(Exception):
     diagnostic. Mirrors the failure-carrying shape of ``servicer._InsufficientData``.
     ``code`` (a gRPC status name) is set only for an owner-unreadable refusal."""
 
-    def __init__(self, formula_id: str, error: str, code: str = ""):
+    def __init__(self, formula_id: str, error: str, code: str = "", exit_reason: int = 0):
         super().__init__(f"formula {formula_id} failed: {error}")
         self.formula_id = formula_id
         self.error = error
         self.code = code
+        self.exit_reason = exit_reason
 
 
 def _finite_or_none(v) -> float | None:
@@ -138,11 +139,20 @@ def _decode_formula_output(formula_id: str, resp) -> dict:
     path (which then enforces its ``len==n`` + ``"value"``-required policy) and the
     fundamentals-only scalar-broadcast path."""
     if not resp.success:
-        raise FormulaExecutionError(formula_id, resp.error)
+        raise FormulaExecutionError(formula_id, resp.error, exit_reason=resp.exit_reason)
     try:
         return MessageToDict(resp.output)
     except ValueError as e:
         raise FormulaExecutionError(formula_id, resp.error or str(e)) from e
+
+
+def _is_transient_formula_error(exc: BaseException) -> bool:
+    if isinstance(exc, grpc.RpcError):
+        return True
+    return (
+        isinstance(exc, FormulaExecutionError)
+        and exc.exit_reason == indicators_pb2.SANDBOX_EXIT_REASON_TIMEOUT
+    )
 
 
 _SUPPORTED_INDICATORS = {"SMA", "EMA", "RSI", "MACD", "BB", "ATR", "VWAP", "STOCH"}

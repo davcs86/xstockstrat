@@ -1,4 +1,4 @@
--- Migration: 057_trading_broker_paper_per_environment.up.sql
+-- Migration: 059_trading_broker_paper_per_environment.up.sql
 -- Service: xstockstrat-config, feature 321. Stored keys are namespace-relative (045 CHECK).
 
 INSERT INTO config.config_values

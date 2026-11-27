@@ -24,9 +24,7 @@ findings log.
 
 ## Dead / orphaned code
 
-| What | Why it looks dead | Evidence |
-|---|---|---|
-| `package.json`'s `migrate` npm script (`node-pg-migrate up`) | Migration files use the golang-migrate `NNN_*.up/.down.sql` convention driven by `scripts/db-migrate.sh`; `node-pg-migrate` has no config here and would not apply them. **Reframed 2026-08-09** — no longer a "docs mismatch": CLAUDE.md's Running Locally section already tells the reader to run `../../scripts/db-migrate.sh` (golang-migrate), so nobody is currently pointed at the broken script — it's just a dead leftover. | `package.json#"migrate" (~L11)` vs `docs/patterns/database.md` (golang-migrate via `scripts/db-migrate.sh`; the CLAUDE.md § Running Locally section was removed by the 2026-11-13 scrub)` — action: delete the dead `migrate` script |
+_None open._
 
 ## Cross-module contract notes (not a bug — for consumers)
 
@@ -43,6 +41,7 @@ findings log.
 
 ## Resolved
 
+- **RESOLVED 2026-11-27 — dead `package.json` `migrate` npm script (`node-pg-migrate up`), by feature 323 (`fix-orphaned-code`).** The script and the `node-pg-migrate` devDependency are removed from `package.json`; the root `pnpm-lock.yaml` is regenerated (the leaf `Dockerfile` copies only the root lock). `grep -n '"migrate"\|node-pg-migrate' package.json` is empty; migrations stay golang-migrate via `scripts/db-migrate.sh`.
 - **RESOLVED 2026-11-10 — 3 dead config keys (`ledger.stream.notify_enabled`, `ledger.retention.years`, `ledger.compression.after_days`)**: `CLAUDE.md#Config Keys Consumed` (~L72-83) now lists only the three read keys (`export.enabled`, `export.max_window_days`, `stream.resolve_timeout_ms`); the `notify_enabled` row was deleted by feature 306 (config migration `047_config_alias_removal_rows`) and the other two were dropped from the docs by commit `adf411c3`. `src/` grep for all three = zero hits.
 - **RESOLVED 2026-11-10 — `CLAUDE.md` § Ports omitted `ExportEvents`**: § Ports (~L25-26) now names `AppendEvent`, `QueryEvents`, `GetEvent`, `StreamEvents` and the server-streaming `ExportEvents` (commit `adf411c3`).
 - **RESOLVED 2026-11-10 — compression/retention half of the § Database row**: § Database (~L104-105) now says compression/retention is **not implemented** and no config key controls either, matching the migrations (commit `adf411c3`). The `pg_notify` channel half stays open above.

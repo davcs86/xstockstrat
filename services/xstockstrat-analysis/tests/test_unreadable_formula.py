@@ -15,12 +15,19 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import grpc
 import pytest
 from gen.analysis.v1 import analysis_pb2
+from gen.indicators.v1 import indicators_pb2
 from google.protobuf import json_format
 from google.protobuf.struct_pb2 import Struct
 
 from app.engine.durable_schedule import DurableSchedule
 from app.handlers.servicer import _definition_fingerprint
-from app.services.evaluator import FormulaExecutionError, StrategyEvaluator, _empty_readiness
+from app.repositories.opportunities import EVALUATION_FAILED_PROVENANCE
+from app.services.evaluator import (
+    FormulaExecutionError,
+    StrategyEvaluator,
+    _empty_readiness,
+    _is_transient_formula_error,
+)
 from tests.conftest import RecordingStub, aio_rpc_error, ctx_with
 from tests.test_analysis_servicer import (
     _EOF_PAGE,
@@ -284,7 +291,9 @@ async def test_traced_refusal_mixed_with_timeout_still_raises(sem):
     def _dispatch(req, **_kw):
         if req.formula_id == "f-zscore":
             raise _permission_denied()
-        return SimpleNamespace(success=False, error=_TIMEOUT)
+        return SimpleNamespace(
+            success=False, error=_TIMEOUT, exit_reason=indicators_pb2.SANDBOX_EXIT_REASON_TIMEOUT
+        )
 
     sem = asyncio.Semaphore(sem) if sem else None
     ev = _traced_evaluator(_dispatch, component_sem=sem)
@@ -413,7 +422,10 @@ async def test_backtest_unreadable_formula_is_formula_error_and_excluded_from_ev
     svc._indicators.GetFormula = AsyncMock(side_effect=_not_found())
     # AAPL's formula is unreadable; MSFT's sibling succeeds (keeps the exclusion non-vacuous).
     svc._indicators.ExecuteFormula = AsyncMock(
-        side_effect=[_not_found(), SimpleNamespace(success=True, output=ok, error="")]
+        side_effect=[
+            _not_found(),
+            SimpleNamespace(success=True, output=ok, error="", exit_reason=0),
+        ]
     )
     req = analysis_pb2.RunBacktestRequest(
         strategy_id="s-1", symbols=["AAPL", "MSFT"], initial_capital=100_000.0
@@ -473,7 +485,7 @@ async def test_evaluate_readiness_fast_serves_formula_unreadable_marker():
     svc._strategies_repo = MagicMock(get_by_owner_and_id=AsyncMock(return_value=strategy))
     svc._marketdata = MagicMock()  # GetDataCoverage probe is best-effort; a miss reads as 0
     svc._indicators = MagicMock()
-    svc._indicators.GetFormula = AsyncMock(return_value=SimpleNamespace(fundamental_inputs=[]))
+    svc._indicators.GetFormula = AsyncMock(return_value=indicators_pb2.FormulaDefinition())
     svc._indicators.ComputeIndicator = AsyncMock(side_effect=lambda req, **_kw: _sma_resp(req))
     svc._indicators.ExecuteFormula = AsyncMock()
     svc._readiness_cache_repo = MagicMock(read_many=AsyncMock(return_value={"MYSZ": cached}))
@@ -502,7 +514,7 @@ _CLOSES = [120.0, 130.0, 150.0]
 def _ok_formula(req, **_kw):
     out = Struct()
     out.update({"value": [1.0] * len(_FIRING_BARS)})
-    return SimpleNamespace(success=True, output=out, error="")
+    return SimpleNamespace(success=True, output=out, error="", exit_reason=0)
 
 
 def _held_definition():
@@ -540,6 +552,15 @@ async def _drain(predicate):
         if not predicate():
             break
         await asyncio.sleep(0)
+
+
+def _classifier_spy():
+    # O-10: assert what the classifier received, so a double's own error cannot pass as a fault.
+    return patch(
+        "app.handlers.servicer._is_transient_formula_error",
+        wraps=_is_transient_formula_error,
+        create=True,
+    )
 
 
 @_REFUSALS
@@ -648,7 +669,7 @@ async def test_opportunities_marker_clears_once_formula_is_readable():
     first = _find((await svc._compute_opportunities("u1", _META))[0], "s-1")
     assert "formula_unreadable" in first["provenance"]
 
-    svc._indicators.GetFormula = AsyncMock(return_value=SimpleNamespace(fundamental_inputs=[]))
+    svc._indicators.GetFormula = AsyncMock(return_value=indicators_pb2.FormulaDefinition())
     svc._indicators.ExecuteFormula = AsyncMock(side_effect=_ok_formula)
     second = _find((await svc._compute_opportunities("u1", _META))[0], "s-1")
 
@@ -668,34 +689,45 @@ async def test_opportunities_execute_outage_stays_data_unavailable_without_marke
     assert "formula_unreadable" not in row["provenance"]
 
 
-async def test_opportunity_recompute_timeout_fails_and_keeps_stored_rows(caplog):
+async def test_opportunity_recompute_timeout_marks_the_row_unavailable(caplog):
     svc = _mysz_svc()
     svc._indicators.GetFormula = AsyncMock(side_effect=_not_found())
     svc._indicators.ExecuteFormula = AsyncMock(
-        return_value=SimpleNamespace(success=False, error=_TIMEOUT)
+        return_value=SimpleNamespace(
+            success=False, error=_TIMEOUT, exit_reason=indicators_pb2.SANDBOX_EXIT_REASON_TIMEOUT
+        )
     )
     stored = _unavailable_served_row(
         "MYSZ", "s-1", provenance=["watchlist"], computed_at=datetime.now(UTC)
     )
     svc._opportunities_repo.rows["u1"] = [stored]
-    before = dict(stored)
 
-    with caplog.at_level(logging.WARNING):
+    with _classifier_spy() as spy, caplog.at_level(logging.WARNING):
         svc._kick_opportunity_recompute("u1", _META)
         await _drain(lambda: "u1" in svc._opportunity_recomputing)
 
-    assert "opportunity recompute failed" in caplog.text
-    assert svc._opportunities_repo.rows["u1"] == [before]
+    (received,) = [call.args[0] for call in spy.call_args_list]
+    assert isinstance(received, FormulaExecutionError)
+    assert received.exit_reason == indicators_pb2.SANDBOX_EXIT_REASON_TIMEOUT
+    assert "opportunity recompute failed" not in caplog.text
+    provenance = _find(svc._opportunities_repo.rows["u1"], "s-1")["provenance"]
+    assert "unavailable" in provenance
+    assert EVALUATION_FAILED_PROVENANCE not in provenance
 
 
-async def test_evaluate_readiness_timeout_raises_not_converted_to_marker():
+async def test_evaluate_readiness_timeout_degrades_the_symbol():
     svc = _cache_svc({"MYSZ": _real_bars("MYSZ", _CLOSES)}, strategy_row=_row(_definition()))
-    svc._indicators.GetFormula = AsyncMock(return_value=SimpleNamespace(fundamental_inputs=[]))
+    svc._indicators.GetFormula = AsyncMock(return_value=indicators_pb2.FormulaDefinition())
     svc._indicators.ExecuteFormula = AsyncMock(
-        return_value=SimpleNamespace(success=False, error=_TIMEOUT)
+        return_value=SimpleNamespace(
+            success=False, error=_TIMEOUT, exit_reason=indicators_pb2.SANDBOX_EXIT_REASON_TIMEOUT
+        )
     )
-    with pytest.raises(FormulaExecutionError):
-        await svc.EvaluateReadiness(_READINESS_REQ, ctx_with(_BOB))
+    (readiness,) = (await svc.EvaluateReadiness(_READINESS_REQ, ctx_with(_BOB))).readiness
+
+    assert (readiness.passing_conditions, readiness.total_conditions) == (0, 0)
+    assert readiness.formula_unreadable is False
+    svc._readiness_cache_repo.upsert_many.assert_not_awaited()
 
 
 async def test_live_loop_permission_denied_pair_is_isolated_and_cycle_continues(caplog):
@@ -856,7 +888,7 @@ async def test_heal_refusal_rewrites_to_marker_and_is_not_reselected(held):
 
 async def test_heal_recovery_restores_an_evaluated_row():
     svc = _mysz_svc()
-    svc._indicators.GetFormula = AsyncMock(return_value=SimpleNamespace(fundamental_inputs=[]))
+    svc._indicators.GetFormula = AsyncMock(return_value=indicators_pb2.FormulaDefinition())
     svc._indicators.ExecuteFormula = AsyncMock(side_effect=_ok_formula)
     svc._opportunities_repo.rows["u1"] = [_aged_row(["watchlist", "unavailable"])]
 

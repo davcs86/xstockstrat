@@ -1073,3 +1073,325 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - [ ] `**kw` spy rename risk (Step 7) and the residual two-header risk for a future caller (Step 6). Target: Steps 6-7.
 - [ ] DRY guard rail did not run on this branch's doc commits (missing `scripts/check-duplication.py` on the branch base). Target: first `/sdd-execute` step (merge `main-dev` first).
 - Next: `/sdd-execute fix-system-identity-paths`.
+
+## Session 2026-11-21 — operator ruling on AC-1 wording, recorded by the orchestrator (verbatim)
+
+Question (handoff § 3.4): after the operator asked to see the wording first, the orchestrator showed AC-1 exactly as in acceptance.feature (`@AC-1 @regression`): "Given an mcp_client signal source registered by owner "user-a" / When one ingest.mcp_client.poll_interval_seconds cycle ingests a signal from it / Then the ingest.signal.ingested ledger event has user_id "user-a" / And ExportEvents called as "user-a" returns that event". "Confirm it as written?"
+
+Operator's answer (option selected): "Confirm as written (Recommended)".
+
+Effect: the spec-authored AC-1 `Then` wording is operator-confirmed; the Step 1 confirmation is cleared. The ingest-docs question (docs step vs recorded deviation, § 3.4) is still open.
+
+## Session 2026-11-21 — operator ruling on the stale ingest docs, recorded by the orchestrator (verbatim)
+
+Question (handoff § 3.4): "Feature 313: after its Steps 4 and 6, the ingest docs go stale (findings :38 and ingest CLAUDE.md :146 still describe the old system-owner behaviour). How should that be handled?"
+
+Operator's answer (option selected): "Add a docs step (Recommended)".
+Option text as offered: "Add a step to 313's spec that updates the ingest findings row and CLAUDE.md. Needs a small re-spec and impl-spec review before execute."
+
+Orchestrator note (not an operator quote): 313 needs `/sdd-spec` re-spec for the added docs step and `/sdd-review impl-spec` before `/sdd-execute`. Not yet done. The doc line numbers cited above predate the 2026-11-21 main-dev sync; re-grep them.
+
+## Session 2026-11-26 — sdd-spec re-spec (operator ruling: add ingest docs step)
+
+- Re-spec of `implementation-spec.md` under the operator ruling of 2026-11-21 ("Add a docs step"). Status unchanged (`implementation-ready`); Total Steps 7 → 8. No code, proto, config or migration change.
+- Added **Step 8 — docs** (`**TDD**: N/A (docs)`, Reviewers none, no `**Lands with**`), placed last because it documents Step 4 (owner stamp) and Step 6 (per-cycle `correlation_id`, proved by Step 7). Steps 1-7 are not renumbered and their bodies are untouched; the unit stays Steps 6+7 (cap of 4 respected).
+  - `services/xstockstrat-ingest/docs/context-constitution-findings.md`: delete the `## Open questions` bullet "The `mcp_client` loop drives `_ingest_external_signal` with **no `propagation_meta`**" (`:38` on both trees) and add a `RESOLVED <landing date> ... (feature 313)` bullet at the top of `## Resolved`. The `## Filed as defect reports` row for the ownerless report (`:65`) stays: that file's own rule (`:59`) keeps a row until its report is resolved.
+  - `services/xstockstrat-ingest/CLAUDE.md`: replace the `ingest.signal.ingested` row of `## Ledger Events Emitted` (`:185` on the branch, `:197` on main-dev; the ruling's `:146` matches neither) with text naming the owner (`AppendEventRequest.user_id`, both paths) and the loop-path per-cycle `correlation_id` (empty on the RPC path).
+  - Checked and left alone: CLAUDE.md § Ownership (reserved `system` owner rules) and `docs/context-constitution.md` INGEST-12; neither describes behaviour Steps 4 or 6 change.
+- Other edits to keep the spec coherent: `## Execution Summary` (one sentence), `## Step Dependencies` (Step 8 requires Steps 4 and 6; the "Steps 6-7 stay last" line now says "last code steps" and notes that only Step 8's per-cycle wording would change if FR-3 were ruled out; the old "Proposed, not specced" ingest-docs bullet is replaced by the ruling reference), `feature.md` (Artifacts step count, Reviewers snapshot row "Steps 1, 8 (docs)", Last Updated).
+- Self-review (no subagent tool, so this was a self-review against `sdd-review/reference/impl-spec-criteria.md` B2/B2b/B3/B3b): Step 8 passes: evidence re-grepped on `origin/feature/fix-system-identity-paths@8c1db49e` and `origin/main-dev@2b2dec92`; Files are exact paths; Instructions cite only confirmed symbols (`_ingest_external_signal`, `poll_one_source`, both grep-found); Verification is runnable and was dry-run against the pre-edit tree (the open-question check fails there, as it should; the other checks return 0). B2b not triggered (no trading-domain terms). B3 and B3b: no migration/proto dependency, no code step without a test pair, no new atomic-unit trigger. Result: 0 failures, 0 new warnings; the pre-existing carried items below are unchanged.
+- Open items:
+  - [ ] AC-1 wording vs Step 1: the operator's "Confirm as written" (session 2026-11-21) was given on the text now in `acceptance.feature` (Then "the ingest.signal.ingested ledger event has user_id "user-a"" / And "ExportEvents called as "user-a" returns that event"). Step 1 still replaces those Thens with the AppendEvent-request wording ("the ingest.signal.ingested AppendEvent request carries user_id "user-a"" / "no x-user-id call metadata is sent with it"). Left as written per the ruling's "no change"; the operator or `/sdd-review impl-spec` must reconcile which text lands in Step 1 before it executes.
+  - [ ] Analysis findings go stale after Steps 2-3 (`services/xstockstrat-analysis/docs/context-constitution-findings.md:24` latent-bug row and `:32` open question). The ruling named only the ingest docs, so no step covers them. Target: operator.
+  - [ ] The bracketed "main-dev `:N`" hints in Steps 4 and 6 predate main-dev moving again: `_ingest_external_signal` is now `servicer.py:1346` and the `ingest.signal.ingested` emit `:1507` on `origin/main-dev@2b2dec92`. Steps 4 and 6 carry a re-grep instruction; no edit made. Merge `main-dev` (21 commits ahead, `servicer.py` and `test_ingest_servicer.py` among the changes) before executing.
+  - [ ] Step 8 wording of the per-cycle id depends on FR-3 holding; if FR-3 is ruled out, record it in the Deviation Log (F-09).
+  - [ ] Still open from earlier sessions: `**kw` spy rename risk (Step 7), the two-header residual (Step 6), merge-order row for 313/309, the missing `scripts/check-duplication.py` on the branch base.
+- Next: `/sdd-review fix-system-identity-paths impl-spec`, then `/sdd-execute fix-system-identity-paths`.
+
+## Session 2026-11-26 — operator ruling on AC-1 text, recorded by the orchestrator (verbatim)
+
+Question: "Which text should land? (confirmed text vs AppendEvent-request wording)"
+
+Operator's answer (option selected): "Keep the confirmed text (Recommended)" — option text as offered: "AC-1 stays exactly as you confirmed (ledger event user_id + ExportEvents). I amend Step 1 so it does not rewrite the Thens; the AppendEvent-request assertion moves into the test, not the scenario."
+
+What changed in `implementation-spec.md` (sdd-spec amendment, same date):
+- Step 1: `@AC-1` keeps its Given/When/Then/And byte-for-byte ("the ingest.signal.ingested ledger event has user_id "user-a"" / "ExportEvents called as "user-a" returns that event"); only the `@FR-1` tag is added (tag, not wording; needed for C-15 FR traceability). The `PRESERVE @AC-11 @feature-021` comment that existed only for the rewording is dropped. The `@AC-2` rewording and `@AC-3` are unchanged. The context.md fold-in, the Verification greps (the `ExportEvents called as` negative check becomes a positive check, plus a negative check for the AppendEvent wording and the dropped comment) and the Execution Summary were updated to match.
+- Step 1 also marks `debate.md` D-8 (`superseded by operator ruling 2026-11-26`) and O-1 (`reopened and closed @ 2026-11-26`), the two register rows that recorded the AC-1 rewording as settled.
+- Step 5: the `AppendEventRequest.user_id` and no-`x-user-id`-metadata assertions stay in the test and are now described as plain test assertions, not scenario Thens. Evidence added: AC-1's ExportEvents Then rests on the unchanged ledger code and tests (`@AC-11 @feature-021`, `ledgerServiceImpl.test.ts:675,691,709`).
+- Step Dependencies: Step 5 no longer depends on Step 1's wording.
+- Open items:
+  - [ ] `design.md` "Business Rules Touched" (CHANGE `@AC-1`, and C-16 line) still records the AC-1 rewording; design.md was not edited. Superseded by this ruling.
+  - [ ] AC-1's ExportEvents Then is not executed by any ingest test; it is carried by existing ledger tests. Accepted by the ruling; flagged for `/sdd-review impl-spec`.
+  - [ ] The `@FR-1` tag on `@AC-1` is the only edit to the confirmed scenario; confirm it is acceptable.
+  - The open item "AC-1 wording vs Step 1" of the 2026-11-26 sdd-spec re-spec entry above is resolved by this entry.
+
+## Session 2026-11-26 — independent impl-spec review (spec-reviewer), recorded by the orchestrator
+
+- Verdict: PASS WITH WARNINGS, no blockers. Fixes applied (nothing else changed; no operator question needed):
+  - `design.md`: a one-line HTML-comment supersession note ("Superseded 2026-11-26 by operator ruling: AC-1 stays as confirmed (PRESERVE); only AC-2 is reworded.") at the three places that record the AC-1 rewording: Build order step 1, the `C-16` "honored by" line, and the `CHANGE @AC-1` line under Business Rules Touched. design.md is not in Step 1's Files; the edit is recorded here only.
+  - AC-1 Then 2 delegation: `@AC-1`'s ExportEvents Then is run by no ingest test. Recorded in Step 1 item 4 (the context.md fold-in) and as a test-comment instruction in Step 5: "AC-1 Then 2 is covered by ledger @AC-11 @feature-021 plus ledgerServiceImpl.test.ts:675-709 (owner precedence) and the WHERE user_id = $1 predicate at ledgerServiceImpl.ts:404, not here". `:404` verified on both `origin/feature/fix-system-identity-paths` and `origin/main-dev@2b2dec92`; the Execution Summary citation `:373` (a comment) was changed to `:404`. Step 5 also tells `/sdd-execute` the promoted scenario must not be claimed as fully ingest-tested.
+  - Header: the Evidence-tree paragraph now says the "main-dev `:N`" hints come from two tips (`fb52065c` for Steps 1/4/6/7, `2b2dec92` for Step 8) and are advisory (edit by symbol, re-grep at BRANCH SYNC). The stale "only `servicer.py` has moved" claim is replaced: at `2b2dec92` ingest `servicer.py`, `tests/test_ingest_servicer.py` and `CLAUDE.md` differ from the branch, while `mcp_client_loop.py`, `tests/test_mcp_client_loop.py`, analysis `identity.py`, `pnl_pattern_consumer.py` and their tests do not (checked with `git diff --stat HEAD...origin/main-dev`).
+  - C-14: `## Step Dependencies` gains "No UI/ledger step by design (D-7): the `/trader` ledger export route has no event-type allowlist and the ledger scopes the export to the caller; the `correlation_id` meaning change is recorded in context.md."
+  - Step 1 Verification gains a check that the only `@AC-1` delta against the pre-step file is the `@FR-1` tag line (a `diff` of the `@AC-1` block; simulated on the current tree: exactly one changed line).
+- Open items carried: the `**kw` spy rename risk (Step 7), the two-header residual (Step 6), the analysis findings `:24`/`:32` that Steps 2-3 make stale (no step), the merge-order row for 313/309, the missing `scripts/check-duplication.py` on the branch base (merge `main-dev` first).
+
+## Session 2026-11-26 — sdd-execute sequential (sdd-batch-execute)
+
+- Up-front confirmation (operator-approved plan, binding record, verbatim): `{"mainDev":"f802b184b13bd899d858c4b0349a616e9981b9d9","dev":"72eecaaca38c7715d20484911283b8502f001442","specHash":"98ea87c10fa0cef7027661b6f4b39efb57385351","directive":"conditional","pending":[1,2,3,4,5,6,7,8],"mismatches":[{"n":1,"detail":"All 4 Files exist. Every Codebase Evidence claim checks out: acceptance.feature has @AC-1/@AC-2 only, no @FR tags, and the old Thens at :18-19; product-spec has no FR or Consumer Surface section and contains 'metadata=None' (:16) and 'optionally a trace id is "},{"n":2,"detail":"Both Files exist and all pnl_pattern_consumer.py and identity.py anchors match exactly (:3, :6-10, :35, :348, :358, :388, :532, :539, :541, :546-548, :566-569, _POISON :65-73 with ValueError, _process_with_retry :228, the _emit request with no user_id). is_rea"},{"n":3,"detail":"File exists and all test_pnl_pattern_consumer.py anchors match (:33, :122, :158, :214, :234 owner u-1, :273, :328-336, :443 with metas, :461, :474, :483-486, :515); no '\"system\"' match; asyncio_mode at pyproject.toml:33. Mismatches: (a) test_ac17_ownerless_ord"},{"n":4,"detail":"File exists. All servicer.py anchors moved after the main-dev merge and match neither the branch number nor the main-dev hint. The spec allows this because edits go by symbol, and the content is unchanged: _ingest_external_signal is at :1346-1348 (hints 1015 a"},{"n":5,"detail":"File exists. Helpers match: :20-22, :25, :32, :62, :80 (owner seed-user), :173, :338, :426, :465. test_signal_ownership.py :20, :28, :123-139 and :138 match. Mismatches: (a) make_servicer's AppendEvent AsyncMock is at test_ingest_servicer.py:70, not :64-65 (th"},{"n":6,"detail":"Both Files exist. mcp_client_loop.py anchors match exactly: imports asyncio/json/logging/time at :13-16 with no uuid; poll_one_source :116; owner :123; split_credentials_ref :140; for item in parsed :156; the per-item call :158-160 with owner=owner; except :16"},{"n":7,"detail":"File exists. The spy at :194-197 and assertions through :211-212 match; mcp-client-signal-source.feature:32-33 is @AC-4 @FR-4 @feature-166; the except at mcp_client_loop.py:163 and _build_external_signal source=slug at :88-91 match; no correlation_id grep hit "},{"n":8,"detail":"Both Files exist and every anchor matches the main-dev form: the findings open-question bullet is at :38 under '## Open questions' :34; '## Resolved' is at :41 with RESOLVED 2026-11-10 bullets from :43; '## Filed as defect reports' is at :56, the 'A row stays "}]}`
+- Merged `origin/main-dev` `f802b184` into the branch (`ae6397eb`; resolver: nothing to resolve; ledger-guard clean).
+- Tooling (steps 1-8): python 3.13 ✓ · uv ✓ 0.11.32 · ruff/pytest via per-step `uv sync --extra dev` · docs steps need nothing. Hook check hook=0.
+- Re-spec (directive conditional, step bodies only; line-number hints re-grepped on the merged tree, no instruction changed in substance): `43bd8d75` respec(fix-system-identity-paths): align steps 1,2,3,4,5,6,7,8 with current codebase.
+
+```sdd-batch-setup
+{"mainDev":"f802b184b13bd899d858c4b0349a616e9981b9d9","date":"2026-11-26"}
+```
+
+## Session 2026-11-27 — sdd-execute sequential (sdd-batch-execute), step 1
+
+### Step 1 — docs: acceptance scenarios, FR-1 to FR-3, consumer surface and register cells [done]
+- `acceptance.feature`: `@AC-1` gains only the `@FR-1` tag (Given/When/Then/And byte-for-byte, rulings of 2026-11-21 and 2026-11-26); `@AC-2` reworded and tagged `@FR-2`; new `@AC-3 @FR-3`. `product-spec.md`: FR-1 to FR-3, `## Consumer Surface(s)`, the D-12 drift fix ("an empty `propagation_meta` list"), the `**Expected**` per-cycle wording, Open Questions 1-3 marked resolved (D-17, D-5, D-6). `debate.md`: status cells only (D-2 → superseded by D-17, D-8 → superseded by operator ruling 2026-11-26, D-9 → superseded by D-14, O-1 reopened and closed @ 2026-11-26, O-17/O-18/O-19 closed @ round 5).
+- Consumer surface (C-14, extends D-7): the `/trader` ledger export. No UI or ledger code change. In that export the `correlation_id` column (`services/xstockstrat-ledger/acceptance/ledger-event-export.feature:40`) shows a poll-cycle id on `mcp_client` `ingest.signal.ingested` rows, not a request trace; RPC-path rows stay empty. The analysis change is internal-only.
+- A later `portfolio.position.closed` for a `system` owner is a no-op: no window was opened, so `seal` finds no row (D-4).
+- `@AC-2` rewording (pre-design Thens "_compose does not raise" / "marked degraded" replaced by the observable Thens; first Then is the operator's wording verbatim) rests on the operator's C-16 sign-off of 2026-11-20 (session "2026-11-20 — sdd-design (approved)"). `@AC-1`'s text was kept as confirmed (rulings of 2026-11-21 and 2026-11-26). Its second Then (ExportEvents) is run by no ingest test: it is delegated to ledger `@AC-11 @feature-021`, `ledgerServiceImpl.test.ts:675-709` and the `WHERE user_id = $1` predicate at `ledgerServiceImpl.ts:404` (Step 5 carries the matching test comment).
+- TDD: N/A (docs). Verification `.sdd-logs/v-1.log` `exit=0`: the `@AC-1` block diff is the one line `@AC-1 @regression` → `@AC-1 @FR-1 @regression`; product-spec shows FR-1/FR-2/FR-3 at `:34-36` and `## Consumer Surface(s)` at `:69`; debate.md counts 2 / 2. Config-key wiring gate not applicable (no config key).
+- Discovery notes: the FR-N form precedent `docs/roadmap/features/307-ui-env-themed-bundles/product-spec.md` no longer exists (307 archived, `662413d7`); the same `FR-N.` form was taken from `docs/roadmap/features/280-third-party-sso-oidc/product-spec.md:17`. D-12's line is `servicer.py:1355` on this tree, as the spec says.
+- Files modified: `docs/roadmap/features/313-fix-system-identity-paths/acceptance.feature`, `docs/roadmap/features/313-fix-system-identity-paths/product-spec.md`, `docs/roadmap/features/313-fix-system-identity-paths/debate.md`, `docs/roadmap/features/313-fix-system-identity-paths/context.md`
+- Deviations: none
+
+## Open Threads
+
+- [x] Register status cells lag the rulings (O-17, O-18, O-19; D-2 / D-9). Closed by Step 1.
+- [x] AC-3's observable-only Thens written into acceptance.feature, traced by `@FR-3`. Closed by Step 1.
+- [x] The export's `correlation_id` meaning change on mcp_client rows is recorded (Step 1 consumer-surface note above).
+- [ ] The `@AC-3` PRESERVE comment (spec text, landed verbatim) places `@AC-41 @feature-294` in `services/xstockstrat-ingest/acceptance/signal-map-instrumentation.feature`; that file holds `@AC-28`, `@AC-29` and `@AC-53` only. `@AC-41 @FR-15 @feature-294` is at `docs/sdd/business-rules/platform.feature:1346`. Target: operator (reword the comment before C-16 promotion, or leave it).
+- [ ] Carried: `**kw` spy rename risk (Step 7), two-header residual (Step 6), analysis findings `:24`/`:32` stale after Steps 2-3 (no step), merge-order row for 313/309.
+
+## Session 2026-11-27 — Verification block fixes (operator ruling precedent from 316), recorded by the orchestrator
+
+Defect class (reported by the batch executor on Step 2): a leading `cd services/<svc> && ...` persists in the shell, so the following root-relative lines ran inside the service directory (the `git diff --stat HEAD -- <file>` printed nothing either way; the `grep -n ... services/...` failed with "No such file or directory"). Ruling: the 2026-11-26 operator precedent from feature 316 ("Re-spec the Verification first": one subshell per `cd`, non-failing count checks, then re-run the step verbatim) applies to 313. Only Verification blocks of the pending Steps 2-8 changed; no scope, instruction, evidence or done step (Step 1) was touched.
+
+Fixes, applied identically to every pending block:
+- Every `cd services/<svc> && ruff ... && pytest ...` became `( cd services/<svc> && ... )`; all other lines run from the repo root.
+- Step 2: old `git diff --stat HEAD -- .../tests/test_identity.py` (vacuous once committed, empty regardless) became `test -z "$(git diff --stat "$(git merge-base HEAD origin/main-dev)" -- .../tests/test_identity.py)"`; old `grep -n "is_real_owner" identity.py pnl_pattern_consumer.py  # 2 + 4 lines` became two `test "$(grep -c ...)" = 2` / `= 4` checks.
+- Step 3: old trailing `grep -n "def .*fixture\|from .conftest\|conftest" .../test_pnl_pattern_consumer.py` (exit 1 on the expected no-match) became `test "$(grep -c ...)" = 0`.
+- Step 4: old `grep -n -A6 'event_type="ingest.signal.ingested"' ... | grep -n "user_id=owner"` became a count check `= 1` over `-B3 -A8` (the instruction does not fix where `user_id=owner,` sits in the request).
+- Step 5: old `grep -n "from tests.test_signal_ownership import\|from tests.conftest import" ...` became `test "$(grep -c ...)" = 2`.
+- Step 6: old `grep -n "trace_id" servicer.py mcp_client_loop.py` (passes if either file matches) became one `grep -q` per file; old `grep -n "x-user-id" mcp_client_loop.py  # no new match` (exit 1 on the expected result) became `test "$(grep -c ...)" = 0`.
+- Step 7: old `grep -n "async def spy" -A2 ...` (prints, always passes) became two `test "$(grep -c ...)" = 1` checks on the exact spy signature and the forwarded `orig(signal, propagation_meta, owner=owner, **kw)` call.
+- Step 8: each `grep -c ... # N` became `test "$(... | grep -c ...)" = N`; old `git diff --name-only HEAD -- services/` (empty once steps are committed, and it would also list Steps 4-7's files) became a diff against the merge-base with main-dev, scoped to `services/xstockstrat-ingest/docs` and `services/xstockstrat-ingest/CLAUDE.md`, compared with the two expected paths.
+- Merge-base is used in place of bare `origin/main-dev` because the branch is not always synced to `main-dev` (Step 8's evidence records `CLAUDE.md` differing between the two trees).
+
+Steps fixed: 2, 3, 4, 5, 6, 7, 8. Re-run Step 2 onward with the updated blocks verbatim.
+
+## Session 2026-11-27 — sdd-execute sequential (sdd-batch-execute), step 2
+
+- Tooling (step 2): uv ✓ 0.11.32 · `uv sync --extra dev` in `services/xstockstrat-analysis` ⬇ (the service `.venv` resolved Python 3.12, not the 3.13 pin) · ruff ✓ 0.16.9 (host; CI installs unpinned `ruff`) · pytest ✓ (service `.venv`, put first on `PATH` for each run). Hook check hook=0.
+
+### Step 2 — service: a `system` owner degrades in the P&L consumer [done]
+- Added `is_real_owner(owner)` to `app/identity.py` (no import added); `owner_metadata`'s guard now calls it, with the raise, message and return unchanged. `pnl_pattern_consumer.py` uses it at the import, the `_compose` `meta` line (still outside the `try`), the `_compose` degrade branch, and the `_handle_order_event` window guard (ruff format wrapped that guard onto three lines). `_POISON`, `_process_with_retry`, `_synth_position_id`, `_handle_close_event` and the other `SYSTEM_IDENTITY` users are unchanged.
+- TDD (no `**Covers**`; AC-2's own test is Step 3). RED: Verification run `.sdd-logs/v-1.log` `exit=1`. ruff and the 77 tests passed, and the final `is_real_owner` count check failed because the predicate did not exist yet. A behaviour probe outside the repo (the AC-2 shape: `_process_with_retry` on `{**ORDER_PAYLOAD, "user_id": "system"}` with the `sleeps` patch, not committed) failed with `Expected mock to not have been awaited. Awaited 2 times.` and logged `attempt 3/3 failed: ValueError("owner-scoped call needs a real owner, got 'system'")` and then `parking event seq=1`. GREEN: `.sdd-logs/v-2.log` `exit=0`: `All checks passed!`, `143 files already formatted`, `77 passed`. The same probe passed (`1 passed`). Full suite `pytest --cov=app --cov-fail-under=40`: `1826 passed`, `Total coverage: 91.89%`.
+- The block reports only its last line's status, so the two other root-level checks were run separately: the `test_identity.py` diff against merge-base `f802b184` is empty, and the counts are `identity.py:2` and `pnl_pattern_consumer.py:4`.
+- Config-key wiring gate: not applicable (no config key).
+- Files modified: `services/xstockstrat-analysis/app/identity.py`, `services/xstockstrat-analysis/app/engine/pnl_pattern_consumer.py`
+- Deviations: none
+
+## Open Threads
+
+- [ ] The Step 2 Verification block's `exit=` reflects only its last command (no `set -e`), so an earlier `test` line failing would not change it. Steps 3-8 share the shape. Target: operator, or the executor re-checking each line as done here.
+- [ ] Step 3 RED must run on the pre-Step-2 tree (its instruction 4). Step 2 is now on the branch, so on the current tree the new test passes at once. The probe output above shows the expected RED message. Target: Step 3.
+- [ ] Carried: `@AC-3` PRESERVE comment file placement (operator), `**kw` spy rename risk (Step 7), two-header residual (Step 6), analysis findings `:24`/`:32` stale after Steps 2-3 (no step), merge-order row for 313/309.
+
+## Session 2026-11-27 — sdd-execute sequential (sdd-batch-execute), step 3
+
+- Tooling (step 3): uv ✓ · `uv sync --extra dev` in `services/xstockstrat-analysis` ⬇ (the `.venv` resolved Python 3.12.3, not the 3.13 pin, as in Step 2) · ruff ✓ (host) · pytest ✓ (service `.venv`, put first on `PATH` for each run). Hook check hook=0.
+
+### Step 3 — test: AC-2, a system-owned order event is processed on its first attempt [done]
+- Added `test_feature313_ac2_system_owned_order_event_degrades_on_first_attempt(sleeps)` after the feature-259 helpers in `tests/test_pnl_pattern_consumer.py`. It drives `_process_with_retry` on `{**ORDER_PAYLOAD, "user_id": "system"}`, uses `_MetaRecordingComposer` and the real `_compose`/`owner_metadata`, and spies on `process_event`. It asserts no awaited sleep, one run, one snapshot with empty indicators and signals, degraded and not captured, no window, no park, `metas == {"ohlcv": []}` and `pool.cursor == 1`.
+- TDD: AC-2 red: `sleeps.assert_not_awaited()` failed → green: passed. RED was run on the pre-Step-2 tree by checking out the two Step 2 app files from `878bd1a0^` into the worktree for one run, then restoring them from `HEAD` (empty diff confirmed before GREEN). RED `.sdd-logs/v-1.log`: `AssertionError: Expected mock to not have been awaited. Awaited 2 times.`, with `attempt 1/3`, `2/3` and `3/3 failed: ValueError("owner-scoped call needs a real owner, got 'system'")` and `parking event seq=1`; `1 failed, 50 deselected`. GREEN `.sdd-logs/v-2.log` `exit=0`: `All checks passed!`, `143 files already formatted`, `1 passed, 50 deselected`, `1827 passed`, `Total coverage: 91.89%`. The block's `exit=` reflects only its last line (the C-13 count check, `= 0`); the earlier lines were confirmed from the log.
+- C-13: the `system` payload is a single-consumer inline spread; no fixture or conftest entry added.
+- Config-key wiring gate: not applicable (no config key).
+- Files modified: `services/xstockstrat-analysis/tests/test_pnl_pattern_consumer.py`
+- Deviations: none
+
+## Open Threads
+
+- [x] Step 3 RED on the pre-Step-2 tree. Closed by Step 3 (see above).
+- [ ] Carried: Verification `exit=` reflects only the last line (Steps 4-8), `@AC-3` PRESERVE comment file placement (operator), `**kw` spy rename risk (Step 7), two-header residual (Step 6), analysis findings `:24`/`:32` stale after Steps 2-3 (no step), merge-order row for 313/309.
+
+## Session 2026-11-27 — sdd-execute sequential (sdd-batch-execute), step 4
+
+- Tooling (step 4): uv ✓ 0.11.32 · `uv sync --extra dev` in `services/xstockstrat-ingest` ⬇ (the `.venv` resolved Python 3.12.3, not the 3.13 pin, as in Steps 2-3) · ruff ✓ 0.16.9 (host) · pytest ✓ (service `.venv`, put first on `PATH` for each run). Hook check hook=0.
+
+### Step 4 — service: stamp the owner on the `ingest.signal.ingested` ledger event [done]
+- Added `user_id=owner,` after `payload=payload,` in the `ingest.signal.ingested` `AppendEventRequest` of `_ingest_external_signal` (re-grepped anchor: `event_type=` at `servicer.py:1507`). `metadata=propagation_meta`, the other `AppendEventRequest` sites (`servicer.py:648`, `app/admin_audit.py:29`) and both callers are unchanged; no `x-user-id` entry built.
+- TDD (no `**Covers**`; AC-1's test is Step 5). RED: Verification `.sdd-logs/v-1.log` `exit=1` (ruff `All checks passed!`, `58 files already formatted`, `246 passed`; the final `user_id=owner` count check failed). A behaviour probe outside the repo (`_ingest_external_signal(..., owner="user-a")` with no `propagation_meta`, the loop shape, via the `test_signal_ownership.py` helpers; not committed) failed with `AssertionError: assert '' == 'user-a'`. GREEN: `.sdd-logs/v-2.log` `exit=0`: `All checks passed!`, `58 files already formatted`, `246 passed`; the probe passed (`1 passed`). Full suite `pytest --cov=app --cov-fail-under=40`: `622 passed`, `Total coverage: 87.68%`.
+- Config-key wiring gate: not applicable (no config key).
+- Files modified: `services/xstockstrat-ingest/app/handlers/servicer.py`
+- Deviations: none
+
+## Session 2026-11-27 — sdd-execute sequential (sdd-batch-execute), step 5
+
+- Tooling (step 5): uv ✓ · `uv sync --extra dev` in `services/xstockstrat-ingest` ⬇ · ruff ✓ 0.16.9 (host) · pytest ✓ (service `.venv`, put first on `PATH` for each run). Hook check hook=0.
+
+### Step 5 — test: AC-1, the loop's ledger event is owner-stamped [done]
+- Added `test_feature313_ac1_loop_signal_event_is_owner_stamped(monkeypatch)` after `test_second_identical_cycle_deduplicates`. Loop half: one `_mcp_source(user_id="user-a")`, `_item()`, a dedup-miss `transaction_conn` (one `db.fetchrow` row, two `conn.fetchrow` rows), the real `_ingest_external_signal` via `run_one_cycle`; asserts `event_type == "ingest.signal.ingested"`, `user_id == "user-a"` and no `x-user-id` in the call metadata, with the AC-1 Then 2 delegation comment. RPC half (untraced incidental hardening, no AC-33 claim): `_fresh_ingest_svc(11)` + `IngestSignal(_signal_req("motley-fool"), _ctx("0", user_id="alice"))` → `user_id == "alice"`. Imports `_ctx` from `tests.conftest` and `_fresh_ingest_svc`, `_signal_req` from `tests.test_signal_ownership` (C-13: no copies, no new domain literal). The promoted `@AC-1` is not fully ingest-tested: its ExportEvents Then rests on the ledger tests named in the comment.
+- TDD: AC-1 red: `assert '' == 'user-a'` failed → green: passed. Step 4 was already on the branch, so RED ran on the pre-Step-4 tree by checking out `services/xstockstrat-ingest/app/handlers/servicer.py` from `5ac54339^` for one run, then restoring it from `HEAD` (only the test file differed before GREEN). RED `.sdd-logs/v-1.log`: `AssertionError: assert '' == 'user-a'` at `tests/test_mcp_client_loop.py:235`, `1 failed, 22 deselected` (its `exit=0` is the last line, the C-13 count check). GREEN `.sdd-logs/v-2.log` `exit=0`: `All checks passed!`, `58 files already formatted`, `1 passed, 22 deselected`, `623 passed`, `Total coverage: 87.68%`; the C-13 import count is 2.
+- Config-key wiring gate: not applicable (no config key).
+- Files modified: `services/xstockstrat-ingest/tests/test_mcp_client_loop.py`
+- Deviations: none
+
+## Open Threads
+
+- [ ] Carried: Verification `exit=` reflects only the last line (Steps 6-8), `@AC-3` PRESERVE comment file placement (operator), `**kw` spy rename risk (Step 7), two-header residual (Step 6), analysis findings `:24`/`:32` stale after Steps 2-3 (no step), merge-order row for 313/309.
+
+## Session 2026-11-27 — sdd-execute sequential (sdd-batch-execute), steps 6+7
+
+- Tooling (steps 6+7): uv ✓ 0.11.32 · `uv sync --extra dev` in `services/xstockstrat-ingest` ⬇ (`.venv` on Python 3.12, as in Steps 2-5) · ruff ✓ 0.16.9 (host) · pytest ✓ 9.0.3 (service `.venv`, put first on `PATH` for each run). Hook check hook=0.
+- Anchors re-grepped before editing (Step 6 instruction 0): `_ingest_external_signal` at `servicer.py:1346`, the `ingest.signal.ingested` emit at `:1507` (with Step 4's `user_id=owner`), `for item in parsed:` at `mcp_client_loop.py:156`, the per-item call at `:158`, the spy at `tests/test_mcp_client_loop.py:198-199`. No peer (309, 328) edit present.
+
+### Step 6 — service: one per-cycle id, sent as `correlation_id` and `x-trace-id` [done] (atomic unit Steps 6+7)
+- `_ingest_external_signal` gains the keyword-only `trace_id: str = ""` after `owner`, plus a two-line docstring constraint. On the `ingest.signal.ingested` request only, it adds `correlation_id=trace_id`. Its `AppendEvent` metadata is `[*propagation_meta, ("x-trace-id", trace_id)] if trace_id else propagation_meta`: append only, `propagation_meta` is not mutated, and with no `trace_id` the request and metadata are what Step 4 left (R-9). `mcp_client_loop.py` adds `import uuid`, mints `str(uuid.uuid4())` once before `for item in parsed:` and passes it as `trace_id=`. There is no `propagation_meta`, no `x-user-id`, and no id goes to the metric or tick helpers. The RPC caller is unchanged.
+- TDD: Step 6 has no `**Covers**`; the unit's RED is Step 7's AC-3 test (below).
+- Config-key wiring gate: not applicable (no config key).
+- Files modified: `services/xstockstrat-ingest/app/handlers/servicer.py`, `services/xstockstrat-ingest/app/engine/mcp_client_loop.py`
+- Deviations: none
+
+### Step 7 — test: AC-3, per-source per-cycle `correlation_id`, and the spy fix [done] (atomic unit Steps 6+7)
+- Spy fix (D-19): `spy(signal, propagation_meta=None, owner=None, **kw)` forwards `**kw` to `orig`; nothing else in `test_second_identical_cycle_deduplicates` changed. Added `test_feature313_ac3_cycle_signals_share_a_per_source_correlation_id(monkeypatch)` after the Step 5 test.
+  - Setup: two `_mcp_source(...)` rows owned by `user-a` (`alpha-mcp`, `beta-mcp`), and the MCP fake returning `[_item("AAPL"), _item("MSFT")]`. A dedup-miss `transaction_conn` holds four `db.fetchrow` and eight `conn.fetchrow` rows, and the real core runs.
+  - Assertions: exactly four `ingest.signal.ingested` calls, and one distinct non-empty `correlation_id` per `payload["source"]`. The two ids differ, and no `x-user-id` is in the metadata. For every call, `("x-trace-id", correlation_id)` is in the metadata exactly once.
+  - RPC path: `IngestSignal` with `_ctx` (inbound `x-trace-id: t1`) gives `correlation_id == ""`.
+- TDD: AC-3 red: `assert ('x-trace-id', '') in []` failed → green: passed.
+  - RED (`.sdd-logs/v-1.log`, Step 7 block, pre-Step-6 tree with the test and spy fix applied) failed at `tests/test_mcp_client_loop.py:273`, `1 failed, 1 passed, 22 deselected`. The `len(calls) == 4` assertion passed first, so the RED is the missing id, not a vacuous harness. The log's `exit=0` is its last line, the spy count check.
+  - GREEN, Step 6 block (`.sdd-logs/v-2.log`, `exit=0`): `All checks passed!`, `58 files already formatted`, `253 passed`.
+  - GREEN, Step 7 block (`.sdd-logs/v-3.log`, `exit=0`): `2 passed, 22 deselected`, `624 passed`, `Total coverage: 87.69%`.
+  - Each block reports only its last line's status, so the root-level lines were re-run one at a time: both `trace_id` greps rc 0, the `x-user-id` count in `mcp_client_loop.py` is 0, and both spy counts are 1.
+- C-13: all domain data comes from `_mcp_source()` and `_item()`, and the RPC half reuses `_fresh_ingest_svc`, `_signal_req` and `_ctx` (already imported by Step 5).
+- Config-key wiring gate: not applicable (no config key).
+- Files modified: `services/xstockstrat-ingest/tests/test_mcp_client_loop.py`
+- Deviations: none
+
+## Open Threads
+
+- [ ] `**kw` spy rename risk: accepted by D-19; the AC-3 `correlation_id` assertion is the guard. Two-header residual: the docstring constraint plus AC-3's one-`x-trace-id` assertion cover today's loop caller only.
+- [ ] Carried: Verification `exit=` reflects only the last line (Step 8), `@AC-3` PRESERVE comment file placement (operator), analysis findings `:24`/`:32` stale after Steps 2-3 (no step), merge-order row for 313/309.
+
+## Session 2026-11-27 — sdd-execute sequential (sdd-batch-execute), step 8
+
+- Tooling (step 8): docs step, none needed. Hook check hook=0.
+- Anchors re-grepped (instruction 0): the open-question bullet at `context-constitution-findings.md:38` (under `## Open questions` `:34`, `## Resolved` `:41`), the event row at `CLAUDE.md:197`; `_ingest_external_signal` at `servicer.py:1346` (with `correlation_id=trace_id` at `:1514`), `poll_one_source` at `mcp_client_loop.py:117` (hint `:116`; the mint is at `:157`). The ingest docs had no diff against merge-base `f802b184` before the edit.
+
+### Step 8 — docs: ingest findings row and CLAUDE.md event row after Steps 4 and 6 [done]
+- `services/xstockstrat-ingest/docs/context-constitution-findings.md`: deleted the "no `propagation_meta`" open question and added `RESOLVED 2026-11-27 — ... (feature 313)` as the first `## Resolved` bullet, using the spec text verbatim. The `## Filed as defect reports` ownerless row stays: its report sidecar flips through `/sdd-triage backmerge`. `services/xstockstrat-ingest/CLAUDE.md`: replaced the `ingest.signal.ingested` row with the spec text. No other line changed.
+- TDD: N/A (docs). Verification `.sdd-logs/v-1.log` `exit=0` (empty log). The block reports only its last line, so each line was re-run alone: the open-questions `propagation_meta` count is 0, the `RESOLVED .*feature 313` count is 1, the defect-row count is 1, the CLAUDE.md `user_id.*correlation_id` count is 1, and the merge-base diff lists exactly the two Files.
+- All-done gate: `node scripts/check-config-wiring.mjs --final` `.sdd-logs/v-2.log` `exit=0`. It printed only two baseline lines from other features, `REPORTED: services/xstockstrat-analysis/app/engine/fundsignal_loop.py:marketdata/fundamentals.provider:readers-disagree` and `REPORTED: services/xstockstrat-trading/internal/service/trading.go:platform/trading_state:readers-disagree`. This feature declares no config key. Status in-progress → code-completed.
+- No insights ledger line: nothing generalizes beyond what the ledger already holds.
+- Files modified: `services/xstockstrat-ingest/docs/context-constitution-findings.md`, `services/xstockstrat-ingest/CLAUDE.md`
+- Deviations: none
+
+## Open Threads
+
+- [ ] `implementation-spec.md` header `**Status**` still reads `pending` (no step flipped it). SESSION-END SUMMARY sets it to `complete`. Target: orchestrator, per-feature session-end summary.
+- [ ] Carried: `@AC-3` PRESERVE comment file placement (operator), analysis findings `:24`/`:32` stale after Steps 2-3 (no step), merge-order row for 313/309, `**kw` spy rename risk and the two-header residual (accepted, D-19).
+
+## Session 2026-11-27 — sdd-batch-execute promotion plan (awaiting operator confirm)
+
+- Branch check (`origin/feature/fix-system-identity-paths` at `5e54f560`): `acceptance.feature` holds @AC-1/@AC-2/@AC-3 with `@FR-*` tags. Its AC-2 and AC-3 match the blocks below. Its AC-1 still has the old Thens ("ledger event has user_id", "ExportEvents called as "user-a" returns that event"), so per the plan the AC-1 wording goes to the operator before anything is promoted. Nothing was written to any durable suite.
+
+```sdd-batch-promotion-plan
+> CORRECTED 2026-11-27 by the orchestrator under the operator ruling "Branch text, fix the cite": @AC-1 below is the branch
+> acceptance.feature text verbatim (operator rulings 2026-11-21 and 2026-11-26: keep @AC-1 as written; the reworded AC-1 in the
+> earlier plan is withdrawn), and the @AC-3 PRESERVE comment cites platform.feature for @AC-41. Nothing else changed.
+## Promotion plan — fix-system-identity-paths (feature 313)
+
+### BLOCKER TO CLEAR BEFORE WRITING (source-of-truth gap)
+I am read-only with no git access, so I could not read `origin/feature/fix-system-identity-paths:docs/roadmap/features/313-fix-system-identity-paths/acceptance.feature`. The copies I could read disagree:
+- The main working tree (`/home/user/xstockstrat/docs/roadmap/features/313-fix-system-identity-paths/acceptance.feature`) is the stale pre-Step-1 file: 2 scenarios (@AC-1, @AC-2), no `@FR-*` tags, no @AC-3. Do NOT promote from it. Its AC-2 Then "_compose does not raise" is an implementation step that design D-15 and R-7 rejected, and promotion is permanent.
+- The worktree copies `/home/user/xstockstrat/.claude/worktrees/wf_fbbc69a4-10e-11`, `wf_f74e1465-c7b-6` and `wf_a4649d74-1f8-5` hold 3 scenarios with `@FR-*` tags, the reworded AC-2 and the new AC-3. Their AC-1 still has the old Thens ("ledger event has user_id", "ExportEvents called as user-a returns that event").
+- `implementation-spec.md` Step 1 (lines 130-163) specifies a reworded AC-1: "the ingest.signal.ingested AppendEvent request carries user_id "user-a"" and "no x-user-id call metadata is sent with it". `context.md` lines 1044, 1061 and 1070 say this wording is spec-authored and still needs operator confirmation.
+
+The blocks below use the Step 1 text, which is the design-approved, C-16-signed-off shape. Before writing, the orchestrator must compare the AC-1, AC-2 and AC-3 steps with `git show origin/feature/fix-system-identity-paths:docs/roadmap/features/313-fix-system-identity-paths/acceptance.feature`. If the reviewed branch text differs, substitute the branch's step text verbatim. Rule 2 (verbatim, never invented) outranks the blocks here. If the branch AC-1 still has the old Thens, flag that to the operator rather than promoting the un-asserted ExportEvents Then (design R-7/O-17).
+
+### Verdicts
+| @AC | target suite (path) | CREATE/APPEND | verdict | note |
+|---|---|---|---|---|
+| @AC-1 (@FR-1) mcp_client loop signal events are owner-stamped in the ledger | /home/user/xstockstrat/services/xstockstrat-ingest/acceptance/fix-system-identity-paths.feature | CREATE | NEW | The Then asserts ingest's `ingest.signal.ingested` AppendEvent request, so it is owned by ingest. Wording needs the gate above. |
+| @AC-2 (@FR-2) A system-owned order event yields a partial P&L snapshot | /home/user/xstockstrat/services/xstockstrat-analysis/acceptance/fix-system-identity-paths.feature | CREATE | NEW | The subject is analysis `PnLPatternConsumer`. Adjacent to `@AC-17 @feature-225` but not a duplicate (see Notes). |
+| @AC-3 (@FR-3) Signals from one mcp_client poll cycle share a per-source correlation id | /home/user/xstockstrat/services/xstockstrat-ingest/acceptance/fix-system-identity-paths.feature | CREATE (same file as AC-1) | NEW | The subject is ingest's per-cycle `correlation_id`. Net-new, so it needs C-15 traceability only. |
+
+### Ready-to-write blocks
+--- /home/user/xstockstrat/services/xstockstrat-ingest/acceptance/fix-system-identity-paths.feature (CREATE) ---
+# Durable business-rule suite for xstockstrat-ingest (Constitution C-16). Promoted from feature 313's
+# acceptance.feature (fix-system-identity-paths) at launch; @feature-313 marks provenance. These are the
+# guarantees a future feature must not regress (recon reads this suite; the design-adversary enforces it).
+
+Feature: xstockstrat-ingest - mcp_client loop ledger events keep owner attribution and a per-cycle correlation id
+  Server-initiated mcp_client poll-loop signal events are attributed to the source owner and share one
+  per-source, per-cycle correlation id.
+
+  # guards: docs/reports/2026-10-19-ingest-mcp-loop-ledger-events-ownerless-defect.md
+  # PRESERVE @AC-11 @feature-021 (services/xstockstrat-ledger/acceptance/ledger-event-export.feature):
+  # the export is scoped to user_id = caller, so an owner-stamped event is returned to its owner.
+  @AC-1 @FR-1 @regression @feature-313
+  Scenario: mcp_client loop signal events are owner-stamped in the ledger
+    Given an mcp_client signal source registered by owner "user-a"
+    When one ingest.mcp_client.poll_interval_seconds cycle ingests a signal from it
+    Then the ingest.signal.ingested ledger event has user_id "user-a"
+    And ExportEvents called as "user-a" returns that event
+
+  # the id persists as the ledger event's correlation_id; ledger ignores the x-trace-id header
+  # PRESERVE @AC-41, @AC-28, @AC-29 and @AC-53 @feature-294
+  # (@AC-41 is in docs/sdd/business-rules/platform.feature; the others in services/xstockstrat-ingest/acceptance/signal-map-instrumentation.feature): neither user_id nor
+  # the per-cycle id becomes a metric label.
+  @AC-3 @FR-3 @feature-313
+  Scenario: Signals from one mcp_client poll cycle share a per-source correlation id
+    Given two mcp_client signal sources registered by owner "user-a", each returning two distinct, non-duplicate signals
+    When one poll cycle ingests all four signals
+    Then each ingest.signal.ingested ledger event from one source's cycle carries the same non-empty correlation_id
+    And the two sources' correlation ids differ
+    And no x-user-id is sent
+
+--- /home/user/xstockstrat/services/xstockstrat-analysis/acceptance/fix-system-identity-paths.feature (CREATE) ---
+# Durable business-rule suite for xstockstrat-analysis (Constitution C-16). Promoted from feature 313's
+# acceptance.feature (fix-system-identity-paths) at launch; @feature-313 marks provenance. These are the
+# guarantees a future feature must not regress (recon reads this suite; the design-adversary enforces it).
+
+Feature: xstockstrat-analysis - a system-owned order event degrades instead of raising
+  The P&L pattern consumer yields a partial snapshot for a system-owned order event; it is never retried or parked on that basis alone.
+
+  # guards: docs/reports/2026-10-19-analysis-pnl-compose-system-owner-raises-defect.md
+  @AC-2 @FR-2 @regression @feature-313
+  Scenario: A system-owned order event yields a partial P&L snapshot
+    Given an order.filled ledger event whose payload has user_id "system"
+    When PnLPatternConsumer processes the event
+    Then the event is processed on its first attempt with no retry backoff
+    And an order_snapshots row is written for that order with empty indicators and signals
+    And an analysis.snapshot.degraded event is emitted
+    And no pnl_positions window is opened
+    And the event is not parked
+
+### Notes / ambiguities / conflicts
+- Source-of-truth gap: see the BLOCKER section above. The AC-1 Then wording is the main risk, because promotion is permanent and `context.md` records it as unconfirmed by the operator.
+- Service attribution: AC-1 and AC-3 are ingest (the loop and `_ingest_external_signal` emit the ledger event). AC-2 is analysis. No scenario spans services, so nothing goes to `/home/user/xstockstrat/docs/sdd/business-rules/platform.feature`. `platform.feature` has no `@feature-313` entries and no overlapping rule. Its only system-identity block, at about line 258, covers the SAN-bound analysis->indicators/ingest contract.
+- Dedup. No `@feature-313` tag exists in any suite, so there are no DUPs and this is a first-time promotion.
+  - Ingest (`/home/user/xstockstrat/services/xstockstrat-ingest/acceptance/`): no scenario asserts `user_id` on `ingest.signal.ingested` or a per-cycle `correlation_id`. `mcp-client-signal-source.feature` and `fix-ingest-poller-backfill.feature` cover registration, poll isolation and last_error, not ledger attribution.
+  - Analysis: `/home/user/xstockstrat/services/xstockstrat-analysis/acceptance/private-by-default-enforce-contract.feature:42-47` (`@AC-17 @feature-225`) is adjacent. It covers an empty-owner event: no ingest or indicators call, snapshot stored, degraded event emitted. AC-2 covers a `system` owner and adds first-attempt processing, no `pnl_positions` window and not parked. That is a different input and different Thens, so it is not an OVERLAP. A future curation pass could group the two.
+- No CONFLICT. These standing rules hold alongside the new scenarios (design "Business Rules Touched"):
+  - `@AC-16 @feature-225`: an ungranted system identity is refused inbound. AC-2 is a ledger-stream event, not an inbound call.
+  - `@AC-8`, `@AC-14` and `@AC-15 @feature-225`: no `system`-owned window or ledger row is written.
+  - `@AC-7` and `@AC-9 @feature-259`: poison still parks.
+  - `@AC-33 @feature-224`: no `x-user-id` is forged. AC-1 and AC-3 assert none is sent.
+- File naming follows the source slug. The `acceptance/` dirs already exist for both services, so only the files are created. No directory creation is needed.
+- Tag order follows the existing convention (`@AC-n @FR-n [@regression] @feature-NNN`, e.g. `@AC-8 @FR-1 @regression @feature-261`). Original `@AC-*` numbers are not renumbered.
+- AC-3 only exists in the branch copy after Step 1. If `status.md` shows Steps 6-7 (ingest `trace_id`) are not done and merged, promoting AC-3 would record an unimplemented guarantee. The caller should promote only at launch or ALL-DONE.
+
+### Coverage check
+- Source scenarios: 3 (@AC-1, @AC-2, @AC-3 in the Step 1 / branch target version). The stale main-tree file has only 2.
+- Planned (NEW + DUP + OVERLAP): 3 (3 NEW, 0 DUP, 0 OVERLAP, 0 CONFLICT). Nothing is skipped. The counts match, so no scenario is dropped.
+- Files written: 2 CREATE (ingest 2 scenarios, analysis 1 scenario), 0 APPEND, 0 to platform.feature.
+```
+
+## Session 2026-11-27 — operator ruling recorded by the orchestrator (verbatim)
+
+Question (C-16 promotion gate): the promoter's plan reworded @AC-1 and cited @AC-41 @feature-294 in the wrong suite; how should the scenarios be promoted?
+Operator answer: **"Branch text, fix the cite (Recommended)"** — promote @AC-1 verbatim as the branch's acceptance.feature has it (operator rulings 2026-11-21 and 2026-11-26), @AC-2 and @AC-3 verbatim, and correct only the @AC-3 PRESERVE comment's file reference for @AC-41 (platform.feature:1346). The `sdd-batch-promotion-plan` block above was corrected accordingly before the gate was approved.

@@ -121,7 +121,7 @@ def _proto_page(periods, token=""):
 def _composite():
     out = Struct()
     out.update({"value": 0.7, "composite": 0.7})
-    return SimpleNamespace(success=True, output=out, error="")
+    return SimpleNamespace(success=True, output=out, error="", exit_reason=0)
 
 
 def _svc(*, gate=True, pit=None, etf=None):

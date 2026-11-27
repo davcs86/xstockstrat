@@ -9,11 +9,14 @@ Feature: fix-orphaned-code (bug fix)
     Then it queries through the mock and returns a result or a mock error, with no nil-pointer panic
 
   # guards: docs/reports/2026-10-19-orphaned-code-defect.md
+  # Then amended 2026-11-26 (operator ruling): noop.py and signal_extraction.md are kept, not deleted.
   @AC-2 @regression
   Scenario: Orphaned modules, scripts and dependencies are gone
     Given the orphaned items listed in the report (config configWatcher.ts, the ledger, config, identity and notify node-pg-migrate migrate script and devDependency, notify jsonwebtoken and bcrypt, marketdata AlpacaAsset, ingest example_simple_email.py and noop.py, agent signal_extraction.md)
     When each touched leaf's package.json and the root pnpm-lock.yaml importers are inspected, and git ls-files is searched for the deleted paths
-    Then none of them exists and every affected service still builds and passes its tests
+    Then none of the deleted items exists (config configWatcher.ts and its test, the ledger, config, identity and notify migrate script and node-pg-migrate devDependency, notify jsonwebtoken and bcrypt, marketdata AlpacaAsset, ingest example_simple_email.py and tests/test_extractor.py)
+    And ingest noop.py and agent signal_extraction.md still exist
+    And every affected service still builds and passes its tests
 
   # guards: docs/reports/2026-10-19-orphaned-code-defect.md
   @AC-3 @regression

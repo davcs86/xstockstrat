@@ -82,6 +82,8 @@ export function PortfolioPanel() {
 
   const portfolios = data.portfolios ?? [];
 
+  // The combined view below renders when no account is selected: none is active, or the account fetch
+  // failed (AccountContext leaves selectedAccountId null).
   if (selectedAccountId) {
     const portfolio = portfolios[0];
     const account = accounts.find((a) => a.id === selectedAccountId);

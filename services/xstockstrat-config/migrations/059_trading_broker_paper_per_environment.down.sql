@@ -1,4 +1,4 @@
--- Migration: 057_trading_broker_paper_per_environment.down.sql
+-- Migration: 059_trading_broker_paper_per_environment.down.sql
 -- Service: xstockstrat-config, feature 321. A row an operator has changed is never deleted.
 
 DELETE FROM config.config_values

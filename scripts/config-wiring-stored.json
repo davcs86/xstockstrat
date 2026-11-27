@@ -1,6 +1,30 @@
 {
     "rows": [
         {
+            "key": "extract.call_budget_seconds",
+            "file": "057_mcp_deadline_budget.up.sql",
+            "global": true,
+            "is_secret": false,
+            "namespace": "agent",
+            "value_type": "float",
+            "description": "Whole-call budget (seconds) for the URL fetches of one extract_email_content / extract_website_content call. Identity auth (10 s) + the source lookup (10 s) + this value must stay at or below 57 s, 3 s under the MCP client's 60 s timeout. Read live; a non-finite or <= 0 value reads as 35. SetConfig-bounded [5,35].",
+            "environment": "production",
+            "default_value": "35",
+            "consuming_service": "xstockstrat-agent"
+        },
+        {
+            "key": "extract.call_budget_seconds",
+            "file": "057_mcp_deadline_budget.up.sql",
+            "global": true,
+            "is_secret": false,
+            "namespace": "agent",
+            "value_type": "float",
+            "description": "Whole-call budget (seconds) for the URL fetches of one extract_email_content / extract_website_content call. Identity auth (10 s) + the source lookup (10 s) + this value must stay at or below 57 s, 3 s under the MCP client's 60 s timeout. Read live; a non-finite or <= 0 value reads as 35. SetConfig-bounded [5,35].",
+            "environment": "staging",
+            "default_value": "35",
+            "consuming_service": "xstockstrat-agent"
+        },
+        {
             "key": "extract.connect_timeout_seconds",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
@@ -2734,6 +2758,30 @@
             "description": "Static ceiling on outbound Alpaca REST calls per second. The effective rate is the lower of this ceiling and what the X-RateLimit response headers allow (alpaca.adaptive_rate_limit_enabled). Read live per request into a token-bucket limiter the client waits on before every REST call; `0` disables only this ceiling.",
             "environment": "staging",
             "default_value": "200",
+            "consuming_service": "xstockstrat-marketdata"
+        },
+        {
+            "key": "bars.miss_backoff_ms",
+            "file": "058_marketdata_bars_miss_backoff.up.sql",
+            "global": true,
+            "is_secret": false,
+            "namespace": "marketdata",
+            "value_type": "int",
+            "description": "Marketdata GetBars miss window: milliseconds a servable symbol with no stored bars is not live-fetched again by GetBars after a live fetch returned none. Read live on each miss. A value of 0 or less disables the back-off, so every miss fetches and warns. Explicit-range reads always fetch.",
+            "environment": "production",
+            "default_value": "1800000",
+            "consuming_service": "xstockstrat-marketdata"
+        },
+        {
+            "key": "bars.miss_backoff_ms",
+            "file": "058_marketdata_bars_miss_backoff.up.sql",
+            "global": true,
+            "is_secret": false,
+            "namespace": "marketdata",
+            "value_type": "int",
+            "description": "Marketdata GetBars miss window: milliseconds a servable symbol with no stored bars is not live-fetched again by GetBars after a live fetch returned none. Read live on each miss. A value of 0 or less disables the back-off, so every miss fetches and warns. Explicit-range reads always fetch.",
+            "environment": "staging",
+            "default_value": "1800000",
             "consuming_service": "xstockstrat-marketdata"
         },
         {
@@ -4538,7 +4586,7 @@
         },
         {
             "key": "broker.paper",
-            "file": "057_trading_broker_paper_per_environment.up.sql",
+            "file": "059_trading_broker_paper_per_environment.up.sql",
             "global": true,
             "is_secret": false,
             "namespace": "trading",
@@ -4550,7 +4598,7 @@
         },
         {
             "key": "broker.paper",
-            "file": "057_trading_broker_paper_per_environment.up.sql",
+            "file": "059_trading_broker_paper_per_environment.up.sql",
             "global": true,
             "is_secret": false,
             "namespace": "trading",
@@ -5185,5 +5233,5 @@
             "consuming_service": "xstockstrat-ui"
         }
     ],
-    "inputs_sha256": "2220896f1f433dc3d986309c0ec4ec79fba50552793d7647082c4c20caadcf37"
+    "inputs_sha256": "29f47190323e82129ef0b18ded64eeb2bea5e628bea0745fceda482cf28c363c"
 }

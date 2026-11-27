@@ -16,7 +16,8 @@
   fetch failed` on client cancel, `GetLatestQuote: cache insert failed`, warm-poller cache insert (471 lines / 7
   days), bar-ingest insert / live-fetch WARNs (one per symbol under a done ctx), the residual re-read WARN; portfolio:
   `processAccountDeregistered` (two WARNs) and the `ackAlways` consumers draining at shutdown (balance sync,
-  bracket update, order-fill).
+  bracket update). Corrected per design O-9: the report also named order-fill, but `processOrderFill` returns its
+  error and is not `ackAlways`-wrapped, so it has no cancel-caused WARN site.
 - **Expected:** cancel-caused repeats are stopped or quieted while genuine failures keep their WARN, reusing feature
   290's settled pattern where it fits.
 - Report: [docs/reports/2026-11-04-cancel-warn-remaining-sites-defect.md](../../../reports/2026-11-04-cancel-warn-remaining-sites-defect.md) (confidence: low)
@@ -60,9 +61,10 @@
 ## Fix Scope
 
 - Proto changes anticipated: **no** — logging and in-process caching only.
-- DB migrations anticipated: **no** — a negative cache need not be persisted; neither report names schema work.
-- Config key changes anticipated: **no** — unless design chooses a new negative-cache TTL / back-off key (open
-  question 3).
+- DB migrations anticipated: no service-schema migration (the negative cache is in-process); one config seed
+  migration, `marketdata_bars_miss_backoff`, for the key below.
+- Config key changes anticipated: **yes** — `marketdata` / `bars.miss_backoff_ms`, the miss back-off window (design
+  (B), D-5; answers open question 3).
 
 ## Open Questions
 

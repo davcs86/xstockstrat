@@ -91,11 +91,11 @@ Feature: readiness-caching-poll-discipline
     Then the persisted readiness verdict for "MYSZ" under "s-1" is 0 of 0 conditions with the unreadable-formula marker and is served as fresh (not stale, not the data-unavailable sentinel)
     And the pass continues so that the "AAPL" entry is also written
 
-  @AC-13 @FR-5 @characterization @feature-289
-  Scenario: A formula execution timeout still aborts EvaluateReadiness
+  @AC-13 @FR-5 @characterization @feature-289 @feature-308
+  Scenario: A formula execution timeout degrades only its symbol in EvaluateReadiness
     Given indicators ExecuteFormula for a component of "s-2" responds success=false with error "Formula execution timed out after 5000ms" (not an RPC deadline)
     When "admin-1" calls EvaluateReadiness for "MYSZ" with strategy "s-2"
-    Then the RPC fails with an unhandled-error status and ERROR "Unexpected [FormulaExecutionError]" is logged, as before feature 289, and the timeout is not converted into a 0 of 0 unreadable-formula result
+    Then the RPC returns OK, "MYSZ" is an empty 0 of 0 SymbolReadiness without the unreadable-formula marker, and no readiness-cache row is staged for it
 
   @AC-19 @FR-1 @FR-3 @regression @feature-289
   Scenario: The daily refresh and the readiness materializer (owner-only metadata) persist the marker

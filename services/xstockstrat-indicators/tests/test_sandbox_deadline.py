@@ -79,6 +79,7 @@ async def test_too_little_remaining_deadline_fails_without_spawning(monkeypatch)
     resp = await servicer.ExecuteFormula(_req(), _ctx(5.55))
 
     assert resp.success is False
+    assert resp.exit_reason == indicators_pb2.SANDBOX_EXIT_REASON_TIMEOUT
     assert "5550" in resp.error, resp.error
     assert calls == []
 

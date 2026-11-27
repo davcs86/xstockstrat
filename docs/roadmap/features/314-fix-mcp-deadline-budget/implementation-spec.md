@@ -191,7 +191,7 @@ These are recorded in context.md (Session 2026-11-20 — sdd-spec) as well.
 
 ### Step 1 — service: SetConfig ceiling, extract-budget bound and cross-key ordering gate
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/grpc/configServiceImpl.ts` — modify
@@ -199,26 +199,28 @@ These are recorded in context.md (Session 2026-11-20 — sdd-spec) as well.
 **Reviewers**: xstockstrat-config owner — config key naming (`<service>.<category>.<key>`), environment (`production`/`staging`) / global-per-user scoping, WatchConfig stream stability
 
 **Codebase Evidence**:
-- `SCALAR_BOUNDS_REGISTRY` at `configServiceImpl.ts:114`, keyed `${namespace}.${relative key}` (comment
-  `:112-113`); `lookupScalarBounds` at `:186-188`.
-- Rows: `'analysis.opportunity.live_enrich_timeout_ms': { minValue: 500, maxValue: 4000 }` `:144`;
-  `'marketdata.price.batch_timeout_ms': { minValue: 500, maxValue: 2500 }` `:149`;
-  `'agent.opportunities.read_timeout_seconds': { minValue: 30, maxValue: 55 }` `:150`;
-  `'portfolio.marketdata.quote_timeout_ms': { minValue: 500, maxValue: 8000 }` `:153`;
-  `'marketdata.quotes.batch_timeout_ms': { minValue: 500, maxValue: 5000 }` `:155`;
-  `'marketdata.quotes.mark_timeout_ms': { minValue: 100, maxValue: 2500 }` `:159`.
-- The ordering exists only as comments: `:141-142` ("the agent floor of 30 sits above analysis's own 27.05s
-  worst case") and `:151-152` ("the portfolio quote deadline (default 4000) must exceed max(batch, mark)
+Line numbers re-anchored on `origin/main-dev` @ `2b2dec92` (merged into the dev branch); re-anchor by content
+if they drift again.
+- `SCALAR_BOUNDS_REGISTRY` at `configServiceImpl.ts:115`, keyed `${namespace}.${relative key}` (comment
+  `:113-114`); `lookupScalarBounds` at `:188-189`.
+- Rows: `'analysis.opportunity.live_enrich_timeout_ms': { minValue: 500, maxValue: 4000 }` `:146`;
+  `'marketdata.price.batch_timeout_ms': { minValue: 500, maxValue: 2500 }` `:151`;
+  `'agent.opportunities.read_timeout_seconds': { minValue: 30, maxValue: 55 }` `:152`;
+  `'portfolio.marketdata.quote_timeout_ms': { minValue: 500, maxValue: 8000 }` `:155`;
+  `'marketdata.quotes.batch_timeout_ms': { minValue: 500, maxValue: 5000 }` `:157`;
+  `'marketdata.quotes.mark_timeout_ms': { minValue: 100, maxValue: 2500 }` `:161`.
+- The ordering exists only as comments: `:143-144` ("the agent floor of 30 sits above analysis's own 27.05s
+  worst case") and `:153-154` ("the portfolio quote deadline (default 4000) must exceed max(batch, mark)
   budget plus the warm read").
 - No `agent.extract.*` row exists in the registry (`grep -n "'agent\.extract" configServiceImpl.ts` → no hit).
-- `setConfig` at `:671`: prefixed-key refusal `:672-676`; `userIdParam` `:680` (`null` = global); admin /
-  internal-caller gate `:689-716` (`callback(ADMIN_SCOPE_ERROR)` `:714`); `env` `:732`; per-key bounds gate
-  `:753-765` returning `callback({ code: 3, message: … must be a number in [min, max] … })`; existence gate
-  `:767-792` whose `this.pool.query` reads `config.config_values` by (namespace, key, environment, user) at
-  `:773-777` and whose `catch` returns `callback({ code: 13, message: err.message })` at `:788-791`.
-- `extractValueData` at `:960`; logger `const log = getLogger('config:impl')` at `:30`, key-only warning
-  style at `:707-717`.
-- `listKeys` (`:858`) surfaces only per-key min/max (`:876`); it is not a write path.
+- `setConfig` at `:673`: prefixed-key refusal `:674-678`; `userIdParam` `:682` (`null` = global); admin /
+  internal-caller gate (`callback(ADMIN_SCOPE_ERROR)` `:721`); `env` `:739`; per-key bounds gate
+  `:760-772` returning `callback({ code: 3, message: … must be a number in [min, max] … })`; existence gate
+  starting at its comment `:774`, whose `this.pool.query` reads `config.config_values` by (namespace, key,
+  environment, user) and whose `catch` returns `callback({ code: 13, message: err.message })` at `:796-798`.
+- `extractValueData` at `:967`; logger `const log = getLogger('config:impl')` at `:31`, key-only warning
+  style `log.warn(msg, fields)` at `:719`.
+- `listKeys` (`:865`) surfaces only per-key min/max (`:883`); it is not a write path.
 
 **Lands with**: `Step 2`
 
@@ -228,12 +230,12 @@ These are recorded in context.md (Session 2026-11-20 — sdd-spec) as well.
 
 **Instructions**:
 1. Registry rows:
-   - `:150` becomes `{ minValue: 30, maxValue: 44 }`. Put a comment of at most two lines above it stating the
+   - `:152` becomes `{ minValue: 30, maxValue: 44 }`. Put a comment of at most two lines above it stating the
      invariant: identity auth (10 s) + the policy read (3 s) + this value must stay ≤ 57 s, 3 s under the MCP
      client's 60 s timeout.
    - Add `'agent.extract.call_budget_seconds': { minValue: 5, maxValue: 35 }` next to it, with a comment
      stating: auth (10 s) + the source lookup (10 s) + this value must stay ≤ 57 s.
-   - Reword the comments at `:141-142` and `:151-152` so they say the cross-key order is enforced by
+   - Reword the comments at `:143-144` and `:153-154` so they say the cross-key order is enforced by
      `CROSS_KEY_ORDERING` and "prevents inversion only" (strict `>`, no warm-read margin). Keep each ≤ 2 lines.
    - Do not change any other bound (per-key bounds of the five cross-hop keys stay as they are — R-1).
 2. Below `lookupScalarBounds`, add `CROSS_KEY_ORDERING`: a `ReadonlyArray` of exactly two rows, each
@@ -243,15 +245,15 @@ These are recorded in context.md (Session 2026-11-20 — sdd-spec) as well.
    - `greater: 'analysis.opportunity.live_enrich_timeout_ms'`, `lesser: ['marketdata.price.batch_timeout_ms']`.
    No DSL, no margin field (R-7). Build `CROSS_KEY_RULES_BY_KEY: ReadonlyMap<string, …>` once at module load
    from that table, mapping every member key (greater and lesser) to its rule(s).
-3. In `setConfig`, add the gate directly after the per-key gate (after `:765`) and before the existence gate
-   comment (`:767`). It runs only when `userIdParam === null` and `CROSS_KEY_RULES_BY_KEY` has
+3. In `setConfig`, add the gate directly after the per-key gate (after `:772`) and before the existence gate
+   comment (`:774`). It runs only when `userIdParam === null` and `CROSS_KEY_RULES_BY_KEY` has
    `${namespace}.${key}`. A per-user write and a key in no rule issue no query.
    - Read the sibling values with **one** `this.pool.query`: the global rows (`user_id IS NULL`) in `env` for
      the other member keys of the matching rule(s). Select `namespace, key, value_data`. The statement text
      must not contain `SELECT key, is_secret` (the existing recording pool in the test suite keys on it).
    - Parse each sibling with `Number(value_data)`. An absent row or a non-finite number skips that
      comparison and logs one `log.warn` carrying the namespace and key only — never a value.
-   - A query error takes the same path as `:788-791`: `log.error` without values, then
+   - A query error takes the same path as `:796-798`: `log.error` without values, then
      `callback({ code: 13, message: err.message })`, and return.
    - Compare with strict `>`, using the written value `Number(extractValueData(value))` (already finite: all
      five member keys are in `SCALAR_BOUNDS_REGISTRY`):
@@ -277,7 +279,7 @@ grep -n "CROSS_KEY_ORDERING\|CROSS_KEY_RULES_BY_KEY\|'agent.extract.call_budget_
 
 ### Step 2 — test: scalar bounds, `@AC-2` ceiling arithmetic and `@AC-3` cross-key ordering
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/__tests__/setConfigScalarBounds.test.ts` — modify
@@ -285,9 +287,9 @@ grep -n "CROSS_KEY_ORDERING\|CROSS_KEY_RULES_BY_KEY\|'agent.extract.call_budget_
 **Reviewers**: xstockstrat-config owner — config key naming, environment / global-per-user scoping, WatchConfig stream stability
 
 **Codebase Evidence**:
-- Loopback gRPC harness with a recording pool at `setConfigScalarBounds.test.ts:42-67`. The pool answers the
-  existence `SELECT key, is_secret FROM config.config_values` with one registered row (`:46-48`) and every
-  other statement with `{ rows: [] }` (`:49`); `insertQuery()` at `:37-39`; admin `setConfig` helper `:72-78`
+- Loopback gRPC harness (`before` at `setConfigScalarBounds.test.ts:41`) with a recording pool at `:42-50`. The
+  pool answers the existence `SELECT key, is_secret FROM config.config_values` (match at `:44`) with one
+  registered row (`:45`) and every other statement with `{ rows: [] }` (`:47`); `insertQuery()` at `:37-39`; admin `setConfig` helper `:72-78`
   (metadata `x-access-scope: '7'`, `x-user-id: 'tester'`).
 - Reject-and-write-nothing template: `:94-102` (`err.code === grpc.status.INVALID_ARGUMENT`,
   `insertQuery() === undefined`).
@@ -298,7 +300,7 @@ grep -n "CROSS_KEY_ORDERING\|CROSS_KEY_RULES_BY_KEY\|'agent.extract.call_budget_
 - Cross-source read precedent in this service's tests: `path.resolve(__dirname, '../../../../scripts/config-heal/signoff.md')`
   (`aliasRemovalRowsMigration.test.ts:9`).
 - Agent constants the arithmetic pins: `_RPC_TIMEOUT_S = 10.0` (`services/xstockstrat-agent/app/client.py:45`),
-  `_POLICY_READ_TIMEOUT_S = 3.0` (`services/xstockstrat-agent/app/tools.py:2824`).
+  `_POLICY_READ_TIMEOUT_S = 3.0` (`services/xstockstrat-agent/app/tools.py:2827`).
 - `tsconfig.json` `include: ["src/**/*"]` — tests compile with the build; `pnpm run test` is
   `tsc && node --test dist/__tests__/*.test.js` (`package.json:12`).
 
@@ -358,11 +360,11 @@ cases and every cross-key rejection case.
 
 ### Step 3 — migration: config `056_mcp_deadline_budget` (seed + global clamp + notify) and its real-DB assertion
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
-- `services/xstockstrat-config/migrations/056_mcp_deadline_budget.up.sql` — create
-- `services/xstockstrat-config/migrations/056_mcp_deadline_budget.down.sql` — create
+- `services/xstockstrat-config/migrations/057_mcp_deadline_budget.up.sql` — create
+- `services/xstockstrat-config/migrations/057_mcp_deadline_budget.down.sql` — create
 - `scripts/migration-assertions/config-mcp-deadline-budget.sql` — create
 - `scripts/config-wiring-stored.json` — modify (generated by `scripts/config-wiring-stored.py`; never hand-edited)
 - `scripts/config-wiring.json` — modify (one temporary `seeded-unread` entry; Step 5 deletes it)
@@ -370,13 +372,15 @@ cases and every cross-key rejection case.
 **Reviewers**: DBA — migration NNN numbering (no gaps, no conflicts), up+down pair present, run-order compliance with `scripts/db-migrate.sh`; xstockstrat-config owner — config key naming, environment / global-per-user scoping, WatchConfig stream stability
 
 **Codebase Evidence**:
-- Last config migration on `origin/main-dev` @ `fb52065c`: `055_analysis_live_enrich_ttl_reseed.{up,down}.sql`;
-  `053` is absent from trunk (claimed by feature 345). Next free above the tip: `056`.
+- Last config migration on `origin/main-dev` @ `2b2dec92`: `056_analysis_live_only_cycle_max_days.{up,down}.sql`
+  (feature 366, commit `540f8ff7`, #1608); `053` is absent from trunk (claimed by feature 345); feature 321
+  also claims `056` in flight. Next free above the tip: `057` (renumber checklist applied).
 - No existing seed of the key: `grep -rn "extract.call_budget_seconds" services/xstockstrat-config/migrations/` → no hit.
 - Seed column shape and conflict target: `048_webhook_fanout_callback_keys.up.sql:4-6,43`
   (`(namespace, key, value_type, value_data, description, default_value, consuming_service, updated_by,
   environment, user_id)`, `ON CONFLICT (namespace, key, environment, COALESCE(user_id, '')) DO NOTHING`).
-- Existing agent float rows are stored as `value_type 'float'` (`041_heal_config_keys_to_reader_catalog.up.sql:40,43,46`).
+- Existing agent float keys carry `value_type 'float'` (`041_heal_config_keys_to_reader_catalog.up.sql:40,43,46`
+  — rows of the `catalog_041` temp-table `VALUES`, not `config_values` inserts).
 - Notify CTE shape: `047_config_alias_removal_rows.up.sql:57-61`; down notify over a `RETURNING`:
   `047_config_alias_removal_rows.down.sql:23-24`. A CTE UPDATE with `caller_identity = NULL` and a final
   `SELECT` that forces the notify CTE: `055_analysis_live_enrich_ttl_reseed.up.sql:4-22`.
@@ -384,7 +388,7 @@ cases and every cross-key rejection case.
   key + value).
 - The audit trigger writes `NEW.updated_by` and `NEW.caller_identity` when `value_data` changes
   (`017_config_secrets_and_scoping.up.sql:66-78`).
-- The read edge parses float rows with `parseFloat(row.value_data)` (`configServiceImpl.ts:935`).
+- The read edge parses float rows with `parseFloat(row.value_data)` (`configServiceImpl.ts:942`).
 - Assertion-file pattern: `scripts/migration-assertions/webhook-fanout-callback.sql` (`BEGIN;` `:3`,
   `PREPARE … AS` copies `:8-63`, `DO $$ … RAISE EXCEPTION` checks, `ROLLBACK;` last line); a reported,
   not asserted, per-user count: `scripts/migration-assertions/config-046.sql:78-86`.
@@ -403,7 +407,7 @@ cases and every cross-key rejection case.
 **Covers**: —
 
 **Instructions**:
-1. Create `056_mcp_deadline_budget.up.sql` as **one statement**. Header comment ≤ 2 lines, number-free
+1. Create `057_mcp_deadline_budget.up.sql` as **one statement**. Header comment ≤ 2 lines, number-free
    content (sentinel `system:config-migration-feature-fix-mcp-deadline-budget`). Proposed text (not executed
    at spec time — no database; the CI `migration-rerun` job is where it is proven):
    ```sql
@@ -444,7 +448,7 @@ cases and every cross-key rejection case.
      single quote by doubling it.
    - The clamp is global-only (`user_id IS NULL`), has the `CASE` guard, and sets `caller_identity = NULL`
      (operator conditions; O-19, O-20, O-22). It has no inverted-pair heal (R-11, D-13).
-2. Create `056_mcp_deadline_budget.down.sql`: one statement that deletes only the seed rows — `namespace =
+2. Create `057_mcp_deadline_budget.down.sql`: one statement that deletes only the seed rows — `namespace =
    'agent' AND key = 'extract.call_budget_seconds' AND value_data = '35' AND user_id IS NULL AND environment
    IN ('staging', 'production') AND updated_by = '<sentinel>'` — `RETURNING namespace, environment`, and ends
    with the same DISTINCT `pg_notify` over that `RETURNING` (`047.down:23-24` shape). It is **forward-only
@@ -469,7 +473,7 @@ cases and every cross-key rejection case.
    - a final `DO` block that only `RAISE NOTICE`s the count of per-user rows of the clamped key whose value
      matches the regex and is `> 44` (reported, not asserted — `config-046.sql:78-86`).
 4. Regenerate `scripts/config-wiring-stored.json` with `scripts/config-wiring-stored.py` (routes in § Step
-   Dependencies). First prove the baseline: with the two `056` files held aside the generator must reproduce
+   Dependencies). First prove the baseline: with the two `057` files held aside the generator must reproduce
    the committed file with an empty diff; with them, the diff must be exactly the two new
    `agent` / `extract.call_budget_seconds` rows plus `inputs_sha256`. If Postgres is available also run
    `scripts/config-heal-dryrun.py --fresh` and confirm `scripts/config-heal/dryrun-fresh.tsv` is unchanged
@@ -480,9 +484,9 @@ cases and every cross-key rejection case.
 
 **Verification** (offline; no database):
 ```bash
-ls services/xstockstrat-config/migrations/056_mcp_deadline_budget.up.sql services/xstockstrat-config/migrations/056_mcp_deadline_budget.down.sql
-ls services/xstockstrat-config/migrations | tail -4          # 056 is the highest number; no duplicate 056
-! grep -q "UPDATE\|opportunities.read_timeout_seconds" services/xstockstrat-config/migrations/056_mcp_deadline_budget.down.sql   # exit 0 = no hit
+ls services/xstockstrat-config/migrations/057_mcp_deadline_budget.up.sql services/xstockstrat-config/migrations/057_mcp_deadline_budget.down.sql
+ls services/xstockstrat-config/migrations | tail -4          # 057 is the highest number; no duplicate 057
+! grep -q "UPDATE\|opportunities.read_timeout_seconds" services/xstockstrat-config/migrations/057_mcp_deadline_budget.down.sql   # exit 0 = no hit
 node scripts/check-config-wiring.mjs --final                  # exit 0: stored set fresh, the one temporary entry is not STALE
 node --test scripts/config-wiring.test.mjs
 ```
@@ -494,7 +498,7 @@ not reverse the clamp, by design (operator condition). The apply, replay and ass
 
 ### Step 4 — test: static test for `*_mcp_deadline_budget` and the PREPARE-copy pin
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/__tests__/mcpDeadlineBudgetMigration.test.ts` — create
@@ -557,7 +561,7 @@ RED capture (before Step 3's files exist): the suite fails with `expected exactl
 
 ### Step 5 — service: whole-call budget for `extract_email_content` and `extract_website_content`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/tools.py` — modify
@@ -572,16 +576,17 @@ RED capture (before Step 3's files exist): the suite fails with `expected exactl
   `{"raw_text": "\n\n".join(texts)}` `:704`. No per-URL catch and no whole-call bound.
 - `extract_website_content` at `:707`: `text = await _fetch_url(url, password=None, headers=request_headers)`
   `:738`; return `{"raw_text": text}` `:739`.
-- `_fetch_url` at `:2844`: per-request policy reads `:2855-2858` (`extract.max_redirects`,
+- `_fetch_url` at `:2847`: per-request policy reads `:2858-2861` (`extract.max_redirects`,
   `extract.max_bytes`, `extract.connect_timeout_seconds` 10.0, `extract.read_timeout_seconds` 30.0);
-  `r.raise_for_status()` `:2895`; `except egress.EgressBlocked` → `ToolError("content fetch refused by
-  egress policy")` `:2904-2907`.
-- `_agent_policy(key, default, cast)` at `:2827-2841` — snapshot read through `read_config_value("agent",
-  key)`; `_POLICY_READ_TIMEOUT_S = 3.0` at `:2824`.
-- Guard to reuse: `if not math.isfinite(timeout_s) or timeout_s <= 0: timeout_s = 40.0` at `:1914-1915`
-  (inside `list_opportunities`, `:1870`).
-- `_get_source` at `:2771` is bounded by `client._RPC_TIMEOUT_S` (`:2776-2777`); `_RPC_TIMEOUT_S = 10.0` at
-  `services/xstockstrat-agent/app/client.py:45`.
+  `r.raise_for_status()` `:2898`; `except egress.EgressBlocked` → `ToolError("content fetch refused by
+  egress policy")` `:2907-2910`.
+- `_agent_policy(key, default, cast)` at `:2830-2845` — snapshot read through `read_config_value("agent",
+  key)`; `_POLICY_READ_TIMEOUT_S = 3.0` at `:2827`.
+- Guard to reuse: `if not math.isfinite(timeout_s) or timeout_s <= 0: timeout_s = 40.0` at `:1917-1918`
+  (inside `list_opportunities`, `:1873`).
+- `_get_source` at `:2774` calls `client.list_signal_sources`, which carries the 10 s bound as
+  `timeout=_RPC_TIMEOUT_S` (`services/xstockstrat-agent/app/client.py:202`); `_RPC_TIMEOUT_S = 10.0` at
+  `client.py:45`. `tools.py:2780` only cites `client._RPC_TIMEOUT_S` in the deadline error message.
 - Imports at `tools.py:60-80`: `asyncio`, `math`, `logging` are imported; `httpx` is **not** (it is imported
   in `app/egress.py:16`; `httpx>=0.27.0` is a dependency, `pyproject.toml:7`). `log` at `:100`.
 - Raise-class guard: `tests/test_tool_errors.py:430-446` allows only `ToolError` raises in `tools.py` apart
@@ -599,11 +604,11 @@ RED capture (before Step 3's files exist): the suite fails with `expected exactl
 **Covers**: —
 
 **Instructions**:
-1. Add `import httpx` to the imports. Next to `_POLICY_READ_TIMEOUT_S` (`:2824`) add
+1. Add `import httpx` to the imports. Next to `_POLICY_READ_TIMEOUT_S` (`:2827`) add
    `_EXTRACT_CALL_BUDGET_DEFAULT_S = 35.0` with a ≤ 2-line comment stating the constraint (auth 10 s + source
    lookup 10 s + this ≤ 57 s), and a small helper `_extract_call_budget_s()` that reads
    `_agent_policy("extract.call_budget_seconds", _EXTRACT_CALL_BUDGET_DEFAULT_S, float)` once and returns the
-   default when the value is non-finite or `<= 0` (the `:1914-1915` guard). The key is read through
+   default when the value is non-finite or `<= 0` (the `:1917-1918` guard). The key is read through
    `_agent_policy` only — no second literal of the budget and no agent-side clamp to the config ceiling (R-4).
 2. `extract_email_content`:
    - Read the budget once per call, after `_get_source` and after the attachments loop, and only when `urls`
@@ -646,7 +651,7 @@ The agent test suite is green only with Step 6's edits in the tree (atomic unit)
 
 ### Step 6 — test: extract whole-call budget (`@AC-1`) and the affected guards
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_extract_call_budget.py` — create
@@ -744,7 +749,7 @@ website cases raise no `ToolError`, the budget-guard and real-reader cases fail 
 
 ### Step 7 — test: `@AC-2` `list_opportunities` worst case at the SetConfig ceiling
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_list_opportunities_deadline.py` — modify
@@ -759,13 +764,13 @@ website cases raise no `ToolError`, the budget-guard and real-reader cases fail 
   - auth: `stub.ValidateToken(…, timeout=client._RPC_TIMEOUT_S)` in `validate_bearer_claims`
     (`services/xstockstrat-agent/app/auth.py:74-80`; the same call in `validate_bearer_jwt` `:41-46`);
   - policy read: `asyncio.wait_for(_agent_policy("opportunities.read_timeout_seconds", 40.0, float),
-    _POLICY_READ_TIMEOUT_S)` (`tools.py:1907-1910`);
-  - analysis: `client.list_opportunities(…, timeout=timeout_s)` (`tools.py:1917-1919`), mapped by
-    `_grpc_error_message(e, deadline_s=timeout_s)` (`tools.py:1921`) to
+    _POLICY_READ_TIMEOUT_S)` (`tools.py:1910-1913`);
+  - analysis: `client.list_opportunities(…, timeout=timeout_s)` (`tools.py:1920-1922`), mapped by
+    `_grpc_error_message(e, deadline_s=timeout_s)` (`tools.py:1924`) to
     `… within {deadline_s:g}s (deadline exceeded); …` (`tools.py:263-271`).
 - `_rpc_error(code, details)` builds an `AioRpcError` (`tests/conftest.py:69-73`).
 - The ceiling row: `'agent.opportunities.read_timeout_seconds': { minValue: 30, maxValue: … }`
-  (`services/xstockstrat-config/src/grpc/configServiceImpl.ts:150`; 44 after Step 1).
+  (`services/xstockstrat-config/src/grpc/configServiceImpl.ts:152`; 44 after Step 1).
 - `@AC-11 @feature-273` already pins the auth leg's own bound (`tests/test_auth_deadline.py:51`).
 
 **TDD**: `red-green required`
@@ -814,7 +819,7 @@ grep -n "def .*fixture\|from .conftest\|conftest" tests/test_list_opportunities_
 
 ### Step 8 — docs: key tables, tool contract, rollout runbook, findings
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/`, `services/*/CLAUDE.md`
 **Files**:
 - `services/xstockstrat-agent/CLAUDE.md` — modify
@@ -836,10 +841,11 @@ grep -n "def .*fixture\|from .conftest\|conftest" tests/test_list_opportunities_
   max(`marketdata.quotes.batch_timeout_ms` (2500), `marketdata.quotes.mark_timeout_ms` (500)) plus the warm
   read"), written against the batch default, while the batch ceiling is 5000.
 - `docs/patterns/config-governance.md`: author-sentinel table `:128-144` (number-free sentinel row `:143`);
-  § Per-Feature Registered Keys `:146` (newest first; feature 330 at `:152`); feature 227 table row `:434`
-  (`[30,55]`); feature 207 section `:463-476`.
+  § Per-Feature Registered Keys `:146` (newest first; feature 366 at `:152`, feature 330 at `:173`); feature
+  227 table row `:455` (`[30,55]`); feature 207 section `:484-498`.
 - `docs/runbooks/mcp-tools.md`: `extract_email_content` `:194` (Return and Errors table below it),
-  `extract_website_content` `:228`, `list_opportunities` errors `:1272-1275` ("bounds `[30,55]`" at `:1274`).
+  `extract_website_content` `:228`, `list_opportunities` section `:1198`, its errors `:1277-1280` ("bounds
+  `[30,55]`" at `:1279`).
 - `docs/runbooks/config-rollout.md`: § Step 3 — Rollout Multiple Keys `:154-176` (sequential `SetConfig`,
   no batch write); § Step 6 — Post-Deploy Read-Back `:217-228`.
 - PLAT-13: `docs/context-constitution.md:37` ("The ordering is **not** enforced by per-key bounds (see
@@ -869,13 +875,13 @@ grep -n "def .*fixture\|from .conftest\|conftest" tests/test_list_opportunities_
    `extract.call_budget_seconds`, float, default 35, bounds [5,35], reader `tools.py:_extract_call_budget_s`
    via `_agent_policy`, seed migration by suffix, live via the config snapshot; the ceiling change; the
    `CROSS_KEY_ORDERING` rule with its two rows, global-only scope and remedy; the migration's clamp and
-   sentinel). Change `:434` to `[30,44]`. Add the sentinel
+   sentinel). Change `:455` to `[30,44]`. Add the sentinel
    `system:config-migration-feature-fix-mcp-deadline-budget` to the author-sentinel table.
 4. `docs/runbooks/mcp-tools.md`: for `extract_email_content`, document the partial return
    (`raw_text`, `error` `PARTIAL: N of M URLs not fetched (deadline: a, transport: b)`, `unfetched_urls`),
    the 35 s whole-call budget and that it can cut off a fetch that used to finish after 35 s; for
    `extract_website_content`, add the `DEADLINE_EXCEEDED: content fetch did not complete within Ns` and
-   `FETCH_FAILED: <ExceptionClass>` rows; change `:1274` to `[30,44]`.
+   `FETCH_FAILED: <ExceptionClass>` rows; change `:1279` to `[30,44]`.
 5. `docs/runbooks/config-rollout.md`: in § Step 3 add the cross-key write order — **raise the greater key
    first** (`portfolio` / `marketdata.quote_timeout_ms`, `analysis` / `opportunity.live_enrich_timeout_ms`),
    then the lesser; the gate covers global writes only; two concurrent writes to a greater and a lesser key
@@ -912,7 +918,7 @@ cd services/xstockstrat-agent && uv run pytest tests/test_extraction_instruction
 
 ### Step 9 — docs: enumeration and read-back per environment (operator-run)
 
-**Status**: `pending`
+**Status**: `skipped`
 **Service**: `xstockstrat-config` (live databases; results recorded in `context.md`)
 **Files**:
 - `docs/roadmap/features/314-fix-mcp-deadline-budget/context.md` — modify (results only)
@@ -984,3 +990,77 @@ Pass criteria are the operator's readings in instructions 1, 3 and 4.
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+### Steps 1+2 — Step 2 Verification block exits 1 on success (2026-11-26)
+- **Spec said**: Step 2's Verification ends with `grep -n "__tests__/fixtures" … # expect no new import`.
+- **Actual**: on a passing tree that grep matches nothing and exits 1, so the block's exit is 1 and it hides
+  the exit of the `lint && test:coverage && c8 check-coverage` line. The block also cannot run as written
+  inside one `( … )` subshell, because the inline `#` comment swallows a closing paren on the same line. The
+  executor put the paren on its own line.
+- **Disposition**: the block was run verbatim and judged from its log: lint 0 errors, `ℹ pass 419` /
+  `ℹ fail 0`, coverage lines 92.63 % with no c8 `ERROR` line, and the grep printed nothing. No spec edit.
+
+### Steps 3+4 — Step 4 Verification block exits 1 on success (2026-11-26)
+- **Spec said**: Step 4's Verification ends with `grep -n "__tests__/fixtures" … # expect no hit`.
+- **Actual**: this is the same problem as the Steps 1+2 entry above. On a passing tree the grep matches
+  nothing and exits 1, so the block exits 1 and hides the exit of the `lint && test:coverage && c8
+  check-coverage` line. The executor put the closing paren on its own line, as before.
+- **Disposition**: the block was run verbatim and judged from its log `.sdd-logs/v-3.log`. Lint reported
+  0 errors, the tests `# pass 427` / `# fail 0`, coverage `All files | 92.63` lines with no c8 `ERROR`
+  line, and the grep printed nothing. No spec edit.
+
+### Steps 5+6 — `app/main.py` added to the unit's files (2026-11-27)
+- **Spec said**: Steps 5+6 touch `tools.py`, `scripts/config-wiring.json` and three test files. Step 6
+  asserts that no captured log record on a partial call contains a URL or host.
+- **Actual**: httpx's own INFO record `HTTP Request: GET <url> …` (logger `httpx`) carries the URL, so the
+  assertion cannot pass with only the specced files (the RED log shows the record).
+- **Disposition**: operator-approved scope expansion (Option A, 2026-11-27). One line in
+  `services/xstockstrat-agent/app/main.py` sets `logging.getLogger("httpx")` to WARNING. The Step 6
+  assertion is unchanged; the test imports `app.main` so the process level applies. Step 8 adds the
+  findings row.
+
+### Steps 5+6 — Verification block exit semantics and node version (2026-11-27)
+- **Spec said**: Step 6's block ends with a C-13 `grep`, and Step 5's block ends with `! grep -q …`.
+- **Actual**: each block's exit is its last command's exit, so it hides the pytest and
+  `check-config-wiring --final` exits. The default PATH node is v22, so the blocks ran with
+  `/opt/node24/bin` first on PATH (root CLAUDE.md pins Node 24).
+- **Disposition**: both blocks were run verbatim and judged from their logs. Step 6: ruff
+  `All checks passed!`, `80 files already formatted`, `848 passed`, coverage `TOTAL … 89%` with the 40 %
+  gate reached. Step 5: ruff clean, and the wiring check printed only the two pre-existing `REPORTED:`
+  lines. `check-config-wiring --final` was also run on its own and exited 0. No spec edit.
+
+### Step 7 — Verification block: vacuous `git status` line and exit semantics (2026-11-27)
+- **Spec said**: Step 7's block runs `git status --short services/xstockstrat-config/` to show that the
+  RED mutation was restored, and ends with a C-13 `grep`.
+- **Actual**: the block's first line `cd`s into `services/xstockstrat-agent`, so the `git status` pathspec
+  resolves to a directory that does not exist. git prints `could not open directory
+  'services/xstockstrat-agent/services/xstockstrat-config/'` and the check passes vacuously. The block's
+  exit is the trailing grep's exit, so it also hides the ruff and pytest exits.
+- **Disposition**: the block was run verbatim and judged from its logs. The restore was checked
+  separately with `git status --short` from the worktree root, which showed only the step's test file. Run
+  `.sdd-logs/v-1.log` failed on ruff E501 in the new test, not on the behaviour, so it does not count as RED.
+  RED is `.sdd-logs/v-2.log` and GREEN is `.sdd-logs/v-3.log`. No spec edit.
+
+### Step 8 — findings-row placement, a partial config row, and the node PATH (2026-11-27)
+- **Spec said**: the Steps 5+6 entry above says "Step 8 adds the findings row" for the `httpx` logger change.
+  Instruction 7 says to remove or resolve the config cross-key row (`:24`). Step 8's Verification runs `node`.
+- **Actual**: the agent's own findings file is not in Step 8's **Files**. So the `httpx` row went into the root
+  findings § Resolved table, which already holds agent-specific rows. The config row also names an invariant
+  feature 314 does not enforce (retention floor > lookback ceiling), so it was marked `◐ PARTIAL (feature 314)`
+  in place instead of resolved. The default PATH node is v22, so the block ran with `/opt/node24/bin` first on
+  PATH, as in the earlier steps.
+- **Disposition**: the block was run verbatim and judged from `.sdd-logs/v-1.log` (`exit=0`; the
+  `[30,55]` grep printed nothing; `45 passed`). `--doc-check` was also run alone (`.sdd-logs/v-2.log`, `exit=0`,
+  no output). No spec edit.
+
+### Step 9 — deferred to the operator after the integration PR deploys (2026-11-27)
+- **Spec said**: Step 9 runs the pre-deploy enumeration on the staging and production databases, the
+  post-rollout query, the `get_config` / `list_config_keys` read-back and a dev smoke test, and records the
+  readings in context.md.
+- **Actual**: the executing agent has no read path to either database and the feature is not deployed, so none
+  of the readings could be taken. The step was raised as a blocker.
+- **Disposition**: operator decision B (2026-11-27): Step 9 is `skipped` here and is operator-run after the
+  integration PR deploys. The four outstanding checks are a context.md Open Thread, and the sign-off stays
+  "unenumerated" until the operator runs them. Production readings are waived (standing ruling: production is
+  out of scope). The Verification block was still run; `check-config-wiring --final` exited 0. Step 9 does not
+  block `code-completed` (§ Step Dependencies). No spec edit.

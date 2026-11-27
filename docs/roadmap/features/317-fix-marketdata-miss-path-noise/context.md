@@ -643,3 +643,331 @@ Unresolved ⚠ carried into execution (`/sdd-execute` announces each at every ch
   impl-spec. Re-run the `fetchAndCacheBars` peer grep before unit B2. `configServiceImpl.ts` peer 294 is
   historical, low risk.
 - Overlap scan limit: the scan read a local checkout and could not read branch refs.
+
+## Session 2026-11-21 — operator rulings on the four spec-time choices, recorded by the orchestrator (verbatim)
+
+Question 1 (handoff § 3.10): "317 (fix-marketdata-miss-path-noise), spec-time choice 1 of 4: part (B) lands as two commits (bounds unit Steps 5+6 first, then Steps 7–10), because one commit would be five steps, above the four-step unit cap. Bounds land first so the seeded key never exists without write bounds. Confirm?" — Operator's answer: "Confirm two commits (Recommended)".
+
+Question 2: "317, spec-time choice 2 of 4: the `resolveOffMs` wrapper needs one forwarder entry and two receiver entries in scripts/config-wiring.json (registry entries, not baseline findings); without them `stream.bar_ingest_backoff_ms` turns `seeded-unread` (prototyped on a scratch copy of 36aed60b). Fallback per O-15 is a parallel reader. Confirm the registry entries?" — Operator's answer: "Use the parallel reader fallback". Option text as offered: "Skip the registry entries and add a parallel reader per O-15 (more code in marketdata)."
+
+Question 3: "317, spec-time choice 3 of 4: the miss line (`GetBars: no bars stored and live fetch returned none`) is logged through `warnUnlessDone` in `liveRefetch`, so a client cancel on an implicit miss logs at Debug instead of WARN. design.md did not list this site. Confirm?" — Operator's answer: "Confirm warnUnlessDone (Recommended)".
+
+Question 4: "317, spec-time choice 4 of 4: `UpdatePositionBracket` moves from `r.pool.Exec` to `r.db.Exec` (one line, the only non-logging production change in portfolio unit C) so the bracket test can reuse the `cancelingDB` seam. Confirm the repo-seam change?" — Operator's answer: "Confirm r.db.Exec (Recommended)".
+
+Orchestrator note (not an operator quote): choices 1, 3 and 4 match the spec. Choice 2 overrides the spec: the spec adds the three `config-wiring.json` registry entries; the ruling is the O-15 parallel-reader fallback instead. 317's implementation spec (the step that adds `resolveOffMs` and the config-wiring registry entries) must be amended to the parallel reader, and its Verification re-run against the config-wiring gate, before `/sdd-execute`. Not yet done; re-review after the amendment (`/sdd-review fix-marketdata-miss-path-noise impl-spec`).
+
+## Session 2026-11-26 — sdd-spec re-spec (operator ruling: parallel reader for resolveOffMs)
+
+- Applied the 2026-11-21 operator rulings to `implementation-spec.md`. Spec-time decisions 1, 3, 4 are marked confirmed; decision 2 is marked overridden by the operator; decisions 5 and 6 were not put to the operator and stay open. Step numbering, step count (11), unit table and the "bounds land first" order are unchanged.
+- Changes:
+  - Step 10: the `resolveOffMs` wrapper, the three `scripts/config-wiring.json` registry entries and the wrapper's "check first / fallback" block are removed. `scripts/config-wiring.json` leaves the Files list. `resolveBarsMissBackoff` and its two constants are appended to `bar_hold.go` (additive; `resolveBarIngestBackoff`, `barIngestBackoffKey` and `bar_hold_test.go` stay byte-identical, O-15). A gate check follows right after, and `bars_miss.go` keeps `barsFetch`, `missFetchDue`, `noteMissResult`, `liveRefetch`. Verification gains `git diff --stat origin/main-dev -- scripts/config-wiring.json` empty, a no-`resolveOffMs` grep, and an additive-only `bar_hold.go` diff.
+  - Step 8 evidence and Step 11 (instruction 5, config-governance entry): the reader's file is `bar_hold.go`; "three registry entries" becomes "no registry entry".
+  - Step Dependencies: the `scripts/config-wiring.json` peer-overlap note with `345-authelia-sso` is reworded (this feature no longer edits it); a `bar_hold.go` append-only note is added.
+- Gate evidence (read from `scripts/check-config-wiring.mjs` on `origin/main-dev` @ `2b2dec92`, byte-identical to `36aed60b`; prototyped on a scratch worktree, never committed): a `cfg.GetInt(barsMissBackoffKey, …)` read is attributed through `registry.receivers["<file>:cfg"]` (`:547-552`). In a new `bars_miss.go` it is `unattributed`; appended to `bar_hold.go`, under the existing `bar_hold.go:cfg` entry (`scripts/config-wiring.json:115`), `--final` exits 0 and `node --test scripts/config-wiring.test.mjs` passes 75/75.
+- Why the reader sits in `bar_hold.go`: the ruling says to skip the registry entries, and the O-15 fallback text in the earlier spec still added one receiver entry (`bars_miss.go:cfg`). Zero entries needs a file whose `cfg` receiver is already registered. The cost is a miss-path reader beside the bar-ingest one.
+- Self-review: no subagent tool in this run, so `spec-reviewer` was not spawned; the review was a manual grep of the amended spec (no residual `resolveOffMs` forwarder, `bars_miss.go:resolveBarsMissBackoff` or "three registry" text), a re-check of every new `path:line` against the gate files, and a prototype run of the gate.
+- Still open:
+  - Operator to confirm the reader's home: `bar_hold.go` with no registry change (as specced), or `bars_miss.go` with one receiver entry `bars_miss.go:cfg` (prototyped green). Executor does not choose (P-03).
+  - Not exercised: the real regenerated `scripts/config-wiring-stored.json` (no `migrate` binary here; the scratch run hand-added the two seed rows), `go build` of the package (modules not downloadable offline), and the pre-commit jscpd run on the duplicated reader (about eight lines, estimated under the 100-token floor).
+  - design.md Build order step 3 and the C-18 line still name the `resolveOffMs` wrapper; not edited, superseded by the O-15 "otherwise" branch and this ruling.
+  - `origin/main-dev` has moved to `2b2dec92` (`marketdata_service.go` changed by 26 lines since `36aed60b`); spec anchors are unchanged and still re-grepped at `/sdd-execute` BRANCH SYNC.
+  - Re-run `/sdd-review fix-marketdata-miss-path-noise impl-spec` after this amendment.
+
+## Session 2026-11-26 — operator ruling on reader placement, recorded by the orchestrator (verbatim)
+
+Question (the open item left by the sdd-spec re-spec of 2026-11-26): where `resolveBarsMissBackoff` lives. In `bar_hold.go` with no registry change (as specced), or in `bars_miss.go` with exactly one receiver entry `bars_miss.go:cfg` in `scripts/config-wiring.json` (prototyped green).
+
+Operator's answer, 2026-11-26: "bars_miss.go, one receiver entry" — option text as offered: "Keep the reader beside the miss-path code in bars_miss.go and add exactly one `bars_miss.go:cfg` receiver entry to scripts/config-wiring.json. Touches the 345-authelia-sso overlap file again."
+
+Amendment summary (implementation-spec.md; step count, numbering and unit order unchanged):
+- Spec-time decision 2 now reads: overridden by the operator, parallel reader in `bars_miss.go` with one receiver entry; no `resolveOffMs` wrapper, no forwarder.
+- Step 10: `scripts/config-wiring.json` is back on the Files list with exactly one `registry.receivers` entry, `bars_miss.go:cfg`, placed after `bar_hold.go:cfg` (`:115`); `bar_hold.go` is not modified and `resolveBarIngestBackoff` stays byte-identical (O-15). The key constants and `resolveBarsMissBackoff(cfg intGetter)` are in `bars_miss.go` (parameter named `cfg`). The gate check runs after the entry and the reader exist. Verification: the `config-wiring.json` diff is exactly the one added line, no `resolveOffMs` anywhere, empty `bar_hold.go` diff.
+- Evidence kept from the prototype (scratch copy of `origin/main-dev` @ `2b2dec92`, seed rows hand-added to the scratch stored set): reader in `bars_miss.go` without the entry is `unattributed`; with the one entry `--final` exits 0 and `node --test scripts/config-wiring.test.mjs` passes 75/75.
+- Step 8 and Step 11: the reader's file is `bars_miss.go` again; the registered-keys text names the one receiver entry.
+- Step Dependencies: the `345-authelia-sso` overlap note on `scripts/config-wiring.json` is restored (disjoint keys; on a conflict keep both sets); the `bar_hold.go` append-only note is removed.
+- Still open: the real regenerated `scripts/config-wiring-stored.json`, `go build` and the jscpd run were not exercised (see the earlier 2026-11-26 entry); re-run `/sdd-review fix-marketdata-miss-path-noise impl-spec`.
+
+## Session 2026-11-26 — independent impl-spec review (spec-reviewer), recorded by the orchestrator
+
+Verdict: PASS WITH WARNINGS, no blockers (independent `spec-reviewer` subagent, older main-dev checkout). The reader-placement amendment (parallel reader `resolveBarsMissBackoff` in `bars_miss.go` + one `bars_miss.go:cfg` receiver entry) is applied consistently; the config-wiring gate logic (`check-config-wiring.mjs:547-552`) attributes it. Warning fixed: `design.md` Build order step 3 (:150) and the C-18 line (:197) carry a supersession note pointing to impl-spec decision 2 / the O-15 parallel-reader branch. Still open at execute time: config migration `056` is now taken on `main-dev` by feature 366 (next free `057`); 314, 317 and 321 all need the renumber checklist and a merge order; re-grep 36aed60b-only anchors after BRANCH SYNC.
+
+## Session 2026-11-26 — sdd-execute sequential (sdd-batch-execute)
+
+Up-front confirmation: the operator approved the plan with this record (binding, verbatim):
+
+```json
+{"mainDev":"f802b184b13bd899d858c4b0349a616e9981b9d9","dev":"7a3692fddf316fae2e981a37c075ea7f629bcab0","specHash":"12931c87fab189d28a43469b94f2dacd8e5c9a0b","directive":"conditional","pending":[1,2,3,4,5,6,7,8,9,10,11],"mismatches":[{"n":8,"detail":"Migration number 056 is no longer free. On the merged tree (feature tip 7a3692fd with origin/main-dev f802b184 merged in), services/xstockstrat-config/migrations/ already holds 056_analysis_live_only_cycle_max_days.{up,down}.sql, added by feature 366 opportuni"},{"n":11,"detail":"docs/patterns/config-governance.md has changed. The newest-first `## Per-Feature Registered Keys` list now starts with `### feature 366 — opportunity-live-only-rotation` at :152, not `### feature 330` (330 is now at :173). The single-key marketdata precedent `"}]}
+```
+
+- Branch sync: `origin/main-dev` `f802b184` merged into the feature branch as `a68b1294` (merge-train resolver:
+  nothing to resolve; `ledger-guard`: clean).
+- Tooling setup (steps 1-11, detection only): go1.27.0 ✓ · golangci-lint ✗ 2.5.0 built with go1.25.1 (pinned
+  v2.14.0 install via `GOTOOLCHAIN=go1.27.0 go install …` at the first Go step) · Node v24.22.3 ✓ at
+  `/opt/node24/bin` (PATH default is v22.23.5) · pnpm ✓ 9.15.9 · migration step: no tool. The Step 8
+  regeneration route (Postgres + `migrate`, or the CI artifact) is still to be confirmed at the Step 7 preflight.
+- Re-spec (directive conditional), steps 8 and 11 only:
+  - `59cb6888ce542c523ad092b93039d17fbc9a3921` respec(fix-marketdata-miss-path-noise): align steps 8,11 with current codebase
+  - Step 8: the seed is now `057_marketdata_bars_miss_backoff` (`056` is taken on trunk by feature 366). The
+    merge checklist also found `056_mcp_deadline_budget` on the unmerged `fix-mcp-deadline-budget` branch, which
+    may take `057` first; re-run the checklist before unit 7-10.
+  - Step 11: the config-governance entry goes above the current first entry (feature 366 at `:152`); the
+    feature-352 precedent is at `:187-200`.
+  - Left as written (outside the step bodies the re-spec may edit): the Step 8 heading, spec-time decision 6
+    (`:125`) and the § Step Dependencies spec-time result still say `056`.
+
+```sdd-batch-setup
+{"mainDev":"f802b184b13bd899d858c4b0349a616e9981b9d9","date":"2026-11-26"}
+```
+
+## Session 2026-11-27 — sdd-execute sequential (sdd-batch-execute), unit A (Steps 1+2)
+
+- Tree: detached at `origin/feature/fix-marketdata-miss-path-noise` @ `5450a6a5` (post BRANCH SYNC `a68b1294`).
+  Every Step 1/2 anchor re-grepped: all symbols and messages present, lines shifted (e.g. `fetchAndCacheBars`
+  `:418`, `GetLatestQuote` `:641`, `ingestRecentBarsForTimeframe` `:1434`).
+- Tooling: go1.27.0 ✓ · golangci-lint ✓ v2.14.0 built with go1.27.0 (`$(go env GOPATH)/bin`, first on `PATH`;
+  `/usr/local/bin` is 2.5.0) · Go modules ✓ (`go build` downloaded one module).
+
+### Step 1 — test: marketdata cancel-quiet regression tests (AC-1) [done]
+- Unit A (Steps 1+2, one commit). Added `err` to `barsCancelSource`; created `cancel_quiet_test.go` with the eight
+  specced tests plus two level-aware helpers over `warmLogRecorder.recs` (`cqCount`, `cqTotal`) and the mid-cycle
+  `cancelingInsertStore`.
+- TDD: AC-1 red (throwaway no-op `warnUnlessDone` stub, deleted before commit): `TestFetchAndCacheBars_AC1_CanceledLiveFetchLogsNoWarn`
+  "1 WARN … want 0", `TestWarnUnlessDone`, `…DoneCtxReturnsBeforeFetch` "multi = 1", `…CancelMidCycleQuietsInsertWarn`
+  "3 WARN … want 0", `TestCancelQuietSites_Structural` failed by assertion; the three characterization controls
+  passed → green: all pass (15 `--- PASS`, 0 FAIL), module total 87.5%, golangci-lint 0 issues.
+- Files modified: `services/xstockstrat-marketdata/internal/service/cancel_quiet_test.go`, `services/xstockstrat-marketdata/internal/service/marketdata_service_test.go`
+- Deviations: Verification shell framing (Deviation Log, Deviation 1).
+
+### Step 2 — service: `warnUnlessDone` at the cancel-caused marketdata WARN sites [done]
+- Unit A. Added `warnUnlessDone` above `fetchAndCacheBars`; replaced the eight specced `slog.WarnContext` sites;
+  `ingestRecentBarsForTimeframe` returns on a done process `ctx` first and again before `applyBarCycle`.
+  `resolve source failed`, `cache insert failed`, the fetch-deadline WARN and the warm poller are unchanged.
+- TDD: green per Step 1 (unit red→green); `grep -c 'warnUnlessDone(ctx, '` = 8; both kept WARNs present.
+- Files modified: `services/xstockstrat-marketdata/internal/service/marketdata_service.go`
+- Deviations: Deviation 1 (shared).
+
+## Session 2026-11-27 — sdd-execute sequential (sdd-batch-execute), unit C (Steps 3+4)
+
+- Tree: detached at `origin/feature/fix-marketdata-miss-path-noise` @ `baf10104`. Every Step 3/4 anchor was
+  re-grepped, and all symbols are present at shifted lines: `processAccountDeregistered` `:1590`, the
+  `processPositionSync` stop closure `:1667`, `processBracketUpdate` `:1746`, `processBalanceSync` `:1794`,
+  `UpdatePositionBracket` `r.pool.Exec` `portfolio_repo.go:379`.
+- Tooling: go1.27.0 ✓ · golangci-lint ✓ v2.14.0 built with go1.27.0 (`$(go env GOPATH)/bin`, first on `PATH`).
+- Config-key wiring gate: not applicable (no config key or migration in this unit).
+
+### Step 3 — test: portfolio cancel-quiet tests (deregistration, bracket, balance) [done]
+- Unit C (Steps 3+4, one commit). Appended the nine specced tests to `portfolio_sync_cancel_test.go`, plus
+  inline payload builders (`deregisterPayload`, `bracketPayload`, `balancePayload`) and `failingCanceledDB` (C-13:
+  one consumer each, this file).
+- TDD red, run against the pre-unit tree:
+  - Deregistration: `…CanceledCtxMakesNoWrite` failed with "err = <nil>, want context.Canceled" and "execs = 2,
+    want 0". `…WriteThatSeesCancellation…` failed with "execs = 2, want 1" and "1 WARN records".
+    `…CanceledIsNeverParked` failed with "err = <nil>".
+  - Bracket: `TestProcessBracketUpdate_DoneCtxWriteFailureLogsNoWarn` hit the predicted nil-pointer panic in
+    `pgxpool.(*Pool).Exec` at `portfolio_repo.go:379`.
+  - Balance, in a supplementary run: `…DoneCtxWriteFailureLogsNoWarn` failed with "1 WARN records … upsert
+    account balance failed". The live-ctx characterization controls passed.
+- Green: Step 3's targeted tests show 28 `--- PASS` and 0 FAIL, the nine new tests included. Module total is 79.1%
+  (≥ 40%), golangci-lint reports 0 issues, and the full Verification exits 0.
+- Files modified: `services/xstockstrat-portfolio/internal/service/portfolio_sync_cancel_test.go`
+- Deviations: Deviation 2 (Verification shell framing; supplementary RED and count runs).
+
+### Step 4 — service: portfolio cancel-quiet in the deregistration, bracket and balance consumers [done]
+- Unit C. In `processAccountDeregistered`, a `stop` closure (Debug `account deregistration stopped: context done`,
+  returning `ctx.Err()`) is now checked before each delete and inside each delete's error branch. The bracket
+  and balance write-error branches log Debug and return on a done ctx; both stay void and `ackAlways`.
+  `UpdatePositionBracket` uses `r.db.Exec`. `processOrderFill`, `ackAlways`, `observed` and the wiring are
+  unchanged.
+- TDD: green per Step 3 (unit red→green). `stopped: context done` appears 4 times, both `ackAlways` wirings are
+  present, and there is no `r.pool.Exec`.
+- Files modified: `services/xstockstrat-portfolio/internal/service/portfolio_service.go`, `services/xstockstrat-portfolio/internal/repository/portfolio_repo.go`
+- Deviations: Deviation 2 (shared).
+
+## Session 2026-11-27 — sdd-execute sequential (sdd-batch-execute), unit B1 (Steps 5+6)
+
+- Tree: detached at `origin/feature/fix-marketdata-miss-path-noise` @ `c7cd98b7`. Anchors re-grepped:
+  `TIMEOUT_KEY_FORMS` `setConfigScalarBounds.test.ts:270`, neighbour row `:283`; `SCALAR_BOUNDS_REGISTRY`
+  `configServiceImpl.ts:114`, neighbour entry `'marketdata.stream.bar_ingest_backoff_ms'` now `:165`;
+  `lookupScalarBounds` `:187-189`. No `miss_backoff` string existed under `services/` before this unit.
+- Tooling: Node v24.22.3 (`/opt/node24/bin`, prepended to `PATH`) · pnpm 9.15.9 · main-checkout `node_modules` linked;
+  no install.
+- Config-key wiring gate: the product spec has no `## Config Key Changes` section and the unit adds no migration;
+  Step 6's own Verification runs `node scripts/check-config-wiring.mjs --final`, which exited 0 (two pre-existing
+  `REPORTED: … readers-disagree` lines, analysis `fundamentals.provider` and trading `trading_state`, unrelated).
+
+### Step 5 — test: `SetConfig` bounds for `marketdata` / `bars.miss_backoff_ms` [done]
+- Unit B1 (Steps 5+6, one commit). Added one `TIMEOUT_KEY_FORMS` row after the `stream.bar_ingest_backoff_ms` row;
+  the existing loops generate the accept, reject and prefixed-refusal cases.
+- TDD red (pre-unit tree): "rejects marketdata/bars.miss_backoff_ms just outside [0, 21600000] and writes nothing"
+  failed with `AssertionError: -1 must be rejected` (`undefined !== 3`), tests 407 / pass 406 / fail 1 → green:
+  tests 407 / pass 407 / fail 0, All files 92.32% lines, lint clean, union Verification exit 0.
+- Files modified: `services/xstockstrat-config/src/__tests__/setConfigScalarBounds.test.ts`
+- Deviations: Deviation 3 (Verification shell framing).
+
+### Step 6 — service: `SCALAR_BOUNDS_REGISTRY` entry for `marketdata.bars.miss_backoff_ms` [done]
+- Unit B1. Added `'marketdata.bars.miss_backoff_ms': { minValue: 0, maxValue: 21600000 }` after the feature-291
+  entry, with a two-line constraint comment (0 = kill switch; 6h ceiling bounds the first-live-fetch delay).
+- TDD: green per Step 5 (unit red→green); the grep finds one entry (`:168`); `--final` exit 0.
+- Files modified: `services/xstockstrat-config/src/grpc/configServiceImpl.ts`
+- Deviations: Deviation 3 (shared).
+
+## Session 2026-11-27 — sdd-execute sequential (sdd-batch-execute), unit B2 (Steps 7+8+9+10)
+
+- Tree: detached at `origin/feature/fix-marketdata-miss-path-noise` @ `a9cba5f7`. The branch does not contain
+  `origin/main-dev` @ `9e4b23b8`, which is 2 commits ahead. Neither commit touches a file this unit diffs
+  against (`git diff --stat HEAD origin/main-dev` on those files is empty), and main-dev's config migrations still
+  end at `056`. Anchors re-grepped, all present at shifted lines: `GetBars` `:279`, the guard `:362`,
+  `staleCheckDue` `:382`, `fetchAndCacheBars` `:428`, `barsCancelSource` `marketdata_service_test.go:5839`,
+  `fetchAAPLDaily` `:5922`, `TestGetBarsWarnsWhenMissAndLiveFetchEmpty` `:1274`, `bar_hold.go:cfg`
+  `scripts/config-wiring.json:115`.
+- Merge checklist (O-20), re-run: `056*`/`057*`/`058*` on any ref finds only `056_mcp_deadline_budget` (314,
+  `270e850d`), 321's `056` seed (`8599b995`) and 366's `056` on trunk. `miss_backoff_ms` appears only in this
+  feature's `a9cba5f7`. Feature 317 keeps `057`.
+- **Step 8 preflight, regeneration route.** Operator decision for the Step 7 blocker, recorded verbatim from the
+  orchestrator note: "Option A, operator-authorized 2026-11-26 (answer 'Throwaway Docker Postgres here
+  (Recommended)' to the question on regenerating scripts/config-wiring-stored.json for 314, 317 and 321)."
+  - The main session provisioned a throwaway local PostgreSQL 16 (local-only, never shared or staging).
+  - This agent used it only to generate the stored set, and started and stopped no database.
+  - The migration's live apply and rollback stay with CI.
+  - Steps 7-10 run as one commit (the operator's re-confirmation of the planned unit; the reason is in the
+    Deviation Log, Deviation 4).
+- Tooling: go1.27.0 ✓ · golangci-lint ✓ v2.14.0 built with go1.27.0 · Node v24.22.3 (`/opt/node24/bin`) · pnpm ✓
+  9.15.9 · psql 16.15 ✓ · `migrate` ✓ (`/usr/local/bin`) · main-checkout `node_modules` linked; no install.
+- Config-key wiring gate (C-16, step-time, `--declared-from product-spec.md --declared-migration 057_…up.sql`):
+  exit 0, no output (log `.sdd-logs/v-7.log`). Step 8's and Step 10's
+  `--keys marketdata.bars.miss_backoff_ms --final` both exit 0. Each prints only the two pre-existing `REPORTED:
+  … readers-disagree` lines, for analysis `fundamentals.provider` and trading `trading_state`, which are unrelated.
+  `--final` without `--keys` runs at Step 11, the last step.
+
+### Step 7 — test: seed-migration shape test for `bars.miss_backoff_ms` [done]
+- Unit B2 (Steps 7+8+9+10, one commit). Created `barsMissBackoffSeedMigration.test.ts`, which follows the
+  `delistingConfirmationSeedMigration.test.ts` case list. It uses `findOne`/`splitStatements` only.
+- TDD red (pre-unit tree, run K=1): 4 of 5 cases failed on `expected exactly one *_marketdata_bars_miss_backoff.up.sql,
+  got []` (and `.down.sql`), with tests 412 / pass 408 / fail 4. The bounds case is a constant characterization.
+  Green (K=6): tests 412 / pass 412 / fail 0, All files 92.32% lines, lint 0 errors.
+- Files modified: `services/xstockstrat-config/src/__tests__/barsMissBackoffSeedMigration.test.ts`
+- Deviations: Deviation 4.
+
+### Step 8 — migration: seed `marketdata` / `bars.miss_backoff_ms` (config `057`) [done]
+- Unit B2. Added the `057_marketdata_bars_miss_backoff` up/down pair. The up is a two-row relative-key seed
+  (staging, production, `user_id` NULL, sentinel actor, `ON CONFLICT … DO NOTHING`). The down is the sentinel- and
+  value-filtered `DELETE`. The stored set was regenerated with the generator and committed unedited: two rows plus
+  `inputs_sha256`.
+- TDD: N/A (migration). Offline check: the pair is the highest number; `grep -c '^057_'` = 2; the stored set holds 2
+  rows for the file; `--final` for the key exits 0. The down reverses the up by inspection, and Step 7 pins its
+  text.
+- Files modified: `services/xstockstrat-config/migrations/057_marketdata_bars_miss_backoff.up.sql`, `services/xstockstrat-config/migrations/057_marketdata_bars_miss_backoff.down.sql`, `scripts/config-wiring-stored.json`
+- Deviations: Deviation 4 (stored-set route, number kept).
+
+### Step 9 — test: GetBars miss-path negative-cache tests (AC-2) and the retargeted structural test [done]
+- Unit B2. Added `calls` to `barsCancelSource`. `fetchAAPLDaily` now reads the `barsFetch` result, and
+  `TestGetBarsWarnsWhenMissAndLiveFetchEmpty` is retargeted onto `bars_miss.go:liveRefetch` and
+  `s.liveRefetch(` in `GetBars`. Created `bars_miss_test.go` with the 11 specced tests. Cross-key uses the
+  timeframe (`1d`/`1h`), and `DNB` is declared only in this file.
+- TDD: AC-2 red (throwaway stub, deleted before commit; run K=3):
+  `TestLiveRefetch_AC2_ThreeCallsOneVendorFetchOneWarn` failed with "vendor calls = 3, want 1" and "miss WARNs = 3,
+  want 1". Expiry, cross-key, explicit-range, cancel-plus-empty, `TestMissFetchDue`, `TestNoteMissResult` and
+  `TestResolveBarsMissBackoff` failed by assertion. The structural test failed with "open bars_miss.go: no such
+  file". The window-zero, fetch-error and stale-branch controls passed under the stub, since they pin pre-fix
+  behaviour. Green (K=6): all 12 named tests PASS (37 `--- PASS` in the targeted run, 0 FAIL), module total 87.5%,
+  golangci-lint 0 issues.
+- Files modified: `services/xstockstrat-marketdata/internal/service/bars_miss_test.go`, `services/xstockstrat-marketdata/internal/service/marketdata_service_test.go`
+- Deviations: Deviation 4 (RED staging; the K=4 lint fix; the K=5 `internal/fmp` timing flake).
+
+### Step 10 — service: GetBars miss-path negative cache (`bars_miss.go`, `liveRefetch`, `barsFetch`, reader) [done]
+- Unit B2. `bars_miss.go` holds the key constants, `resolveBarsMissBackoff(cfg intGetter)`, `barsFetch`,
+  `missFetchDue` (no reservation; window `<= 0` clears the map), `noteMissResult` (the only writer; it sweeps
+  entries `>=` window under `missMu`) and `liveRefetch`. `fetchAndCacheBars` returns `barsFetch`, with
+  `confirmedEmpty` set only when the fetch is empty and `ctx.Err() == nil`. `GetBars` keeps its guard
+  byte-identical and calls `s.liveRefetch`. `missMu`/`lastEmptyFetch` sit beside `staleMu`, and the constructor
+  initialises the map. `scripts/config-wiring.json` gains the one `bars_miss.go:cfg` receiver. `bar_hold.go` is
+  untouched, and there is no `resolveOffMs`.
+- TDD: green per Step 9 (unit red→green). `go build` and `go vet` pass; `config-wiring.test.mjs` passes 75/75.
+  The `config-wiring.json` diff is exactly the one added line, and `missMu` appears only at the field and in the two
+  writers.
+- Files modified: `services/xstockstrat-marketdata/internal/service/bars_miss.go`, `services/xstockstrat-marketdata/internal/service/marketdata_service.go`, `scripts/config-wiring.json`
+- Deviations: Deviation 4 (shared).
+
+## Session 2026-11-27 — sdd-execute sequential (sdd-batch-execute), Step 11
+
+- Tree: detached at `origin/feature/fix-marketdata-miss-path-noise` @ `4f202749`. Anchors re-grepped: key row
+  `stream.bar_ingest_backoff_ms` `services/xstockstrat-marketdata/CLAUDE.md:55`; `GetBars` bullet
+  `alpaca-integration.md:9`; MARKETDATA-3 `:17`, MARKETDATA-8 `:22`; PORTFOLIO-3 `:16`; first registered-keys
+  entry `### feature 366` `config-governance.md:152`; `product-spec.md:17-19`, `:63-65`. Code symbols the docs
+  name were read on the tree: `liveRefetch` `bars_miss.go:72`, `fetchAndCacheBars` `marketdata_service.go:426`,
+  `cacheLiveBars` `:397`, `barsCacheWriteGrace` `:393`, the `s.liveRefetch(` call `:368`, `warnUnlessDone` `:416`.
+- Tooling: Node v24.22.3 (`/opt/node24/bin`, first on `PATH`); no install.
+
+### Step 11 — docs: key table, GetBars / cancel-stop invariants, registered keys, product-spec corrections [done]
+- Added the `bars.miss_backoff_ms` key row; the miss back-off and cancel-quiet text in the `GetBars` bullet;
+  MARKETDATA-8's rule now names the implicit-page back-off and MARKETDATA-3 points at `bars_miss.go#liveRefetch`
+  with refreshed `~L` hints; PORTFOLIO-3 covers the deregistration cancel-stop and the bracket/balance done-ctx
+  Debug, with the new guard tests; a `### feature 317` registered-keys entry above feature 366; product-spec
+  order-fill correction (O-9) and § Fix Scope (config key yes; one config seed migration, no schema migration).
+- TDD: N/A (docs). Verification K=1 exit 0 (each grep as expected; "fires on every window" no match);
+  `--doc-check` alone K=2 exit 0, no output.
+- Config-key wiring gate, last step: `node scripts/check-config-wiring.mjs --final` K=3 exit 0; it prints only the
+  two pre-existing `REPORTED: … readers-disagree` lines (analysis `fundamentals.provider`, trading
+  `trading_state`), unrelated. Status → `code-completed`.
+- Files modified: `services/xstockstrat-marketdata/CLAUDE.md`, `services/xstockstrat-marketdata/docs/alpaca-integration.md`, `services/xstockstrat-marketdata/docs/context-constitution.md`, `services/xstockstrat-portfolio/docs/context-constitution.md`, `docs/patterns/config-governance.md`, `docs/roadmap/features/317-fix-marketdata-miss-path-noise/product-spec.md`
+- Deviations: Deviation 5 (Verification framing; two consistency edits within the step's Files).
+
+## Session 2026-11-27 — sdd-batch-execute promotion plan (awaiting operator confirm)
+
+```sdd-batch-promotion-plan
+## Promotion plan — fix-marketdata-miss-path-noise (feature 317)
+
+Source: docs/roadmap/features/317-fix-marketdata-miss-path-noise/acceptance.feature, 2 scenarios (@AC-1, @AC-2), read verbatim.
+
+### Verdicts
+| @AC | target suite (path) | CREATE/APPEND | verdict | note |
+|---|---|---|---|---|
+| AC-1 | services/xstockstrat-marketdata/acceptance/fix-marketdata-miss-path-noise.feature | CREATE | NEW | Subject is the "GetBars: live fetch failed" WARN in marketdata's GetBars. Distinct from @AC-6/8/11 @feature-290 in fix-ctx-cancel-warn-flood.feature, which assert the "GetBars: cache insert failed" WARN. |
+| AC-2 | services/xstockstrat-marketdata/acceptance/fix-marketdata-miss-path-noise.feature | CREATE | NEW | Subject is the GetBars live-fetch count and the "no bars stored and live fetch returned none" log. No existing scenario asserts it (see Notes). |
+
+### Ready-to-write blocks
+
+--- services/xstockstrat-marketdata/acceptance/fix-marketdata-miss-path-noise.feature (CREATE) ---
+# Promoted from docs/roadmap/features/317-fix-marketdata-miss-path-noise/acceptance.feature at launch
+# (Constitution C-16). Source-feature provenance is carried on every scenario's `@feature-317` tag.
+# Durable business rules xstockstrat-marketdata already guarantees — a rule enters only by promotion
+# from a reviewed feature acceptance.feature, never by hand-authoring.
+
+Feature: fix-marketdata-miss-path-noise (bug fix)
+  Regression guard for clustered defect reports: cancel-caused failures do not log per-item WARNs, and GetBars does
+  not live-fetch on every call for a symbol that recently returned no bars.
+
+  # guards: docs/reports/2026-11-04-cancel-warn-remaining-sites-defect.md
+  @AC-1 @regression @feature-317
+  Scenario: a GetBars live fetch aborted by client cancellation logs no WARN
+    Given a symbol "AAPL" with no stored 1Day bars
+    And the GetBars client cancels its context while the live fetch is in flight
+    When the live fetch returns context.Canceled
+    Then no "GetBars: live fetch failed" WARN is logged
+    And a live fetch that fails with a non-cancel error still logs that WARN
+
+  # guards: docs/reports/2026-11-04-marketdata-getbars-miss-path-refetch-every-call-defect.md
+  @AC-2 @regression @feature-317
+  Scenario: repeated GetBars for a symbol with no data performs one live fetch
+    Given symbol "DNB" has no stored bars and the vendor returns no bars for it
+    When GetBars is called for "DNB" three times within the back-off window
+    Then exactly one live vendor fetch is made
+    And "GetBars: no bars stored and live fetch returned none" is logged at most once
+
+### Notes / ambiguities / conflicts
+- Service attribution: both scenarios assert on marketdata's GetBars (a log line and the live vendor fetch count), so both go to marketdata. Nothing spans services, so platform.feature gets nothing.
+- Cancel-quiet work in portfolio: feature.md's Reviewers table lists portfolio (steps 3-4, `processAccountDeregistered`). The acceptance.feature has no portfolio-observable scenario, so there is nothing to route to services/xstockstrat-portfolio/acceptance/. I did not invent one. If portfolio cancel-quiet needs a durable guarantee, it needs a reviewed scenario in the feature first.
+- Missing @FR tags: the source scenarios carry only `@AC-n @regression` and no `@FR-n`. Rule 3 says to keep the original tags and add `@feature-317`, and not to invent tags, so I added none. docs/sdd/business-rules/CLAUDE.md expects at least one @FR per scenario. A human can add the FR tags if wanted. I could not check the product-spec mapping (see the last note).
+- AC-2 and existing suites (no CONFLICT, no OVERLAP):
+  - @AC-4 @feature-282 (filter-otc-symbols.feature) and @AC-7 @feature-282 (platform.feature:1307) cover unservable symbols, which make 0 live fetches. AC-2 covers a servable symbol whose vendor returns none, with exactly one fetch inside the back-off window. These are different observable outcomes.
+  - @AC-9 @feature-282 (never-loaded asset set attempts the live fetch) is compatible, because AC-2 still makes the first fetch.
+  - fix-marketdata-dead-symbol-ingest.feature (feature 291) concerns the ingester back-off, not GetBars. Its line 56 comment says GetBars is untouched by that feature.
+  - design.md classed AC-2 as a CHANGE to GetBars miss behaviour (operator decision O-11), not a contradiction of any promoted rule.
+- AC-1 and existing suites: it is compatible with @AC-8 and @AC-11 @feature-290, the genuine cache-insert failures that still WARN. Those are a different log site (`GetBars: cache insert failed`).
+- Dedup grep for `@feature-317`, `live fetch failed`, `no bars stored` and `miss.path` across services/*/acceptance and platform.feature found no existing match, so this is not a re-run.
+- Worktree read problem: partway through, docs/roadmap/features/317-fix-marketdata-miss-path-noise/ stopped resolving in this worktree. An earlier Glob listed it, but a later Read of product-spec.md and a later Glob both found nothing. I had already read acceptance.feature, feature.md and design.md in full before that, so the blocks above are verbatim from that read. The caller should re-verify them against origin/feature/fix-marketdata-miss-path-noise before writing.
+
+### Coverage check
+- Source scenarios: 2. Planned (NEW+DUP+OVERLAP): 2 (2 NEW, 0 DUP, 0 OVERLAP, 0 CONFLICT). Every @AC-* is accounted for and none were skipped.
+- The target file does not exist, so it is a CREATE; the `acceptance/` directory already exists for marketdata.
+```
