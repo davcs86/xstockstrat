@@ -784,3 +784,11 @@ Tooling setup (step 15): docs step, none needed · no Node install. Config-key w
 - Not touched (outside Step 15's instructions; noted for a follow-up): other stale conviction text in `docs/runbooks/add-data-source.md` — `:289` ("otherwise `NULL`"), `:405` (`conviction=signal.conviction or None`, which contradicts the new invariant) and `:591` (`sig.get("conviction", 0.5)`).
 - Files modified: `services/xstockstrat-ingest/docs/context-constitution.md`, `docs/runbooks/add-data-source.md`
 - Deviations: none
+
+## Session 2026-11-27 — Operator Gate 1 read-only SELECT results, supplied by the operator (verbatim)
+
+The operator ran the Step 16 read-only SELECT (the one in `implementation-spec.md` Step 16 Instruction 0, with the cutoff `2026-10-31T00:00:00Z`, no list leg) in both environments and pasted the results:
+- DO staging (`xstockstrat-staging`): `(0 rows)`.
+- Homelab staging (`xstockstrat-staging` on the homelab VM): `(0 rows)`.
+
+The union over the in-scope environments is therefore empty. Production is out of scope (never launched; standing ruling), so it is not part of the union. Operator Gate 1 is answered with an empty list. Gates 2 (cutoff confirmation) and 4 (second cross-schema read approval) were not answered by the operator; they only matter if a migration is still written. The follow-up decision (drop Steps 16-18, keep them as a guarded no-op, or hold) is recorded in the entry that follows.
