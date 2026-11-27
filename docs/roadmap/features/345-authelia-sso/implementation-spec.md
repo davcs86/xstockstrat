@@ -633,7 +633,7 @@ grep -n "25061/production" ../../.do/app.yaml | head -1 && grep -n "25061/stagin
 
 ### Step 13 — service: GetSecret grant for ui/oidc.client_secret
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/grpc/authz.ts` — modify

@@ -853,3 +853,9 @@
 - TDD: red (Step 11 reverted): `tsc` TS2307 `Cannot find module '../grpc/externalIdentity'`, TS2339 `linkExternalIdentity` missing, TS2551 `recordLinkFailure` missing (exit 2) → green: lint 0 errors, `test:coverage` 211/211 (exit 0), c8 ≥ 40 (85.68 %); guards AC-25 (`007:8`), AC-33 (`identityServiceImpl.ts:404`, test `:1303`, UI `middleware.test.ts:250`), AC-6 (`.do/app.yaml:87`, `.do/app.dev.yaml:87` — the `25061/<db>` comment lines; the URL itself is on `:88`).
 - Files modified: `services/xstockstrat-identity/src/__tests__/{externalIdentity,adminDirectory,identityTelemetry,telemetryAllowlist}.test.ts`, `services/xstockstrat-identity/src/__tests__/fixtures/sanCall.ts`
 - Deviations: none
+
+### Step 13 — service: GetSecret grant for ui/oidc.client_secret [done]
+- Appended `{ callerID: 'ui', namespace: 'ui', keys: ['oidc.client_secret'], peerSan: 'xstockstrat-ui' }` to `SECRET_CALLER_ALLOWLIST`; no other grant changed.
+- Verification: lint exit 0; `callerID: 'ui'` at `authz.ts:163`. TDD: recorded under Step 14.
+- Files modified: `services/xstockstrat-config/src/grpc/authz.ts`
+- Deviations: none
