@@ -690,3 +690,31 @@ Amendment summary (implementation-spec.md; step count, numbering and unit order 
 ## Session 2026-11-26 — independent impl-spec review (spec-reviewer), recorded by the orchestrator
 
 Verdict: PASS WITH WARNINGS, no blockers (independent `spec-reviewer` subagent, older main-dev checkout). The reader-placement amendment (parallel reader `resolveBarsMissBackoff` in `bars_miss.go` + one `bars_miss.go:cfg` receiver entry) is applied consistently; the config-wiring gate logic (`check-config-wiring.mjs:547-552`) attributes it. Warning fixed: `design.md` Build order step 3 (:150) and the C-18 line (:197) carry a supersession note pointing to impl-spec decision 2 / the O-15 parallel-reader branch. Still open at execute time: config migration `056` is now taken on `main-dev` by feature 366 (next free `057`); 314, 317 and 321 all need the renumber checklist and a merge order; re-grep 36aed60b-only anchors after BRANCH SYNC.
+
+## Session 2026-11-26 — sdd-execute sequential (sdd-batch-execute)
+
+Up-front confirmation: the operator approved the plan with this record (binding, verbatim):
+
+```json
+{"mainDev":"f802b184b13bd899d858c4b0349a616e9981b9d9","dev":"7a3692fddf316fae2e981a37c075ea7f629bcab0","specHash":"12931c87fab189d28a43469b94f2dacd8e5c9a0b","directive":"conditional","pending":[1,2,3,4,5,6,7,8,9,10,11],"mismatches":[{"n":8,"detail":"Migration number 056 is no longer free. On the merged tree (feature tip 7a3692fd with origin/main-dev f802b184 merged in), services/xstockstrat-config/migrations/ already holds 056_analysis_live_only_cycle_max_days.{up,down}.sql, added by feature 366 opportuni"},{"n":11,"detail":"docs/patterns/config-governance.md has changed. The newest-first `## Per-Feature Registered Keys` list now starts with `### feature 366 — opportunity-live-only-rotation` at :152, not `### feature 330` (330 is now at :173). The single-key marketdata precedent `"}]}
+```
+
+- Branch sync: `origin/main-dev` `f802b184` merged into the feature branch as `a68b1294` (merge-train resolver:
+  nothing to resolve; `ledger-guard`: clean).
+- Tooling setup (steps 1-11, detection only): go1.27.0 ✓ · golangci-lint ✗ 2.5.0 built with go1.25.1 (pinned
+  v2.14.0 install via `GOTOOLCHAIN=go1.27.0 go install …` at the first Go step) · Node v24.22.3 ✓ at
+  `/opt/node24/bin` (PATH default is v22.23.5) · pnpm ✓ 9.15.9 · migration step: no tool. The Step 8
+  regeneration route (Postgres + `migrate`, or the CI artifact) is still to be confirmed at the Step 7 preflight.
+- Re-spec (directive conditional), steps 8 and 11 only:
+  - `59cb6888ce542c523ad092b93039d17fbc9a3921` respec(fix-marketdata-miss-path-noise): align steps 8,11 with current codebase
+  - Step 8: the seed is now `057_marketdata_bars_miss_backoff` (`056` is taken on trunk by feature 366). The
+    merge checklist also found `056_mcp_deadline_budget` on the unmerged `fix-mcp-deadline-budget` branch, which
+    may take `057` first; re-run the checklist before unit 7-10.
+  - Step 11: the config-governance entry goes above the current first entry (feature 366 at `:152`); the
+    feature-352 precedent is at `:187-200`.
+  - Left as written (outside the step bodies the re-spec may edit): the Step 8 heading, spec-time decision 6
+    (`:125`) and the § Step Dependencies spec-time result still say `056`.
+
+```sdd-batch-setup
+{"mainDev":"f802b184b13bd899d858c4b0349a616e9981b9d9","date":"2026-11-26"}
+```
