@@ -1,4 +1,4 @@
--- Migration: 057_marketdata_bars_miss_backoff.up.sql
+-- Migration: 058_marketdata_bars_miss_backoff.up.sql
 -- Service: xstockstrat-config, feature fix-marketdata-miss-path-noise. Stored keys are namespace-relative (045 CHECK).
 
 INSERT INTO config.config_values

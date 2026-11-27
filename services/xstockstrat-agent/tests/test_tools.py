@@ -1262,6 +1262,13 @@ class TestManageStrategyScore:
                 "no eligible evidence — all evidence symbols excluded "
                 "(fundamentals unavailable: SCHD)",
             ),  # AC-8
+            ("UNAVAILABLE", "formula version unavailable — grade unchanged"),  # 327 AC-4
+            (
+                "NOT_FOUND",
+                "no eligible evidence — formula f-9 is not readable and no evidence was "
+                "recorded for a readable version; restore access to the formula or rebind "
+                "the component, then run a backtest",
+            ),
         ],
     )
     async def test_server_detail_surfaces_in_error(self, code_name, details):
@@ -2474,6 +2481,7 @@ async def test_ac2_extract_website_content_proceeds_on_stalled_config(
         "extract.max_bytes": 5_000_000,
         "extract.connect_timeout_seconds": 10.0,
         "extract.read_timeout_seconds": 30.0,
+        "extract.call_budget_seconds": 35.0,
     }
 
 

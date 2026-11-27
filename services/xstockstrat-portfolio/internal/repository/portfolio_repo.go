@@ -244,7 +244,7 @@ func (r *PortfolioRepo) GetSnapshot(ctx context.Context, portfolioID string, atT
 		FROM portfolio.snapshots
 		WHERE portfolio_id=$1 AND snapshot_time <= $2
 		ORDER BY snapshot_time DESC LIMIT 1`
-	row := r.pool.QueryRow(ctx, q, portfolioID, atTime)
+	row := r.db.QueryRow(ctx, q, portfolioID, atTime)
 	var (
 		pid                  string
 		snapTime             time.Time
@@ -268,7 +268,7 @@ func (r *PortfolioRepo) GetSnapshot(ctx context.Context, portfolioID string, atT
 func (r *PortfolioRepo) CountPositions(ctx context.Context, userID string, mode commonv1.TradingMode) (int, error) {
 	const q = `SELECT COUNT(*) FROM portfolio.positions WHERE user_id=$1 AND trading_mode=$2`
 	var count int
-	err := r.pool.QueryRow(ctx, q, userID, mode.String()).Scan(&count)
+	err := r.db.QueryRow(ctx, q, userID, mode.String()).Scan(&count)
 	return count, err
 }
 

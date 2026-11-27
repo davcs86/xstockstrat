@@ -12,8 +12,10 @@
  * The recording pool returns a row for the existence SELECT so every case reaches the bounds guard
  * in front of an already-registered key, not confounded by the existence gate (feature 091).
  */
-import { describe, it, before, after } from 'node:test';
+import { describe, it, before, after, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import * as grpc from '@grpc/grpc-js';
 
 import { HEADER_ACCESS_SCOPE, HEADER_USER_ID } from '../grpc/authz';
@@ -33,10 +35,23 @@ describe('signal_decay_half_life_hours write-time scalar bounds', () => {
   let server: grpc.Server;
   let client: any;
   let queries: { sql: string; params?: unknown[] }[] = [];
+  // Stored global rows the cross-key sibling read sees; empty by default so other cases are untouched.
+  let siblingRows: { namespace: string; key: string; value_data: string }[] = [];
+  let siblingReadFails = false;
+  const SIBLING_READ = 'SELECT namespace, key, value_data';
 
   function insertQuery() {
     return queries.find((q) => q.sql.includes('INSERT INTO config.config_values'));
   }
+
+  function siblingQueries() {
+    return queries.filter((q) => q.sql.includes(SIBLING_READ));
+  }
+
+  beforeEach(() => {
+    siblingRows = [];
+    siblingReadFails = false;
+  });
 
   before(async () => {
     const recordingPool: any = {
@@ -44,6 +59,11 @@ describe('signal_decay_half_life_hours write-time scalar bounds', () => {
         queries.push({ sql, params });
         if (sql.includes('SELECT key, is_secret FROM config.config_values')) {
           return { rows: [{ key: params?.[1], is_secret: false }] }; // registered, non-secret
+        }
+        if (sql.includes(SIBLING_READ)) {
+          if (siblingReadFails) throw new Error('sibling read failed');
+          const wanted = (params?.[1] ?? []) as string[];
+          return { rows: siblingRows.filter((r) => wanted.includes(`${r.namespace}.${r.key}`)) };
         }
         return { rows: [] };
       },
@@ -69,9 +89,18 @@ describe('signal_decay_half_life_hours write-time scalar bounds', () => {
     server?.forceShutdown();
   });
 
-  function setConfig(value: Record<string, unknown>, key = KEY, namespace = NS) {
-    const request = { namespace, key, value, author: 'tester', reason: 'bounds test' };
-    const metadata = md({ [HEADER_ACCESS_SCOPE]: '7', [HEADER_USER_ID]: 'tester' }); // admin scope for a global write
+  function setConfig(
+    value: Record<string, unknown>,
+    key = KEY,
+    namespace = NS,
+    opts: { userId?: string; admin?: boolean } = {},
+  ) {
+    const request = { namespace, key, value, author: 'tester', reason: 'bounds test', userId: opts.userId ?? '' };
+    const metadata = md(
+      opts.admin === false
+        ? { [HEADER_USER_ID]: 'tester' }
+        : { [HEADER_ACCESS_SCOPE]: '7', [HEADER_USER_ID]: 'tester' }, // admin scope for a global write
+    );
     return new Promise<{ err: any; res: any }>((resolve) => {
       client.setConfig(request, metadata, (err: any, res: any) => resolve({ err, res }));
     });
@@ -273,7 +302,8 @@ describe('signal_decay_half_life_hours write-time scalar bounds', () => {
     { ns: 'analysis', key: 'engine.max_strategies_per_cycle', field: 'intVal', min: 1, max: 1000 },
     { ns: 'analysis', key: 'engine.eval_interval_seconds', field: 'intVal', min: 30, max: 600 },
     { ns: 'marketdata', key: 'price.batch_timeout_ms', field: 'intVal', min: 500, max: 2500 },
-    { ns: 'agent', key: 'opportunities.read_timeout_seconds', field: 'floatVal', min: 30, max: 55 },
+    { ns: 'agent', key: 'opportunities.read_timeout_seconds', field: 'floatVal', min: 30, max: 44 },
+    { ns: 'agent', key: 'extract.call_budget_seconds', field: 'floatVal', min: 5, max: 35 },
     { ns: 'portfolio', key: 'marketdata.quote_timeout_ms', field: 'intVal', min: 500, max: 8000 },
     { ns: 'marketdata', key: 'quotes.latest_lookback_hours', field: 'intVal', min: 24, max: 720 },
     { ns: 'marketdata', key: 'quotes.batch_timeout_ms', field: 'intVal', min: 500, max: 5000 },
@@ -373,10 +403,142 @@ describe('signal_decay_half_life_hours write-time scalar bounds', () => {
     assert.equal((await setConfig({ intVal: 30 }, 'opportunities.read_timeout_seconds', 'agent')).err, null);
     assert.ok(insertQuery());
     queries = [];
-    const { err } = await setConfig({ intVal: 56 }, 'opportunities.read_timeout_seconds', 'agent');
-    assert.equal(err?.code, grpc.status.INVALID_ARGUMENT, 'intVal 56 is above the 55s ceiling');
-    assert.match(err.details ?? err.message, /\[30, 55\]/);
+    const { err } = await setConfig({ intVal: 45 }, 'opportunities.read_timeout_seconds', 'agent');
+    assert.equal(err?.code, grpc.status.INVALID_ARGUMENT, 'intVal 45 is above the 44s ceiling');
+    assert.match(err.details ?? err.message, /\[30, 44\]/);
     assert.equal(insertQuery(), undefined);
+  });
+
+  function agentConstant(file: string, name: string): number {
+    const src = readFileSync(path.resolve(__dirname, '../../../../services/xstockstrat-agent/app', file), 'utf8');
+    const m = src.match(new RegExp(`^${name}\\s*=\\s*([0-9.]+)\\s*$`, 'm'));
+    assert.ok(m, `${name} assignment not found in services/xstockstrat-agent/app/${file}`);
+    return Number(m[1]);
+  }
+
+  it('@AC-2: auth + policy read + the largest accepted read timeout stays <= 57s', async () => {
+    const auth = agentConstant('client.py', '_RPC_TIMEOUT_S');
+    const policyRead = agentConstant('tools.py', '_POLICY_READ_TIMEOUT_S');
+    const KEY_RT = 'opportunities.read_timeout_seconds';
+    queries = [];
+    assert.equal((await setConfig({ floatVal: 44 }, KEY_RT, 'agent')).err, null, '44 must be accepted');
+    queries = [];
+    const { err } = await setConfig({ floatVal: 45 }, KEY_RT, 'agent');
+    assert.equal(err?.code, grpc.status.INVALID_ARGUMENT, '45 must be rejected, so 44 is the largest accepted');
+    assert.equal(insertQuery(), undefined);
+    assert.ok(auth + policyRead + 44 <= 57, `${auth} + ${policyRead} + 44 exceeds the 57s bar`);
+  });
+
+  // feature 314: cross-key deadline ordering on global writes (strict >, prevents inversion only).
+  const QUOTE = { ns: 'portfolio', key: 'marketdata.quote_timeout_ms' };
+  const BATCH = { ns: 'marketdata', key: 'quotes.batch_timeout_ms' };
+  const MARK = { ns: 'marketdata', key: 'quotes.mark_timeout_ms' };
+  const ENRICH = { ns: 'analysis', key: 'opportunity.live_enrich_timeout_ms' };
+  const PRICE = { ns: 'marketdata', key: 'price.batch_timeout_ms' };
+
+  function stored(k: { ns: string; key: string }, v: string) {
+    return { namespace: k.ns, key: k.key, value_data: v };
+  }
+
+  async function expectOrderingRejection(k: { ns: string; key: string }, v: number) {
+    queries = [];
+    const { err } = await setConfig({ intVal: v }, k.key, k.ns);
+    assert.equal(err?.code, grpc.status.INVALID_ARGUMENT, `${k.ns}.${k.key} = ${v} must be rejected`);
+    assert.equal(insertQuery(), undefined, 'no INSERT for an ordering violation');
+    assert.equal(siblingQueries().length, 1, 'exactly one sibling read');
+    return (err.details ?? err.message) as string;
+  }
+
+  async function expectAccepted(k: { ns: string; key: string }, v: number) {
+    queries = [];
+    const { err } = await setConfig({ intVal: v }, k.key, k.ns);
+    assert.equal(err, null, `${k.ns}.${k.key} = ${v} must be accepted`);
+    assert.ok(insertQuery(), 'an accepted write reaches the INSERT');
+  }
+
+  it('@AC-3: rejects a batch timeout that inverts the stored portfolio quote deadline', async () => {
+    siblingRows = [stored(QUOTE, '1000')];
+    const msg = await expectOrderingRejection(BATCH, 5000);
+    assert.match(msg, /raise portfolio\.marketdata\.quote_timeout_ms/);
+    assert.match(msg, /marketdata\.quotes\.batch_timeout_ms/);
+    assert.match(msg, /stored: 1000/);
+  });
+
+  it('rejects a quote deadline below the stored batch timeout (reverse direction)', async () => {
+    siblingRows = [stored(BATCH, '5000'), stored(MARK, '500')];
+    const msg = await expectOrderingRejection(QUOTE, 1000);
+    assert.match(msg, /raise portfolio\.marketdata\.quote_timeout_ms/);
+  });
+
+  it('compares the quote deadline against max(batch, mark): mark is the violating sibling', async () => {
+    siblingRows = [stored(BATCH, '600'), stored(MARK, '2500')];
+    const msg = await expectOrderingRejection(QUOTE, 2000);
+    assert.match(msg, /marketdata\.quotes\.mark_timeout_ms \(stored: 2500\)/);
+    assert.doesNotMatch(msg, /quotes\.batch_timeout_ms \(stored/);
+  });
+
+  it('enforces enrich > price batch in both directions', async () => {
+    siblingRows = [stored(PRICE, '2500')];
+    await expectOrderingRejection(ENRICH, 2000);
+    siblingRows = [stored(ENRICH, '1000')];
+    const msg = await expectOrderingRejection(PRICE, 2000);
+    assert.match(msg, /raise analysis\.opportunity\.live_enrich_timeout_ms/);
+  });
+
+  it('strict >: quote = 2500 over stored batch 2500 is rejected, remedy leads with raise and offers lowering batch', async () => {
+    siblingRows = [stored(BATCH, '2500'), stored(MARK, '500')];
+    const msg = await expectOrderingRejection(QUOTE, 2500);
+    const raise = msg.indexOf('raise portfolio.marketdata.quote_timeout_ms');
+    const lower = msg.indexOf('lower marketdata.quotes.batch_timeout_ms');
+    assert.ok(raise >= 0, `remedy must offer raising the quote deadline: ${msg}`);
+    assert.ok(lower > raise, `lowering the one violating sibling is offered after the raise remedy: ${msg}`);
+  });
+
+  it('offers no lower-first remedy when both lesser siblings violate', async () => {
+    siblingRows = [stored(BATCH, '3000'), stored(MARK, '2500')];
+    const msg = await expectOrderingRejection(QUOTE, 1000);
+    assert.doesNotMatch(msg, /lower /);
+  });
+
+  it('accepts ordered writes in both directions (@AC-8 @feature-229 stays valid)', async () => {
+    siblingRows = [stored(BATCH, '2500'), stored(MARK, '500')];
+    await expectAccepted(QUOTE, 4000);
+    siblingRows = [stored(QUOTE, '4000')];
+    await expectAccepted(BATCH, 500);
+  });
+
+  it('skips the ordering gate for a per-user write: no sibling read, not rejected', async () => {
+    siblingRows = [stored(QUOTE, '1000')];
+    queries = [];
+    const { err } = await setConfig({ intVal: 5000 }, BATCH.key, BATCH.ns, { userId: 'tester' });
+    assert.equal(err, null, 'a per-user write is not gated by the cross-key rule');
+    assert.equal(siblingQueries().length, 0, 'no sibling query for a per-user write');
+    assert.ok(insertQuery());
+  });
+
+  it('accepts the write when the sibling is absent or unparseable', async () => {
+    await expectAccepted(BATCH, 5000);
+    siblingRows = [stored(QUOTE, 'abc')];
+    await expectAccepted(BATCH, 5000);
+  });
+
+  it('returns INTERNAL and writes nothing when the sibling read fails', async () => {
+    siblingReadFails = true;
+    queries = [];
+    const { err } = await setConfig({ intVal: 2000 }, BATCH.key, BATCH.ns);
+    assert.equal(err?.code, grpc.status.INTERNAL);
+    assert.equal(insertQuery(), undefined);
+  });
+
+  it('issues zero queries for an out-of-bounds or non-admin global write to a member key', async () => {
+    queries = [];
+    let r = await setConfig({ intVal: 5001 }, BATCH.key, BATCH.ns);
+    assert.equal(r.err?.code, grpc.status.INVALID_ARGUMENT);
+    assert.equal(queries.length, 0, 'the per-key gate fires before any query');
+    queries = [];
+    r = await setConfig({ intVal: 2000 }, BATCH.key, BATCH.ns, { admin: false });
+    assert.equal(r.err?.code, grpc.status.PERMISSION_DENIED);
+    assert.equal(queries.length, 0, 'the admin gate fires before any query');
   });
 
   it('bounds the indicator history depth to [200, 1000] — AC-1, AC-3', async () => {

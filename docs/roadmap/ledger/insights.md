@@ -4568,6 +4568,11 @@ reusing.
 - **Evidence**: `docs/roadmap/features/306-config-keys-alias-removal/acceptance.feature` (@AC-7, amended Then); `docs/roadmap/features/306-config-keys-alias-removal/context.md` (Archive Synthesis, Why).
 - **Rule it implies**: A shim-removal earliest-start gate requires deployed-image ancestry of the consumer fix, in addition to a log zero-count with a positive control.
 
+### 2026-11-20 — fix-mcp-deadline-budget — design
+- **Pattern**: A heal migration that casts a text config value in its WHERE must put the cast inside `CASE WHEN value_data ~ re THEN value_data::numeric > N ELSE false END`. Postgres does not guarantee qual evaluation order, so `value_data ~ re AND value_data::numeric > N` can abort the migration on one non-numeric row.
+- **Evidence**: `docs/roadmap/features/314-fix-mcp-deadline-budget/debate.md` (O-20); `docs/roadmap/features/314-fix-mcp-deadline-budget/design.md` § 4.
+- **Rule it implies**: Guard every cast of `config.config_values.value_data` in a migration predicate with `CASE`, and test a non-numeric row.
+
 ### 2026-11-11 — homelab-otel-host-provider — design
 - **Pattern**: Before freezing a documented query or label design, interrogate the live datasource instead of the docs: three read-only Grafana checks falsified the spec's premise ("resource attributes land on `target_info` only"), showed Go/Node series carry no `instance`, and found per-restart duplicate `target_info` rows that make a bare `group_left` join error for ~5 minutes after any redeploy; the fix (a `group by` wrapper and `deployment_environment` in the join keys) came from those facts.
 - **Evidence**: `docs/roadmap/features/332-homelab-otel-host-provider/recon.md` § Live Grafana Cloud facts; `debate.md` D-3, D-9, D-14, D-20.

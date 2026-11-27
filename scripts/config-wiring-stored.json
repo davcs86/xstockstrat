@@ -1,6 +1,30 @@
 {
     "rows": [
         {
+            "key": "extract.call_budget_seconds",
+            "file": "057_mcp_deadline_budget.up.sql",
+            "global": true,
+            "is_secret": false,
+            "namespace": "agent",
+            "value_type": "float",
+            "description": "Whole-call budget (seconds) for the URL fetches of one extract_email_content / extract_website_content call. Identity auth (10 s) + the source lookup (10 s) + this value must stay at or below 57 s, 3 s under the MCP client's 60 s timeout. Read live; a non-finite or <= 0 value reads as 35. SetConfig-bounded [5,35].",
+            "environment": "production",
+            "default_value": "35",
+            "consuming_service": "xstockstrat-agent"
+        },
+        {
+            "key": "extract.call_budget_seconds",
+            "file": "057_mcp_deadline_budget.up.sql",
+            "global": true,
+            "is_secret": false,
+            "namespace": "agent",
+            "value_type": "float",
+            "description": "Whole-call budget (seconds) for the URL fetches of one extract_email_content / extract_website_content call. Identity auth (10 s) + the source lookup (10 s) + this value must stay at or below 57 s, 3 s under the MCP client's 60 s timeout. Read live; a non-finite or <= 0 value reads as 35. SetConfig-bounded [5,35].",
+            "environment": "staging",
+            "default_value": "35",
+            "consuming_service": "xstockstrat-agent"
+        },
+        {
             "key": "extract.connect_timeout_seconds",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
@@ -2738,7 +2762,7 @@
         },
         {
             "key": "bars.miss_backoff_ms",
-            "file": "057_marketdata_bars_miss_backoff.up.sql",
+            "file": "058_marketdata_bars_miss_backoff.up.sql",
             "global": true,
             "is_secret": false,
             "namespace": "marketdata",
@@ -2750,7 +2774,7 @@
         },
         {
             "key": "bars.miss_backoff_ms",
-            "file": "057_marketdata_bars_miss_backoff.up.sql",
+            "file": "058_marketdata_bars_miss_backoff.up.sql",
             "global": true,
             "is_secret": false,
             "namespace": "marketdata",
@@ -5185,5 +5209,5 @@
             "consuming_service": "xstockstrat-ui"
         }
     ],
-    "inputs_sha256": "581d279e0a3b384884aa55763dacbe34e1f06ebbfe9cf1d42fdf304ec3362b52"
+    "inputs_sha256": "cda705880f9fce17c0b815c1c304cb226f878015e3689c4dfbd94cdaf5c939d1"
 }

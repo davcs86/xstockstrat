@@ -1,4 +1,4 @@
--- Migration: 057_marketdata_bars_miss_backoff.down.sql
+-- Migration: 058_marketdata_bars_miss_backoff.down.sql
 -- Service: xstockstrat-config, feature fix-marketdata-miss-path-noise. A row an operator has changed is never deleted.
 
 DELETE FROM config.config_values

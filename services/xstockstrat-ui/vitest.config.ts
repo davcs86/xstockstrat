@@ -17,6 +17,10 @@ export default defineConfig({
   },
   test: {
     environment: 'node',
+    retry: process.env.CI ? 1 : 0,
+    reporters: process.env.CI
+      ? ['default', ['json', { outputFile: 'flaky-report/vitest.json' }]]
+      : ['default'],
     include: ['src/**/*.test.ts'],
     coverage: {
       provider: 'v8',
