@@ -3083,3 +3083,12 @@ Up-front confirmation: the operator approved the plan with this record (verbatim
 - Tooling: none needed (migration step).
 - Files modified: `services/xstockstrat-portfolio/migrations/019_fill_applied_events.up.sql`, `services/xstockstrat-portfolio/migrations/019_fill_applied_events.down.sql`
 - Deviations: the Verification block exits 1 when it passes (Deviation Log, Step 1).
+
+## Session 2026-11-27 — sdd-execute sequential (sdd-batch-execute), Step 2
+
+### Step 2 — migration: trading `012_bracket_legs` [done]
+- Created `012_bracket_legs.{up,down}.sql`. The `.up` creates `trading.bracket_legs` with PK `(account_id, leg_order_id)`, `order_id UUID`, `user_id`, `trading_mode`, `symbol`, `side` (CHECK `buy`/`sell`), `filled_qty` (emit cursor) and `observed_filled_qty` (reconciliation), both `NUMERIC(18,8) NOT NULL DEFAULT 0`, `status TEXT DEFAULT 'OPEN'` with no CHECK, `not_found_ticks`, `adopted` (only reader: the `GetOrder` fallback sort), and `created_at`/`updated_at`. It is DDL only: no seed INSERT and no index beyond the PK. The `.down` drops the table. `012` was still the next free number: the highest on the worktree tree and on `origin/main-dev` is `011_offline_fees_snapshot_headers`. Other features' unmerged branches were not checked.
+- TDD: N/A (migration). Verified offline: run `.sdd-logs/v-1.log` printed both paths, `2` and `0`. `exit=1` is `grep -c` exiting on a zero count (Deviation Log, Step 2). Inspection: the one CREATE TABLE in `.up` has its DROP TABLE in `.down`. No database was started. The config-wiring gate does not apply, because the migration writes no `config.config_values` row and the step declares no key.
+- Tooling: none needed (migration step).
+- Files modified: `services/xstockstrat-trading/migrations/012_bracket_legs.up.sql`, `services/xstockstrat-trading/migrations/012_bracket_legs.down.sql`
+- Deviations: the Verification block exits 1 when it passes (Deviation Log, Step 2).

@@ -127,7 +127,7 @@ grep -ci 'insert into\|create trigger' services/xstockstrat-portfolio/migrations
 
 ### Step 2 — migration: trading `012_bracket_legs`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/migrations/012_bracket_legs.up.sql` — create
@@ -1437,4 +1437,9 @@ _Populated by /sdd-execute as implementation proceeds._
 ### Step 1 — Verification block exits 1 when it passes (2026-11-27)
 - **Spec said**: the block's last command, `grep -ci 'insert into\|create trigger' …019_fill_applied_events.up.sql`, should print `# 0`.
 - **Actual**: it prints `0`, and `grep -c` exits 1 when its count is 0. The block therefore exits 1 exactly when this check passes. Every expected value matched: both files are listed, the `019_` count is 2 and the count is 0.
+- **Disposition**: judged on the printed values, not on the exit status. The block ran verbatim, and the step body was not changed (F-09). This is an offline migration check: no database was started, and the live apply and rollback are deferred to CI and deploy.
+
+### Step 2 — Verification block exits 1 when it passes (2026-11-27)
+- **Spec said**: the block's last command, `grep -ci 'insert into' …012_bracket_legs.up.sql`, should print `# 0`.
+- **Actual**: it prints `0`, and `grep -c` exits 1 when its count is 0, so the block exits 1 exactly when this check passes (the same pattern as Step 1). Every expected value matched: both files are listed, the `012_` count is 2 and the count is 0.
 - **Disposition**: judged on the printed values, not on the exit status. The block ran verbatim, and the step body was not changed (F-09). This is an offline migration check: no database was started, and the live apply and rollback are deferred to CI and deploy.
