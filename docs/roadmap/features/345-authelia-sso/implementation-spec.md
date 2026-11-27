@@ -1156,7 +1156,7 @@ cd services/xstockstrat-ui && pnpm run typecheck && pnpm run lint && pnpm run te
 
 ### Step 28 — service: safeRedirect extraction and the refusal mirror
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/safeRedirect.ts` — create

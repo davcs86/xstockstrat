@@ -946,3 +946,9 @@
 - TDD: red (before Step 26): `Cannot find module './oidcIssuer'` / `'./sameOrigin'`, `raceDeadline is not a function`, `__resetLogOnce is not a function` (5 failed, 3 passed) → green: the four files 107 passed; full `pnpm run test:coverage` 89 files, 852 passed / 2 skipped, `src/lib/**` 82.87 % lines; typecheck and lint exit 0.
 - Files modified: `services/xstockstrat-ui/src/lib/{oidcIssuer,sameOrigin,deadlines}.test.ts` (new), `services/xstockstrat-ui/src/lib/serverLog.test.ts`
 - Deviations: none
+
+### Step 28 — service: safeRedirect extraction and the refusal mirror [done]
+- `safeRedirect` moved verbatim to `src/lib/safeRedirect.ts` and imported by the login page (behaviour unchanged); `ssoRefusals.ts` mirrors identity's `EXTERNAL_IDENTITY_REFUSALS` as `SSO_REFUSALS` plus the three refusal types.
+- TDD: recorded under Step 29. Verification: typecheck exit 0, lint exit 0, the `safeRedirect` grep hits the page import/call and the new module.
+- Files modified: `services/xstockstrat-ui/src/lib/{safeRedirect,ssoRefusals}.ts` (new), `services/xstockstrat-ui/src/app/auth/login/page.tsx`
+- Deviations: none

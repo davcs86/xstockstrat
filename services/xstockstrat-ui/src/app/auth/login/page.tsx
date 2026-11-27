@@ -3,19 +3,7 @@ import { Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { AuthCardShell, CredentialsForm } from '@/components/auth/AuthForm';
 import { Skeleton } from '@/components/ui/skeleton';
-
-// Only allow redirects back into one of the known basePaths (open-redirect guard).
-function safeRedirect(target: string | null): string {
-  if (
-    target &&
-    (target.startsWith('/trader') ||
-      target.startsWith('/insights') ||
-      target.startsWith('/config-ui'))
-  ) {
-    return target;
-  }
-  return '/trader';
-}
+import { safeRedirect } from '@/lib/safeRedirect';
 
 function LoginForm() {
   const router = useRouter();
