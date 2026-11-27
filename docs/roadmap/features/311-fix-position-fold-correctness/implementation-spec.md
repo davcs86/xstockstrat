@@ -599,7 +599,7 @@ Never start a database for this step. Without `PORTFOLIO_DB_TEST_URL`, the compi
 
 ### Step 12 — service: `GetPnL` dedup keyed on account and order
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/service/portfolio_service.go` — modify
@@ -636,7 +636,7 @@ cd services/xstockstrat-portfolio && GOWORK=off golangci-lint run --modules-down
 
 ### Step 13 — test: `GetPnL` with bracket-leg fills and two accounts
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/service/portfolio_pnl_legs_test.go` — create
@@ -1491,3 +1491,8 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Spec said** (the Steps 9+10 `context.md` note): the applied row's `event_id` is a UUID column, so dbtest fixtures need UUID event ids.
 - **Actual**: `019_fill_applied_events.up.sql` declares `event_id TEXT NOT NULL`. The `testdata` `ev-<seq>` ids are therefore valid, and the fixtures use them.
 - **Disposition**: no change needed; recorded so the earlier note is not followed.
+
+### Steps 12+13 — Verification blocks stop after their first line; line drift (2026-11-27)
+- **Spec said**: Step 12 and Step 13 each give a three-line block whose lines each start `cd services/xstockstrat-portfolio && …`. Step 12's evidence cites `portfolio_service.go:993-1045`.
+- **Actual**: the same pattern as Steps 3-11. Inside the one subshell the first line's `cd` persists, so lines 2 and 3 fail with `cd: services/xstockstrat-portfolio: No such file or directory`. Run verbatim, Step 12's block (`.sdd-logs/v-2.log`) ran only `go build` and `go vet -tags dbtest`, and Step 13's block (`v-3.log`) ran only the filtered `go test -race`. Both exited 1 for this reason alone. Steps 7 and 9 moved `realizedPnL` to `:1076`; the dedup maps are at `:1085-1112`, the side lookup at `:1119` and the mixed-account refusal at `:1125-1137`. The code located by symbol matched the evidence.
+- **Disposition**: each block was run verbatim once. Then every line that had not run was run unchanged, alone, from the repo root, with its own log. All passed: the `GetPnL` filter run printed `ok` (`v-4.log`), `golangci-lint` v2.14.0 printed `0 issues.` (`v-5.log`), and the coverage line printed `total: (statements) 79.1%` (`v-6.log`). The step bodies were not changed (F-09).

@@ -3232,3 +3232,19 @@ Tooling (step 11): go1.27.0 ✓ · golangci-lint ✓ v2.14.0 (built with go1.27.
 - Files modified: `services/xstockstrat-portfolio/internal/repository/apply_fill_dbtest_test.go`, `services/xstockstrat-portfolio/internal/repository/dbtest_helpers_test.go`, `services/xstockstrat-portfolio/internal/service/fill_fold_dbtest_test.go`, `services/xstockstrat-portfolio/internal/service/position_drain_dbtest_test.go`
 - Deviations: two Deviation Log entries. "Step 11 — Verification block stops after its first line; the DB line cannot run here". "Step 11 — `event_id` column type": the column is `TEXT`, not UUID, so the `ev-<seq>` ids are valid.
 - Not covered here: the design's conflict-path case, where an uncommitted raw tx holds the applied row (debate O-37). Step 11's Instructions do not list it.
+
+## Session 2026-11-27 — sdd-execute sequential (sdd-batch-execute), Steps 12+13
+
+Tooling (steps 12+13): go1.27.0 ✓ · golangci-lint ✓ v2.14.0 (built with go1.27.0, at `/root/go/bin`, put first on `PATH` for the lint run)
+
+### Step 12 — service: `GetPnL` dedup keyed on account and order [done]
+- Atomic unit with Step 13 (planned, **Lands with**). `realizedPnL` keys `filledOrderIDs`, `latest` and `partialOrder` on the new helper `pnlOrderKey(f sequencedFill)` = `f.AccountId + "|" + f.OrderID` (D-28, the operator-approved scope extension of 2026-11-20). `orderSide` still takes the bare `OrderID`; the mixed-account refusal, the sort and the fold are unchanged.
+- TDD: RED `.sdd-logs/v-1.log` `exit=1`: `--- FAIL: TestPnLLegs_TwoAccountsSameLegIDKeepOtherAccountsPartial`, `RealizedPnl = 100, want 140` (account A's `order.filled` for `leg-1` hid account B's partial for the same id). GREEN: Step 13 filter `v-3.log` `ok github.com/xstockstrat/portfolio/internal/service 2.171s`; `v-7.log` (`-v`) counts `36` `--- PASS` lines for `GetPnL|PnLLegs`. Verification: build + vet (`-tags dbtest`) `v-2.log` clean; `GetPnL` filter `v-4.log` `ok`; lint `v-5.log` `0 issues.` `exit=0`; coverage `v-6.log` `total: (statements) 79.1%` `exit=0`, every package `ok`. The config-wiring gate does not apply: the step declares no key.
+- Files modified: `services/xstockstrat-portfolio/internal/service/portfolio_service.go`
+- Deviations: the Verification blocks stop after their first line, plus line drift (Deviation Log, Steps 12+13).
+
+### Step 13 — test: `GetPnL` with bracket-leg fills and two accounts [done]
+- Atomic unit with Step 12. New `portfolio_pnl_legs_test.go` on the 251 harness (`filled`, `partial`, `wantRealized`, `runPnL251`): `TestPnLLegs_AC4_TakeProfitLegFillRealized` (100), `TestPnLLegs_AC5_LegPartialDroppedOnceFilled` (100, not 140), `TestPnLLegs_TwoAccountsSameLegIDKeepOtherAccountsPartial` (140; red before Step 12) and `TestPnLLegs_MixedAccountAttributionStillFailsClosed` (251 `@AC-14`, `ErrFillUnattributable`). The first three also assert that no request with a stream key reached the ledger fake (no side lookup, 251 `@AC-4`).
+- TDD: the RED/GREEN results above; `@AC-4` and `@AC-5` (`GetPnL` half) are green.
+- Files modified: `services/xstockstrat-portfolio/internal/service/portfolio_pnl_legs_test.go`
+- Deviations: the same Deviation Log entry (Steps 12+13).

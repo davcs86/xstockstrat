@@ -1085,7 +1085,7 @@ func (s *PortfolioService) realizedPnL(ctx context.Context, userID string, mode 
 	filledOrderIDs := make(map[string]bool, len(filled))
 	kept := make([]sequencedFill, 0, len(filled))
 	for _, f := range filled {
-		filledOrderIDs[f.OrderID] = true
+		filledOrderIDs[pnlOrderKey(f)] = true
 		f.Qty = math.Abs(f.Qty)
 		kept = append(kept, f)
 	}
@@ -1094,12 +1094,13 @@ func (s *PortfolioService) realizedPnL(ctx context.Context, userID string, mode 
 	latest := make(map[string]sequencedFill)
 	var partialOrder []string
 	for _, f := range partials {
-		prev, ok := latest[f.OrderID]
+		key := pnlOrderKey(f)
+		prev, ok := latest[key]
 		if !ok {
-			partialOrder = append(partialOrder, f.OrderID)
+			partialOrder = append(partialOrder, key)
 		}
 		if !ok || math.Abs(f.FilledQty) > math.Abs(prev.FilledQty) {
-			latest[f.OrderID] = f
+			latest[key] = f
 		}
 	}
 	for _, id := range partialOrder {
@@ -1147,6 +1148,11 @@ func (s *PortfolioService) realizedPnL(ctx context.Context, userID string, mode 
 		fills = append(fills, pnl.Fill{Symbol: key, Qty: signed, Price: f.FillPrice})
 	}
 	return pnl.Fold(fills).Realized, nil
+}
+
+// pnlOrderKey scopes GetPnL's per-order dedup by account: broker leg ids can repeat across accounts.
+func pnlOrderKey(f sequencedFill) string {
+	return f.AccountId + "|" + f.OrderID
 }
 
 func normalisedMode(m string) string {
