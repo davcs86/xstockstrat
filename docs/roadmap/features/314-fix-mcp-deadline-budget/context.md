@@ -1142,3 +1142,33 @@ the first body line of the re-spec commit below.
 **Progress**: 8 done, 1 skipped / 9 total
 **Stopped at**: all complete (Step 9 skipped by operator decision B)
 **Next**: integration PR → `main-dev`
+
+## Session 2026-11-27 — operator rulings recorded by the orchestrator (verbatim)
+
+Rulings from the operator's answers this session (2026-11-27). Production is out of scope (standing ruling).
+
+1. **Step 9 / ALL-DONE tail.** Question: "how should I get 314 through the workflow's preflight rejecting Step 9
+   `skipped`?" → operator answered "Finish by hand (Recommended)". The spec stays truthful: Step 9 is `skipped`
+   with its Deviation Log entry and the operator Open Thread; the enumeration sign-off stays "unenumerated";
+   production readings are waived.
+2. **C-16 @AC-2 text.** Operator answered "Verbatim: 'ceiling' / 60 s". @AC-2 is promoted exactly as written in
+   this branch's `acceptance.feature` ("its SetConfig ceiling", "under 60 s"); the tightened 44 / 57 s wording is
+   not used and the branch's `acceptance.feature` is not edited.
+3. **Defect reports.** Operator answered "Resolve all three (Recommended)".
+
+Orchestrator assumptions (also stated in the integration PR body): acceptance extension (the design's EXTEND
+cases) is not done — only AC-1..3 are promoted, follow-on noted; the three in-place C-16 CHANGE edits are applied
+because the operator did not skip them; the stale `merge-order.md` row 274 text is left alone; the
+`implementation-spec.md` header **Status** is left unchanged.
+
+### ALL-DONE tail — config-key wiring gate (F-09)
+
+After merging `origin/main-dev` (merge commit `c21b4819`, no conflicts; migration `057_mcp_deadline_budget` is
+still the highest config migration; per the orchestrator, feature 321 also carries
+`057_trading_broker_paper_per_environment` — whichever merges second renumbers to 058 and regenerates `scripts/config-wiring-stored.json`):
+`node scripts/check-config-wiring.mjs --final` → `exit=0`, output:
+
+```text
+REPORTED: services/xstockstrat-analysis/app/engine/fundsignal_loop.py:marketdata/fundamentals.provider:readers-disagree
+REPORTED: services/xstockstrat-trading/internal/service/trading.go:platform/trading_state:readers-disagree
+```
