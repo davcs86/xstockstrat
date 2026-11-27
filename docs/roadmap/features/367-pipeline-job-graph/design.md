@@ -1,8 +1,8 @@
 # Design: pipeline-job-graph
 
 **Created**: 2026-11-27
-**Rounds**: 12 (full; round cap lifted by the operator; termination: pending operator approval)
-**Approved by**: pending
+**Rounds**: 12 (full; round cap lifted by the operator; termination: approved)
+**Approved by**: user @ 2026-11-27
 **Grounded in**: recon.md
 **Debate register**: debate.md
 

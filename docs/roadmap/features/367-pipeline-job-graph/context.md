@@ -211,3 +211,33 @@
   writer and an operator, spot-checked 19 code citations (all resolve) and found a test seam for
   every `@AC-*`. Wording and completeness edits applied (O-85). By the protocol's detector this is
   a no-progress round: the debate has converged.
+
+## Session 2026-11-27 — sdd-design (approved)
+
+- **OPERATOR DECISION (design gate): "Approve design"** after round 12.
+- Phase 0 Recon: wrote recon.md (services: analysis, config; key reuse patterns:
+  `supervision.spawn`, `read_budget.py`'s server-side statement timeout and terminate rule).
+- Phase 1 Grilling: 12 rounds (full; cap lifted). Chosen approach: two job tables in analysis, a
+  fenced lease on the database clock, a separate fixed-size control pool, `bounded_txn` for every
+  database operation, three supervised loops, park-and-settle dependencies, a daily prune job.
+  Rejected: 18 alternatives (advisory locks, LISTEN/NOTIFY, a single shared lock or connection,
+  raising `DB_POOL_MAX`, deferred cancellation, a result column, and others; see debate.md).
+- Operator reopens accepted during the debate: P-1..P-7 (slot held until the report is written;
+  bounding invariants instead of a worst-case figure; fixed 7.5 s heartbeat; `FOR NO KEY UPDATE`
+  for reap, settle, claim and the recovery lock; corrected invariants).
+- Constitution rules touched: C-05, C-07, C-08, C-10, C-13, C-14, C-15, C-16, C-18, F-01, F-06,
+  F-07, P-03. Floor breaches: none in any round.
+- Status: spec-ready → design-approved.
+
+## Open Threads
+
+Carried from design.md § Open Risks; each needs an owner at `/sdd-spec` or later:
+
+- asyncpg behaviours pinned by build step 3's tests before step 4 (terminate wakes an in-flight
+  await; `reset=`; `min_size=0`), with fallbacks written in design.md.
+- PgBouncer queueing is untestable in CI; measured in program feature 3's shadow run.
+- No requeue until program feature 4; manual recovery SQL ships in
+  `services/xstockstrat-analysis/docs/pipeline-jobs.md` (build step 8).
+- Hazards H1 and H2 for an in-transaction report, and executor-thread handlers: program feature 3.
+- `docs/roadmap/program-job-graph-analysis-pipeline.md` line 81 (advisory-lock note) is corrected
+  in build step 8.

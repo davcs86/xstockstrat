@@ -1,6 +1,6 @@
 # Debate Register: pipeline-job-graph
 
-**State**: in-debate
+**State**: approved
 **Mode**: full (round cap lifted by operator override, context.md 2026-11-27)
 **Rounds run**: 12
 

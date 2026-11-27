@@ -4878,3 +4878,8 @@ reusing.
   that no same-owner `signal_sources.credentials_ref` references; the 166 secret-first order is unchanged.
 - **Rule it implies**: record the reclaim path in the writer's docstring and runbook; never rewrite another feature's ledger entry to
   say so (the ledger guard forbids it) — add your own entry.
+
+### 2026-11-27 — pipeline-job-graph — design
+- **Pattern**: A design debate converges faster when each round gets a different lens than the last: mechanism review, then an audit of the consolidated document, then a full row-lock conflict matrix, then a (phase, event) table for the stateful object, then a sweep of every numeric and "never / at most" claim, then reading the document as the spec author, the test writer and the operator. Each lens found defects the previous ones could not, and the round in which neither side found substance came only after all of them had run. Asking both reviewers to classify every finding as substance or wording made the convergence signal explicit.
+- **Evidence**: `docs/roadmap/features/367-pipeline-job-graph/debate.md` § Rounds (12 rounds; substance in rounds 1–11, none in 12); `docs/roadmap/features/367-pipeline-job-graph/context.md` round entries.
+- **Rule it implies**: For a concurrency-heavy design, plan the lenses up front instead of repeating "attack the proposal"; keep the consolidated design on disk as the thing under review so nothing settled lives only in a round's transcript.
