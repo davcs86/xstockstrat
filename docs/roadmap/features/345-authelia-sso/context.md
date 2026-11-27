@@ -1053,3 +1053,7 @@
 - TDD: RED/GREEN via Step 53's e2e. Verification: typecheck, lint, build exit 0 (`/auth/login` is `ƒ`); "page is a server component". Regression: host Playwright `CI=1 E2E_PREBUILT=1 … e2e/auth.spec.ts --project=chromium` 39 passed (default `local`).
 - Files modified: `services/xstockstrat-ui/src/app/auth/login/{page,LoginForm}.tsx`, `services/xstockstrat-ui/src/components/auth/SsoSignInForm.tsx` (new)
 - Deviations: none. Gaps filled: `LoginForm` gained an optional `children` slot rendered above `CredentialsForm` inside the same `AuthCardShell` (otherwise `both` would stack two full-screen cards); `LoginForm` still reads `redirect` through `useSearchParams` (same value the page passes to `SsoSignInForm`), and the SSO form passes the raw `redirect` because `/start` applies `safeRedirect`; `not_linked` in `local`/`'error'` shows the `both` variant.
+
+### Owner decisions 2026-11-27 — UI gap-fills accepted; Step 45 blocker → Option A
+- Accepted all UI gap-fills of Steps 25–44 (Deviation Log "Steps 25–44 — UI details…").
+- Step 45 blocker (`'use client'` page importing server-only `ssoErrors.ts` → `UnhandledSchemeError: node:crypto`): owner chose **Option A** — move `SSO_ERROR_CODES`, `LINK_ERROR_CODES` and their message maps to a new client-safe `src/lib/ssoErrorCodes.ts`, re-exported from `ssoErrors.ts` (no behaviour change; touches a Step 36 file outside Step 45's Files, logged as a deviation).
