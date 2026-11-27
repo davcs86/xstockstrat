@@ -632,3 +632,13 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 ```sdd-batch-setup
 {"mainDev":"f802b184b13bd899d858c4b0349a616e9981b9d9","date":"2026-11-26"}
 ```
+
+## Session 2026-11-27 — Verification fixes (operator ruling precedent from 316), recorded by the orchestrator
+
+The batch executor reported that Step 2 Verification line 2 prints 0 on a correct tree: in the serialized descriptor a length byte precedes the field name, so Python writes the leading `c` as `\x63` (`\x13\x63onviction_provided\x18\x0c \x01(\x08`). The field is present (ExternalSignal `conviction_provided`, number 12, bool). Applying the operator's 316 ruling ("Re-spec the Verification first"; a separate respec commit rewrites the block, then the step re-runs verbatim). Scanned Steps 1-18; only Step 2 needed a change.
+
+- **Step 2, Verification line 2** (the only fix):
+  - Old: `grep -c "conviction_provided" packages/proto/gen/python/ingest/v1/ingest_pb2.py   # >= 1`
+  - New: `python3 -c "import sys; sys.path.insert(0,'packages/proto/gen/python'); from ingest.v1 import ingest_pb2; assert ingest_pb2.ExternalSignal.DESCRIPTOR.fields_by_name['conviction_provided'].number == 12"   # exit 0 (run from the repo root; KeyError before the stubs are regenerated)`
+  - Checked on the current tree: it raises `KeyError: 'conviction_provided'` today (the intended RED) and imports cleanly otherwise.
+- **Scan result, no other change**: no other `grep` reads generated protobuf bytes; every `cd` is the first command of its block and later lines in that block are relative to it (no line expects the repo root after a `cd`); every trailing no-match grep is guarded by `; test $? -eq 1`, and no block ends on a bare grep that exits 1 on the expected result; the file, test and doc anchors that exist before their step all resolve on this tree.

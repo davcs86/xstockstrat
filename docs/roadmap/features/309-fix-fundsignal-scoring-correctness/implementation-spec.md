@@ -187,7 +187,7 @@ Run `./scripts/buf-gen.sh` from the repo root and stage only the regenerated ing
 **Verification**:
 ```bash
 ./scripts/buf-gen.sh && git status --porcelain packages/proto/gen/ | grep -v "ingest" ; test $? -eq 1
-grep -c "conviction_provided" packages/proto/gen/python/ingest/v1/ingest_pb2.py   # >= 1
+python3 -c "import sys; sys.path.insert(0,'packages/proto/gen/python'); from ingest.v1 import ingest_pb2; assert ingest_pb2.ExternalSignal.DESCRIPTOR.fields_by_name['conviction_provided'].number == 12"   # exit 0 (run from the repo root; KeyError before the stubs are regenerated)
 ./scripts/buf-gen.sh && git diff --quiet packages/proto/gen/ ; echo "second run clean: $?"   # after staging
 ```
 
