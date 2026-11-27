@@ -167,7 +167,7 @@ ruff check . && ruff format --check .
 
 **Codebase Evidence**:
 - Fixture home (C-13, recon.md): `_strategy_row()` at `tests/test_entry_backfill.py:31`, `_fake_live_loop()` at `:51`, `_cfg()` at `:66`, `_order()` at `:23`, class `TestRunOnce` at `:117`; the `db_pool.fetch = AsyncMock(...)` pattern at `:121`.
-- Existing SQL-constant pin to mirror: `tests/test_analysis_servicer.py:7034-7060` (`from app.repositories.strategies import LIVE_ENABLED_PREDICATE_SQL, StrategiesRepository` … `assert LIVE_ENABLED_PREDICATE_SQL in sql`).
+- Existing SQL-constant pin to mirror: `tests/test_analysis_servicer.py:7055-7081` (`from app.repositories.strategies import LIVE_ENABLED_PREDICATE_SQL, StrategiesRepository` … `assert LIVE_ENABLED_PREDICATE_SQL in sql`).
 - Ledger trap fails.md:2255: an SQL-text assertion alone only proves a string was built — pair it with a behavioural selection assertion.
 
 **TDD**: `red-green required`
@@ -202,8 +202,8 @@ ruff check . && ruff format --check .
 **Reviewers**: xstockstrat-analysis service owner — Backtest reproducibility, strategy scoring determinism, no look-ahead bias
 
 **Codebase Evidence**:
-- `_definition_fingerprint(definition_json: dict) -> str` at `services/xstockstrat-analysis/app/handlers/servicer.py:7333` (sync, pure, module-level); `_FINGERPRINT_EXCLUDED_KEYS` at `:7330`; canonical form `json.dumps(filtered, sort_keys=True, separators=(",", ":"))` → `hashlib.sha256(...).hexdigest()` at `:7348-7349`. `hashlib` / `json` imported at `:16-17`, `json_format` at `:38`.
-- `class _GradeInputsUnknown(Exception)` at `:276` (`__init__(self, symbol)` sets `self.symbol`).
+- `_definition_fingerprint(definition_json: dict) -> str` at `services/xstockstrat-analysis/app/handlers/servicer.py:7488` (sync, pure, module-level); `_FINGERPRINT_EXCLUDED_KEYS` at `:7485`; canonical form `json.dumps(filtered, sort_keys=True, separators=(",", ":"))` → `hashlib.sha256(...).hexdigest()` at `:7503-7504`. `hashlib` / `json` imported at `:17-18`, `json_format` at `:39`. No `typing` import exists in `servicer.py` today.
+- `class _GradeInputsUnknown(Exception)` at `:277` (`__init__(self, symbol)` sets `self.symbol`).
 - `FormulaDefinition` fields (`packages/proto/indicators/v1/indicators.proto:162-182`): `formula_id=1, name=2, description=3, source=4, author=5, created_at=6, updated_at=7, is_public=8, input_schema=9, parameters=10, outputs=11, warmup_period=12, deleted=13, fundamental_inputs=14, origin=15`. `FormulaParameter` (`:118-126`): `name, type, default_value, description, required, min, max` (`min`/`max` are `optional`). `FormulaOutput` (`:133-136`): `name, description`.
 - D-5 classification (debate.md): BEHAVIOURAL = `source`, `input_schema`, `warmup_period`, `fundamental_inputs`, `parameters[]` minus `description`, `outputs[]` `name` only. DISPLAY = `formula_id`, `name`, `description`, `author`, `created_at`, `updated_at`, `is_public`, `deleted`, `origin`, `parameters[].description`, `outputs[].description`.
 - Rejected: R-1 (never hash `updated_at`), R-6 (never hash an "unreadable" sentinel).
@@ -215,14 +215,14 @@ ruff check . && ruff format --check .
 **Covers**: —
 
 **Instructions**:
-Add, directly after `_definition_fingerprint` (`:7333-7349`), module-level and pure (no I/O):
+Add, directly after `_definition_fingerprint` (`:7488-7504`), module-level and pure (no I/O):
 1. Field-classification constants, one frozenset of field names per message, so the Step 4 descriptor walk can assert coverage:
    `_FORMULA_BEHAVIOURAL_FIELDS = {"source", "input_schema", "parameters", "outputs", "warmup_period", "fundamental_inputs"}`, `_FORMULA_DISPLAY_FIELDS = {"formula_id", "name", "description", "author", "created_at", "updated_at", "is_public", "deleted", "origin"}`, `_FORMULA_PARAMETER_BEHAVIOURAL_FIELDS = {"name", "type", "default_value", "required", "min", "max"}`, `_FORMULA_PARAMETER_DISPLAY_FIELDS = {"description"}`, `_FORMULA_OUTPUT_BEHAVIOURAL_FIELDS = {"name"}`, `_FORMULA_OUTPUT_DISPLAY_FIELDS = {"description"}`.
-2. `_formula_digest(formula) -> str`: `json_format.MessageToDict(formula, preserving_proto_field_name=True)` (defaults omitted — the library default — so an unset `optional min`/`max` is absent while a set `0.0` is present), keep only `_FORMULA_BEHAVIOURAL_FIELDS`, within `parameters[]` keep only `_FORMULA_PARAMETER_BEHAVIOURAL_FIELDS`, within `outputs[]` keep only `_FORMULA_OUTPUT_BEHAVIOURAL_FIELDS`; repeated order is preserved; then the same canonical form as `:7348-7349` (`sort_keys=True`, `separators=(",", ":")`, sha256 hex).
+2. `_formula_digest(formula) -> str`: `json_format.MessageToDict(formula, preserving_proto_field_name=True)` (defaults omitted — the library default — so an unset `optional min`/`max` is absent while a set `0.0` is present), keep only `_FORMULA_BEHAVIOURAL_FIELDS`, within `parameters[]` keep only `_FORMULA_PARAMETER_BEHAVIOURAL_FIELDS`, within `outputs[]` keep only `_FORMULA_OUTPUT_BEHAVIOURAL_FIELDS`; repeated order is preserved; then the same canonical form as `:7503-7504` (`sort_keys=True`, `separators=(",", ":")`, sha256 hex).
 3. `_UNREADABLE = object()` — the digest marker for a refused formula (`UNREADABLE_FORMULA_CODES`). It is an `object()`, never a string, so it cannot be hashed into a fingerprint (R-6).
 4. `class _FormulaRead(NamedTuple)`: `metrics: list`, `digest: object` (hex `str`, `_UNREADABLE`, or `None` for an outage). Add `NamedTuple` to the existing `typing` import (confirm the import line by grep before editing; if `typing` is not yet imported, add `from typing import NamedTuple`).
 5. `_evidence_fingerprint(definition_json: dict, digests: dict) -> str`: `def_hash = _definition_fingerprint(definition_json)`; when `digests` is empty return `def_hash` unchanged (D-2 byte identity); raise `ValueError` if any value is not a `str` (a refused or unknown digest must never be stamped); otherwise return `def_hash + "." + hashlib.sha256(";".join(f"{fid}={digests[fid]}" for fid in sorted(digests)).encode("utf-8")).hexdigest()`.
-6. Next to `_GradeInputsUnknown` (`:276`), add `class _FormulaVersionUnknown(_GradeInputsUnknown)`: `__init__(self, formula_id)` calls `Exception.__init__(self, f"{formula_id}: formula version unavailable")` and sets `self.formula_id = formula_id` (it does not set `symbol`). One-line docstring: a referenced formula's content could not be read, so the evidence fingerprint is unknown; keep the old grade.
+6. Next to `_GradeInputsUnknown` (`:277`), add `class _FormulaVersionUnknown(_GradeInputsUnknown)`: `__init__(self, formula_id)` calls `Exception.__init__(self, f"{formula_id}: formula version unavailable")` and sets `self.formula_id = formula_id` (it does not set `symbol`). One-line docstring: a referenced formula's content could not be read, so the evidence fingerprint is unknown; keep the old grade.
 Nothing calls these yet.
 
 **Verification**:
@@ -245,9 +245,9 @@ ruff check . && ruff format --check .
 **Reviewers**: xstockstrat-analysis service owner — Backtest reproducibility, strategy scoring determinism, no look-ahead bias
 
 **Codebase Evidence**:
-- **Not found** — no `tests/test_evidence_fingerprint.py` exists (`ls services/xstockstrat-analysis/tests | grep evidence` → no match); created from scratch. Existing fingerprint unit tests live in `tests/test_analysis_servicer.py:2209-2241` (pattern: import the helper, compare hashes).
+- **Not found** — no `tests/test_evidence_fingerprint.py` exists (`ls services/xstockstrat-analysis/tests | grep evidence` → no match); created from scratch. Existing fingerprint unit tests live in `tests/test_analysis_servicer.py:2213-2242` (`class TestDefinitionFingerprint`; pattern: import the helper, compare hashes).
 - `indicators_pb2.FormulaDefinition(...)` construction pattern in tests: `tests/test_grade_fundamentals_exclusion.py:78-82`.
-- Existing rename guarantee to keep green: `tests/test_analysis_servicer.py:3424-3439` (`@AC-2 @feature-194`).
+- Existing rename guarantee to keep green: `test_rename_of_dirty_row_does_not_change_fingerprint` at `tests/test_analysis_servicer.py:3424-3439` (feature 194; it carries no `@AC-*` tag in the file).
 
 **Lands with**: `Step 3`
 
@@ -285,12 +285,12 @@ ruff check . && ruff format --check .
 **Reviewers**: xstockstrat-analysis service owner — Backtest reproducibility, strategy scoring determinism, no look-ahead bias
 
 **Codebase Evidence**:
-- `_formula_fundamentals(self, definition, propagation_meta, *, cache=None, failures=None, warmups=None)` at `servicer.py:1919-1958`: cache hit `metrics = cache[fid]` (`:1937-1938`), the `GetFormula` call (`:1941-1944`), refusal/outage branch (`:1948-1951`, `UNREADABLE_FORMULA_CODES` imported at `:70`), cache write `cache[fid] = metrics` (`:1952-1953`), return map `{fid: metrics}` (`:1954-1956`). The `warmups=` keyword is feature 341 (its only caller: `:4561-4562`) and is untouched.
-- `_declared_formula_warmup(self, formula_id, cache, propagation_meta, deleted_cache=None, fund_map=None, failures=None) -> int` at `:2533-2572`; the `if formula_id not in cache:` block is `:2549-2571`; `cache` is `dict[str, int]` (`formula_warmup_cache` at `:972`).
-- `_prefetch_formula_warmups(self, definition, cache, propagation_meta, deleted_cache=None, fund_map=None, failures=None)` at `:2574-2621`; its loop call at `:2619-2621`.
-- Callers that pass `cache=` to `_formula_fundamentals` (the cache they own becomes `_FormulaRead`-valued): `_exclude_refused_cells` `:2815-2817`; heal `:5128-5133` (dict declared `formula_fund_cache: dict[str, list] = {}` at `:5087`); opportunities `:5807-5812` (dict declared at `:5662`). Callers without `cache=` (`:805`, `:1002`, `:4024`, `:4328`, `:4561`, `:6150`) are unaffected.
+- `_formula_fundamentals(self, definition, propagation_meta, *, cache=None, failures=None, warmups=None)` at `servicer.py:1923-1960`: per-pass dedup `if fid in out` (`:1938`), cache hit `metrics = cache[fid]` (`:1940-1941`), the `GetFormula` call (`:1944-1947`), refusal/outage branch (`:1951-1954`, `UNREADABLE_FORMULA_CODES` imported at `:71`), cache write `cache[fid] = metrics` (`:1955-1956`), return map `{fid: metrics}` (`:1957-1960`). The `warmups=` keyword is feature 341 (its only caller: `:4565-4567`) and is untouched.
+- `_declared_formula_warmup(self, formula_id, cache, propagation_meta, deleted_cache=None, fund_map=None, failures=None) -> int` at `:2537-2576`; the `if formula_id not in cache:` block is `:2553-2575`; `cache` is `dict[str, int]` (`formula_warmup_cache` at `:976`).
+- `_prefetch_formula_warmups(self, definition, cache, propagation_meta, deleted_cache=None, fund_map=None, failures=None)` at `:2578-2625`; its loop call at `:2623-2625`.
+- Callers that pass `cache=` to `_formula_fundamentals` (the cache they own becomes `_FormulaRead`-valued): `_exclude_refused_cells` (`:2808`) call `:2819-2821`; heal `:5186-5191` (dict declared `formula_fund_cache: dict[str, list] = {}` at `:5145`); opportunities `:5931-5936` (dict declared at `:5786`). Callers without `cache=` (`:809`, `:1006`, `:4028`, `:4332`, `:4565`, `:6281`) are unaffected.
 - Break-radius (checklist i): all three signatures only gain an optional trailing keyword; `grep -n "_formula_fundamentals\|_declared_formula_warmup\|_prefetch_formula_warmups\|formula_cache\|formula_fund_cache" services/xstockstrat-analysis/tests/*.py` → call sites at `tests/test_fundamentals_pit_pager.py:307` and `tests/test_owner_header_guard.py:343-344` use existing positional/keyword forms and no test reads a cache value, so none needs editing.
-- Header propagation (§B): no new outbound call — the digest is computed from the response of the existing `GetFormula` calls, which already pass `metadata=propagation_meta` (`:1943`, `:2553`).
+- Header propagation (§B): no new outbound call — the digest is computed from the response of the existing `GetFormula` calls, which already pass `metadata=propagation_meta` (`:1946`, `:2557`).
 - Rejected: R-4 (no separate `GetFormula` resolver).
 
 **Lands with**: `Step 6`
@@ -302,8 +302,8 @@ ruff check . && ruff format --check .
 **Instructions**:
 1. `_formula_fundamentals`: add keyword `digests=None`. Cache values become `_FormulaRead(metrics, digest)`: on a hit unpack `metrics, digest = cache[fid]`; on a successful fetch `digest = _formula_digest(formula)`; in the `except grpc.RpcError` branch `digest = _UNREADABLE if _rpc_code(e) in UNREADABLE_FORMULA_CODES else None` (the existing `failures[("formula", fid)] = Availability.UNKNOWN` write is unchanged); write `cache[fid] = _FormulaRead(metrics, digest)`; when `digests is not None` set `digests[fid] = digest` for every CUSTOM_FORMULA fid visited (hit or fetch). The returned map stays `{fid: metrics}`. Extend the docstring's last sentence by one clause naming `digests`.
 2. `_declared_formula_warmup`: add trailing keyword `digests=None`. Inside the `if formula_id not in cache:` block only (`cache` stays `dict[str, int]`): after a successful fetch set `digests[formula_id] = _formula_digest(formula)`; in the `except grpc.RpcError` branch set `digests[formula_id] = _UNREADABLE if _rpc_code(e) in UNREADABLE_FORMULA_CODES else None` — both guarded by `digests is not None`, and independent of `fund_map`/`failures`.
-3. `_prefetch_formula_warmups`: add trailing keyword `digests=None` and pass it through at `:2619-2621`.
-4. Annotation-only edits: `formula_fund_cache: dict[str, _FormulaRead] = {}` at `:5087` and `:5662`.
+3. `_prefetch_formula_warmups`: add trailing keyword `digests=None` and pass it through at `:2623-2625`.
+4. Annotation-only edits: `formula_fund_cache: dict[str, _FormulaRead] = {}` at `:5145` and `:5786`.
 No caller passes `digests` yet.
 
 **Verification**:
@@ -328,8 +328,8 @@ ruff check . && ruff format --check .
 
 **Codebase Evidence**:
 - **Not found** — no `tests/test_formula_digest_read.py`; created from scratch.
-- Servicer factory `make_servicer()` at `tests/test_analysis_servicer.py:44`; RPC-error builder pattern `grpc.aio.AioRpcError(code, grpc.aio.Metadata(), grpc.aio.Metadata(), "down")` at `tests/test_grade_fundamentals_exclusion.py:63-64`; direct-helper call patterns at `tests/test_fundamentals_pit_pager.py:307` and `tests/test_owner_header_guard.py:343-344`.
-- Count pins that must stay green: `tests/test_analysis_servicer.py:4273`, `:6837`, `:7302` (`GetFormula.await_count == 1`).
+- Servicer factory `make_servicer()` at `tests/test_analysis_servicer.py:45`; RPC-error builder pattern `grpc.aio.AioRpcError(code, grpc.aio.Metadata(), grpc.aio.Metadata(), "down")` at `tests/test_grade_fundamentals_exclusion.py:63-64`; direct-helper call patterns at `tests/test_fundamentals_pit_pager.py:307` and `tests/test_owner_header_guard.py:343-344`.
+- Count pins that must stay green: `tests/test_analysis_servicer.py:4274`, `:6858`, `:7323` (`GetFormula.await_count == 1`).
 
 **Lands with**: `Step 5`
 
@@ -449,11 +449,11 @@ ruff check . && ruff format --check .
 **Reviewers**: xstockstrat-analysis service owner — Backtest reproducibility, strategy scoring determinism, no look-ahead bias
 
 **Codebase Evidence**:
-- `_run_backtest(self, request, context, disarm)` at `servicer.py:844`. Early fingerprint block at `:921-929` (`run_fingerprint = None` … `if request.strategy_id_ref and request.strategy_id == request.strategy_id_ref and executed_row is not None: run_fingerprint = _definition_fingerprint(executed_row["definition_json"])`).
-- Formula-map build at `:985-1004`: `fund_failures: dict = {}` (`:986`), `formula_fund_map: dict[str, list] = {}` (`:990`), `await self._prefetch_formula_warmups(active_definition, formula_warmup_cache, propagation_meta, formula_deleted_cache, formula_fund_map, failures=fund_failures)` (`:993-1000`) when `start_set`, else `formula_fund_map = await self._formula_fundamentals(active_definition, propagation_meta, failures=fund_failures)` (`:1002-1004`).
-- Formula warnings: `if formula_deleted_cache: result.warnings.extend(formula_deleted_cache.values())` at `:1340-1341`.
-- Stamp: `fingerprint=run_fingerprint` in the `_persist_symbol_cells` call at `:1372-1380`.
-- Recompute: `await self._recompute_headline(caller_user_id, request.strategy_id, fund_cache=fund_cache, failures=fund_failures, meta=propagation_meta)` at `:1414-1420`; `except _GradeInputsUnknown as e: log.warning("fundamentals availability unknown — grade unchanged: %s", e)` at `:1421-1422`. `_recompute_headline(self, user_id, strategy_id, **derive_kw)` (`:2925`) forwards keywords to `_fetch_and_aggregate`, which already accepts `formula_cache=` (`:2874`).
+- `_run_backtest(self, request, context, disarm)` at `servicer.py:848`. Early fingerprint block at `:925-933` (comment `:925-926`) (`run_fingerprint = None` … `if request.strategy_id_ref and request.strategy_id == request.strategy_id_ref and executed_row is not None: run_fingerprint = _definition_fingerprint(executed_row["definition_json"])`).
+- Formula-map build at `:989-1008`: `fund_failures: dict = {}` (`:990`), `formula_fund_map: dict[str, list] = {}` (`:994`), `await self._prefetch_formula_warmups(active_definition, formula_warmup_cache, propagation_meta, formula_deleted_cache, formula_fund_map, failures=fund_failures)` (`:997-1004`) when `start_set`, else `formula_fund_map = await self._formula_fundamentals(active_definition, propagation_meta, failures=fund_failures)` (`:1006-1008`).
+- Formula warnings: `if formula_deleted_cache: result.warnings.extend(formula_deleted_cache.values())` at `:1344-1345`.
+- Stamp: `fingerprint=run_fingerprint` in the `_persist_symbol_cells` call at `:1376-1384` (keyword at `:1380`).
+- Recompute: `await self._recompute_headline(caller_user_id, request.strategy_id, fund_cache=fund_cache, failures=fund_failures, meta=propagation_meta)` at `:1418-1424`; `except _GradeInputsUnknown as e: log.warning("fundamentals availability unknown — grade unchanged: %s", e)` at `:1425-1426`. `_recompute_headline(self, user_id, strategy_id, **derive_kw)` (`:2929`) forwards keywords to `_fetch_and_aggregate`, which already accepts `formula_cache=` (`:2878`).
 - A refusal makes every symbol FORMULA_ERROR on the backtest path (`app/services/evaluator.py:267-271`), so a refused run loses no evidence by stamping `None` (D-10).
 
 **Lands with**: `Step 10`
@@ -463,12 +463,12 @@ ruff check . && ruff format --check .
 **Covers**: —
 
 **Instructions**:
-1. Replace the early block at `:921-929` with only the eligibility flag: keep the comment, and compute `stamps_fingerprint = bool(request.strategy_id_ref and request.strategy_id == request.strategy_id_ref and executed_row is not None)`.
-2. Before the formula-map build (`:985`), declare `formula_digests: dict = {}`; pass `digests=formula_digests` to the `_prefetch_formula_warmups` call (`:993-1000`) and to the `_formula_fundamentals` call (`:1002-1004`).
+1. Replace the early block at `:925-933` with only the eligibility flag: keep the comment, and compute `stamps_fingerprint = bool(request.strategy_id_ref and request.strategy_id == request.strategy_id_ref and executed_row is not None)`.
+2. Before the formula-map build (`:989`), declare `formula_digests: dict = {}`; pass `digests=formula_digests` to the `_prefetch_formula_warmups` call (`:997-1004`) and to the `_formula_fundamentals` call (`:1006-1008`).
 3. Directly after the formula-map build, set `run_fingerprint = None` and, when `stamps_fingerprint`: if every value in `formula_digests` is a `str`, `run_fingerprint = _evidence_fingerprint(executed_row["definition_json"], formula_digests)` (no CUSTOM_FORMULA component → empty dict → the bare `_definition_fingerprint`, byte-identical to today); otherwise leave it `None` — for an outage (`None`) and for a refusal (`_UNREADABLE`) alike.
-4. Add a module constant next to `_UNREADABLE`: `_FORMULA_VERSION_WARNING = "evidence not recorded: formula version unavailable — rerun"`. After the `formula_deleted_cache` warnings (`:1340-1341`), append it to `result.warnings` once when `stamps_fingerprint` and any digest `is None` (an outage only — a rerun cannot fix a refusal, O-21).
-5. Before the recompute (`:1413`), build the run-level seed `recompute_formulas = {fid: _FormulaRead(formula_fund_map.get(fid, []), d) for fid, d in formula_digests.items() if d is not None}` (readable formulas with their metrics, refused ones as `_FormulaRead([], _UNREADABLE)`; an outage is not seeded) and pass `formula_cache=recompute_formulas` in the `_recompute_headline` call (`:1414-1420`) — one `GetFormula` per formula per run (C-18, O-22).
-6. Add `except _FormulaVersionUnknown as e: log.warning("formula version unavailable — grade unchanged: %s", e)` **before** the existing `except _GradeInputsUnknown` at `:1421` (O-23).
+4. Add a module constant next to `_UNREADABLE`: `_FORMULA_VERSION_WARNING = "evidence not recorded: formula version unavailable — rerun"`. After the `formula_deleted_cache` warnings (`:1344-1345`), append it to `result.warnings` once when `stamps_fingerprint` and any digest `is None` (an outage only — a rerun cannot fix a refusal, O-21).
+5. Before the recompute (`:1417`), build the run-level seed `recompute_formulas = {fid: _FormulaRead(formula_fund_map.get(fid, []), d) for fid, d in formula_digests.items() if d is not None}` (readable formulas with their metrics, refused ones as `_FormulaRead([], _UNREADABLE)`; an outage is not seeded) and pass `formula_cache=recompute_formulas` in the `_recompute_headline` call (`:1418-1424`) — one `GetFormula` per formula per run (C-18, O-22).
+6. Add `except _FormulaVersionUnknown as e: log.warning("formula version unavailable — grade unchanged: %s", e)` **before** the existing `except _GradeInputsUnknown` at `:1425` (O-23).
 
 **Verification**:
 ```bash
@@ -493,10 +493,10 @@ ruff check . && ruff format --check .
 
 **Codebase Evidence**:
 - **Not found** — no `tests/test_run_backtest_fingerprint.py`; created from scratch.
-- Registered-own-run harness to mirror: `tests/test_analysis_servicer.py:2302-2329` (`test_registered_own_run_stamps_fingerprint`: `_strategies_repo.get_by_owner_and_id` returns the row, `svc._backtest_symbol_evaluated = AsyncMock(side_effect=lambda symbol=None, **kw: ([], 100_000.0, curve, diag, []))`, cells read from `svc._backtest_run_symbols_repo.insert_many.await_args.args[0]`); it stays green unchanged (no formula → bare hash).
-- Windowed/prefixed request helper `_windowed_req(definition, *, start, end, symbols)` at `tests/test_analysis_servicer.py:3916`; row helper `_row_for(definition)` at `:675`; `_owned_ctx()` at `:71`; a CUSTOM_FORMULA definition literal at `:6826-6835`.
+- Registered-own-run harness to mirror: `tests/test_analysis_servicer.py:2303-2330` (`test_registered_own_run_stamps_fingerprint`: `_strategies_repo.get_by_owner_and_id` returns the row, `svc._backtest_symbol_evaluated = AsyncMock(side_effect=lambda symbol=None, **kw: ([], 100_000.0, curve, diag, []))`, cells read from `svc._backtest_run_symbols_repo.insert_many.await_args.args[0]`); it stays green unchanged (no formula → bare hash).
+- Windowed/prefixed request helper `_windowed_req(definition, *, start, end, symbols)` at `tests/test_analysis_servicer.py:3917`; row helper `_row_for(definition)` at `:676`; `_owned_ctx()` at `:72`; a CUSTOM_FORMULA definition literal at `:6845-6854`.
 - Recompute-kwargs assertion pattern: `tests/test_grade_fundamentals_exclusion.py:160-168` (`svc._recompute_headline = AsyncMock(return_value=None)` → `svc._recompute_headline.await_args.kwargs`).
-- `GetFormula` count pins that must stay green: `tests/test_analysis_servicer.py:4273`, `:6837`.
+- `GetFormula` count pins that must stay green: `tests/test_analysis_servicer.py:4274`, `:6858`.
 
 **Lands with**: `Step 9`
 
@@ -510,7 +510,7 @@ Create `tests/test_run_backtest_fingerprint.py`; reuse `make_servicer`, `_owned_
 2. Outage: `GetFormula` UNAVAILABLE → every inserted cell (if any) has `definition_fingerprint is None` and `_FORMULA_VERSION_WARNING` is in `result.warnings` exactly once.
 3. Refusal: `GetFormula` NOT_FOUND → fingerprint `None`, and `_FORMULA_VERSION_WARNING` is **not** in `result.warnings`.
 4. An inline / id-mismatch run with a formula outage carries **no** `_FORMULA_VERSION_WARNING` (it never records evidence).
-5. Single read: with `svc._recompute_headline = AsyncMock(return_value=None)`, the call's `formula_cache` kwarg holds `_FormulaRead` for the readable fid (digest equal to the stamped one) and `_FormulaRead([], _UNREADABLE)` for a refused fid; with the real recompute on a registered strategy `svc._indicators.GetFormula.await_count == 1` for the whole run. Pin that count with a strategy that has **one** CUSTOM_FORMULA component per formula id. Add a separate duplicate-component case (two components on the same non-fundamentals `f-9`): `_formula_fundamentals` skips a repeated fid only once it is in `out`, i.e. only for a fundamentals formula (`if fid in out: continue`, `servicer.py:1934-1935`), and the unprefixed path calls it without `cache=` (`:1002-1004`), so that shape issues a second `GetFormula` today (existing behaviour, not changed by this feature; the `digests` write is idempotent). For that case assert only that the stamp equals the one-component stamp — do **not** assert `await_count == 1` on the unprefixed path; if the prefixed path (`_prefetch_formula_warmups`, cached per id) shows more than one read, stop and report.
+5. Single read: with `svc._recompute_headline = AsyncMock(return_value=None)`, the call's `formula_cache` kwarg holds `_FormulaRead` for the readable fid (digest equal to the stamped one) and `_FormulaRead([], _UNREADABLE)` for a refused fid; with the real recompute on a registered strategy `svc._indicators.GetFormula.await_count == 1` for the whole run. Pin that count with a strategy that has **one** CUSTOM_FORMULA component per formula id. Add a separate duplicate-component case (two components on the same non-fundamentals `f-9`): `_formula_fundamentals` skips a repeated fid only once it is in `out`, i.e. only for a fundamentals formula (`if fid in out: continue`, `servicer.py:1938-1939`), and the unprefixed path calls it without `cache=` (`:1006-1008`), so that shape issues a second `GetFormula` today (existing behaviour, not changed by this feature; the `digests` write is idempotent). For that case assert only that the stamp equals the one-component stamp — do **not** assert `await_count == 1` on the unprefixed path; if the prefixed path (`_prefetch_formula_warmups`, cached per id) shows more than one read, stop and report.
 6. Run the full suite. If an existing assertion in `tests/test_analysis_servicer.py` fails **only** because a registered own run of a CUSTOM_FORMULA strategy now stamps the composite instead of the bare hash, update that assertion to `_evidence_fingerprint(...)`; any other failure is a blocker to report, not to patch.
 7. When `_recompute_headline` raises `_FormulaVersionUnknown("f-9")`, the run still returns OK and the log carries "formula version unavailable — grade unchanged" (mirror `tests/test_grade_fundamentals_exclusion.py:310-317`).
 
@@ -535,13 +535,13 @@ ruff check . && ruff format --check .
 **Reviewers**: xstockstrat-analysis service owner — Backtest reproducibility, strategy scoring determinism, no look-ahead bias
 
 **Codebase Evidence**:
-- `_fetch_and_aggregate(self, user_id, strategy_id, strategy_row, *, fund_cache=None, formula_cache=None, failures=None, meta=None, sem=None, excluded=None)` at `servicer.py:2867-2923`: `fingerprint = _definition_fingerprint(strategy_row["definition_json"])` (`:2890`), `definition = _row_to_strategy_definition(strategy_row)` (`:2891`), `guarded` (`:2892-2896`), gate-off read `fetch_eligible` (`:2898-2902`), gate-on read `fetch_all_for_fingerprint` (`:2904-2906`), `_exclude_refused_cells(... formula_cache=formula_cache if formula_cache is not None else {}, failures=failures if failures is not None else {}, meta=meta if meta is not None else owner_metadata(user_id), sem=sem)` (`:2909-2917`), the `excluded` out-list pattern (`:2918-2919`).
-- `_exclude_refused_cells` reads the same cache: `await self._formula_fundamentals(definition, meta, cache=formula_cache, failures=failures)` at `:2815-2817`.
-- The four callers (O-11; `grep -n "_fetch_and_aggregate(" app/handlers/servicer.py`): `ScoreStrategy` `:2655-2661`; `_recompute_headline_locked` `:2950`, reached from `_recompute_headline` (`:2925-2941`) by `_run_backtest` (`:1414`) and the boot pass `recompute_unscored_pairs` (`:3104-3110`, per-owner `formula_caches.setdefault(user_id, {})` at `:3108`, one shared `failures` dict at `:3101`), and directly by ManageStrategy UPDATE (`:3399-3401`).
-- `ScoreStrategy` error mapping: `except _GradeInputsUnknown as e:` → `log.warning("score: fundamentals availability unknown for %s", e.symbol)` → UNAVAILABLE `"fundamentals availability unknown — grade unchanged"` at `:2662-2668`; `excluded: list[str] = []` at `:2653`; the no-evidence branch `:2673-2694` ending `NOT_FOUND "no eligible evidence — run a backtest"` (`:2691-2693`).
-- Gate read: `self._cfg.get_bool("backtest.fundamentals.enabled", False)` (`:2892`) — an existing seeded key; no new config reader (C-05 not triggered).
+- `_fetch_and_aggregate(self, user_id, strategy_id, strategy_row, *, fund_cache=None, formula_cache=None, failures=None, meta=None, sem=None, excluded=None)` at `servicer.py:2871-2927`: `fingerprint = _definition_fingerprint(strategy_row["definition_json"])` (`:2894`), `definition = _row_to_strategy_definition(strategy_row)` (`:2895`), `guarded` (`:2896-2900`), gate-off read `fetch_eligible` (`:2901-2907`), gate-on read `fetch_all_for_fingerprint` (`:2908-2912`), `_exclude_refused_cells(... formula_cache=formula_cache if formula_cache is not None else {}, failures=failures if failures is not None else {}, meta=meta if meta is not None else owner_metadata(user_id), sem=sem)` (`:2913-2922`), the `excluded` out-list pattern (`:2923-2924`).
+- `_exclude_refused_cells` reads the same cache: `await self._formula_fundamentals(definition, meta, cache=formula_cache, failures=failures)` at `:2819-2821`.
+- The four callers (O-11; `grep -n "_fetch_and_aggregate(" app/handlers/servicer.py`): `ScoreStrategy` `:2659-2665`; `_recompute_headline_locked` `:2954`, reached from `_recompute_headline` (`:2929-2945`) by `_run_backtest` (`:1418`) and the boot pass `recompute_unscored_pairs` (`:3108-3115`, per-owner `formula_caches.setdefault(user_id, {})` at `:3112`, one shared `failures` dict at `:3105`), and directly by ManageStrategy UPDATE (`:3403-3405`).
+- `ScoreStrategy` error mapping: `except _GradeInputsUnknown as e:` → `log.warning("score: fundamentals availability unknown for %s", e.symbol)` → UNAVAILABLE `"fundamentals availability unknown — grade unchanged"` at `:2666-2672`; `excluded: list[str] = []` at `:2657`; the no-evidence branch `:2677-2698` ending `NOT_FOUND "no eligible evidence — run a backtest"` (`:2695-2697`).
+- Gate read: `self._cfg.get_bool("backtest.fundamentals.enabled", False)` (`:2896`) — an existing seeded key; no new config reader (C-05 not triggered).
 - Durable rule to preserve: `@AC-23 @feature-289` (`services/xstockstrat-analysis/acceptance/block-fundamentals-strategy-on-etf.feature:97-102`) — refusal succeeds with trailer `"[]"`, outage keeps the pinned message.
-- Header propagation (§B): no new outbound RPC; the formula read reuses `_formula_fundamentals` with the caller's `meta` (inbound trio for interactive paths, `owner_metadata(user_id)` for the boot path — `:2915`).
+- Header propagation (§B): no new outbound RPC; the formula read reuses `_formula_fundamentals` with the caller's `meta` (inbound trio for interactive paths, `owner_metadata(user_id)` for the boot path — `:2920`).
 - Gate-off behaviour change (acknowledged): every CUSTOM_FORMULA strategy now issues `GetFormula` on `ScoreStrategy` and on each recompute even with `backtest.fundamentals.enabled` off, and a formula outage then aborts UNAVAILABLE where it did not before. The C-16 sign-off for this coupling and for the `@AC-23 @feature-289` treatment **is recorded**: context.md "Session 2026-11-20 — sdd-design", bullet "Operator decision (binding, recorded 2026-11-20, design gate)"; design.md "Business Rules Touched (C-16)".
 - Agent contract: the UNAVAILABLE text added here is allow-listed by the agent in Step 16 and pinned against this file's source in Step 17 as the literal assignment `_FORMULA_VERSION_UNKNOWN_MSG = "formula version unavailable — grade unchanged"` — keep it a single-line module-level assignment with exactly that text (AGENT-10, `services/xstockstrat-agent/docs/context-constitution.md:25`).
 
@@ -553,16 +553,16 @@ ruff check . && ruff format --check .
 
 **Instructions**:
 0. Phase-2 gate, before any write: obtain the operator's explicit acknowledgement of the unrecoverable refused population (O-18 — a strategy whose formula is refused at rollout and that holds only pre-feature cells answers NOT_FOUND until the formula is readable; 028 template instances, the 029 blend) and record it in `context.md`. This step ships that behaviour; without the acknowledgement, stop and report.
-1. `_fetch_and_aggregate`: add keyword `unreadable=None` (an out-list, mirroring `excluded`). At the top, bind once: `formula_cache = formula_cache if formula_cache is not None else {}`, `failures = failures if failures is not None else {}`, `meta = meta if meta is not None else owner_metadata(user_id)`; pass those bound names (no inline defaults) to `_exclude_refused_cells` at `:2909-2917` (D-11).
-2. Replace `:2890` with: `def_hash = _definition_fingerprint(strategy_row["definition_json"])`, build `definition` (existing `:2891`), `fingerprint = def_hash`. When the definition has at least one `COMPONENT_KIND_CUSTOM_FORMULA` component with a `formula_id`:
+1. `_fetch_and_aggregate`: add keyword `unreadable=None` (an out-list, mirroring `excluded`). At the top, bind once: `formula_cache = formula_cache if formula_cache is not None else {}`, `failures = failures if failures is not None else {}`, `meta = meta if meta is not None else owner_metadata(user_id)`; pass those bound names (no inline defaults) to `_exclude_refused_cells` at `:2913-2922` (D-11).
+2. Replace `:2894` with: `def_hash = _definition_fingerprint(strategy_row["definition_json"])`, build `definition` (existing `:2895`), `fingerprint = def_hash`. When the definition has at least one `COMPONENT_KIND_CUSTOM_FORMULA` component with a `formula_id`:
    - `digests: dict = {}`; `await self._formula_fundamentals(definition, meta, cache=formula_cache, failures=failures, digests=digests)` — **before** any cell read;
    - if any digest `is None`: `raise _FormulaVersionUnknown(<first such fid in sorted order>)`;
    - elif any digest `is _UNREADABLE`: `fingerprint = await self._backtest_run_symbols_repo.latest_formula_fingerprint(user_id, strategy_id, def_hash)`; when that is `None`, extend `unreadable` (if given) with the sorted refused fids and `return None` (the existing no-evidence path); the newest composite is used as a whole even when other formulas are readable (accepted limitation O-19);
    - else `fingerprint = _evidence_fingerprint(strategy_row["definition_json"], digests)`.
    The rest of the method (gate-off `fetch_eligible`, gate-on `fetch_all_for_fingerprint` + `_exclude_refused_cells`) is unchanged and uses `fingerprint`. Update the docstring's first sentence to say the fingerprint is the formula-aware evidence fingerprint.
-3. `ScoreStrategy`: add a module constant next to `_FORMULA_VERSION_WARNING`: `_FORMULA_VERSION_UNKNOWN_MSG = "formula version unavailable — grade unchanged"`. Insert, **before** `except _GradeInputsUnknown` (`:2662`): `except _FormulaVersionUnknown as e:` → `log.warning("score: formula version unavailable for %s", e.formula_id)` → abort UNAVAILABLE with the pinned `"fundamentals availability unknown — grade unchanged"` when `self._cfg.get_bool("backtest.fundamentals.enabled", False)` is true, else with `_FORMULA_VERSION_UNKNOWN_MSG`; `return`.
-4. `ScoreStrategy`: declare `unreadable: list[str] = []` beside `excluded` (`:2653`), pass `unreadable=unreadable` to `_fetch_and_aggregate`, and in the no-evidence branch add, before the `if excluded:` check (`:2684`): when `unreadable`, abort `NOT_FOUND` with `f"no eligible evidence — formula {', '.join(unreadable)} is not readable and no evidence was recorded for a readable version; restore access to the formula or rebind the component, then run a backtest"`. The stale-grade clear above it (`:2676-2683`) is unchanged.
-5. No change to `_recompute_headline`, `_recompute_headline_locked` or `recompute_unscored_pairs`: `_FormulaVersionUnknown` propagates as a `_GradeInputsUnknown` (grade kept) and the boot pass logs it per pair (`:3111-3112`).
+3. `ScoreStrategy`: add a module constant next to `_FORMULA_VERSION_WARNING`: `_FORMULA_VERSION_UNKNOWN_MSG = "formula version unavailable — grade unchanged"`. Insert, **before** `except _GradeInputsUnknown` (`:2666`): `except _FormulaVersionUnknown as e:` → `log.warning("score: formula version unavailable for %s", e.formula_id)` → abort UNAVAILABLE with the pinned `"fundamentals availability unknown — grade unchanged"` when `self._cfg.get_bool("backtest.fundamentals.enabled", False)` is true, else with `_FORMULA_VERSION_UNKNOWN_MSG`; `return`.
+4. `ScoreStrategy`: declare `unreadable: list[str] = []` beside `excluded` (`:2657`), pass `unreadable=unreadable` to `_fetch_and_aggregate`, and in the no-evidence branch add, before the `if excluded:` check (`:2688`): when `unreadable`, abort `NOT_FOUND` with `f"no eligible evidence — formula {', '.join(unreadable)} is not readable and no evidence was recorded for a readable version; restore access to the formula or rebind the component, then run a backtest"`. The stale-grade clear above it (`:2680-2687`) is unchanged.
+5. No change to `_recompute_headline`, `_recompute_headline_locked` or `recompute_unscored_pairs`: `_FormulaVersionUnknown` propagates as a `_GradeInputsUnknown` (grade kept) and the boot pass logs it per pair (`:3116-3117`).
 
 **Verification**:
 ```bash
@@ -587,9 +587,9 @@ ruff check . && ruff format --check .
 
 **Codebase Evidence**:
 - **Not found** — no `tests/test_evidence_grade_formula_aware.py`; created from scratch.
-- Derivation harness: `_derivation_svc(cells, definition_json=None, strategy_id="s1")` at `tests/test_analysis_servicer.py:109-133` (AsyncMock strategies repo, `svc._backtest_run_symbols_repo = AsyncMock()` with `fetch_eligible`, AsyncMock scores repo); `_eligible_cell(...)` at `:96`; `_owned_ctx()` at `:71`.
+- Derivation harness: `_derivation_svc(cells, definition_json=None, strategy_id="s1")` at `tests/test_analysis_servicer.py:110-134` (AsyncMock strategies repo, `svc._backtest_run_symbols_repo = AsyncMock()` with `fetch_eligible`, AsyncMock scores repo); `_eligible_cell(...)` at `:97`; `_owned_ctx()` at `:72`.
 - Formula-strategy harness: `tests/test_grade_fundamentals_exclusion.py` — `_wire(svc, cells, *, pit=None, gate=True)` (`:67-84`, sets the gate, `fetch_all_for_fingerprint`, a readable `GetFormula`), `_blend_svc` (`:87-91`), `_cell` (`:55`), `_rpc_error(code)` (`:63`), `_score` / `_score_aborts` (`:224-233`), `_UNKNOWN_MSG` (`:47`), `_SID` (`:46`).
-- Tests to amend / keep green: `test_ac23_refused_formula_score_strategy_succeeds_with_empty_trailer` (`:501-506`) — after Step 11 a refusal calls `latest_formula_fingerprint`, which on the bare `AsyncMock()` repo returns a truthy mock rather than a fingerprint; `test_ac23_formula_outage_score_strategy_still_aborts_unavailable` (`:510-514`); `test_boot_pass_refusal_for_one_owner_never_poisons_another` (`:521-539`, the per-owner cache at `servicer.py:3108`); `test_gate_off_keeps_today_path` (`:473-478`); `test_non_fundamentals_strategy_makes_no_marketdata_calls_byte_identical` (`:459-469`, asserts `svc._indicators.method_calls == []` — must still hold: no CUSTOM_FORMULA → no formula read).
+- Tests to amend / keep green: `test_ac23_refused_formula_score_strategy_succeeds_with_empty_trailer` (`:501-506`) — after Step 11 a refusal calls `latest_formula_fingerprint`, which on the bare `AsyncMock()` repo returns a truthy mock rather than a fingerprint; `test_ac23_formula_outage_score_strategy_still_aborts_unavailable` (`:510-514`); `test_boot_pass_refusal_for_one_owner_never_poisons_another` (`:521-539`, the per-owner cache at `servicer.py:3112`); `test_gate_off_keeps_today_path` (`:473-478`); `test_non_fundamentals_strategy_makes_no_marketdata_calls_byte_identical` (`:459-469`, asserts `svc._indicators.method_calls == []` — must still hold: no CUSTOM_FORMULA → no formula read).
 
 **Lands with**: `Step 11`
 
@@ -632,10 +632,10 @@ ruff check . && ruff format --check .
 **Reviewers**: xstockstrat-analysis service owner — Backtest reproducibility, strategy scoring determinism, no look-ahead bias
 
 **Codebase Evidence**:
-- UPDATE branch of `ManageStrategy` (`servicer.py:3232`): the unlocked pre-read `pre = await self._strategies_repo.get_by_owner_and_id(...)` at `:3324-3326` (**not** the guard's source — open risk); `async def _apply(current, _defn=definition, _mask=mask_paths, _has=has_mask):` at `:3344` with `old_json = current["definition_json"] or {}` at `:3345` (the row locked by `update_locked`); `row = await self._strategies_repo.update_locked(caller_user_id, definition.strategy_id, _apply)` at `:3379-3381`.
-- Pop + recompute at `:3396-3403` (re-grepped at impl-spec review: comment `:3393-3394`, `sid = …` `:3395`, lock `:3396`, pop `:3397`, recompute `:3398-3401`, `except` `:3402-3403`): `async with self._lock_for(caller_user_id, sid): self._strategies.pop((caller_user_id, sid), None)` then `try: await self._recompute_headline_locked(caller_user_id, sid, row, meta=propagation_meta)` / `except Exception as e: log.warning("failed to recompute headline after update: %s", e)`.
+- UPDATE branch of `ManageStrategy` (`servicer.py:3236`): the unlocked pre-read `pre = await self._strategies_repo.get_by_owner_and_id(...)` at `:3328-3330` (**not** the guard's source — open risk); `async def _apply(current, _defn=definition, _mask=mask_paths, _has=has_mask):` at `:3348` with `old_json = current["definition_json"] or {}` at `:3349` (the row locked by `update_locked`); `row = await self._strategies_repo.update_locked(caller_user_id, definition.strategy_id, _apply)` at `:3383-3385`.
+- Pop + recompute at `:3400-3407` (re-grepped at execute re-spec 2026-11-27: comment `:3397-3398`, `sid = …` `:3399`, lock `:3400`, pop `:3401`, recompute `:3402-3405`, `except` `:3406-3407`): `async with self._lock_for(caller_user_id, sid): self._strategies.pop((caller_user_id, sid), None)` then `try: await self._recompute_headline_locked(caller_user_id, sid, row, meta=propagation_meta)` / `except Exception as e: log.warning("failed to recompute headline after update: %s", e)`.
 - `update_locked` runs `apply_fn(_to_dict(row))` inside `SELECT … FOR UPDATE` (`app/repositories/strategies.py:100-143`, call at `:126`); `apply_fn` must do no I/O — hashing is pure.
-- `_recompute_headline_locked` itself clears the grade on zero evidence (`:2951-2958`), so an unchanged hash with no evidence still clears.
+- `_recompute_headline_locked` itself clears the grade on zero evidence (`:2955-2962`), so an unchanged hash with no evidence still clears.
 - Binding operator decision 2026-11-20 (context.md, design.md step 6); rejected alternative R-7 (unconditional pop). Durable rule: `@AC-2 @regression @feature-194` (`services/xstockstrat-analysis/acceptance/fix-strategy-signal-params-dead-keys.feature:18-23`).
 
 **Lands with**: `Step 14`
@@ -645,9 +645,9 @@ ruff check . && ruff format --check .
 **Covers**: —
 
 **Instructions**:
-1. Before `_apply` (`:3344`), declare a one-slot holder `locked_hash: list[str] = []`. As the first statement after `old_json = …` (`:3345`), `locked_hash[:] = [_definition_fingerprint(old_json)]` — the hash of the **locked** row's definition, never of `pre`.
-2. At `:3396-3403`, replace the unconditional pop (`:3397`) with: `changed = not locked_hash or locked_hash[0] != _definition_fingerprint(row["definition_json"])`; inside the lock, `if changed: self._strategies.pop((caller_user_id, sid), None)`. The recompute call and its `except Exception` are unchanged (an unchanged hash still recomputes; `_FormulaVersionUnknown` is swallowed there and the grade stays).
-3. Replace the two-line comment at `:3393-3394` with the constraint: the grade is cleared first only when the definition hash of the row locked by `update_locked` differs from the written one; a rename must keep the grade when the recompute cannot run.
+1. Before `_apply` (`:3348`), declare a one-slot holder `locked_hash: list[str] = []`. As the first statement after `old_json = …` (`:3349`), `locked_hash[:] = [_definition_fingerprint(old_json)]` — the hash of the **locked** row's definition, never of `pre`.
+2. At `:3400-3407`, replace the unconditional pop (`:3401`) with: `changed = not locked_hash or locked_hash[0] != _definition_fingerprint(row["definition_json"])`; inside the lock, `if changed: self._strategies.pop((caller_user_id, sid), None)`. The recompute call and its `except Exception` are unchanged (an unchanged hash still recomputes; `_FormulaVersionUnknown` is swallowed there and the grade stays).
+3. Replace the two-line comment at `:3397-3398` with the constraint: the grade is cleared first only when the definition hash of the row locked by `update_locked` differs from the written one; a rename must keep the grade when the recompute cannot run.
 Known limitation (documented in Step 15, not handled here): a behavioural edit during a `GetFormula` outage still clears the in-memory grade.
 
 **Verification**:
@@ -671,9 +671,9 @@ ruff check . && ruff format --check .
 
 **Codebase Evidence**:
 - **Not found** — no `tests/test_update_grade_guard.py`; created from scratch.
-- UPDATE harness: `_stub_update_repo(svc, current_row)` at `tests/test_analysis_servicer.py:2500-2515` (its `update_locked` genuinely awaits `apply_fn(current_row)`, so the locked-row hash is exercised); `_update_req(strategy_id="s1", rhs=1, mask_paths=None)` at `:2470`; `_updated_row(strategy_id="s1", rhs=1)` at `:2518`; `_owned_ctx()` at `:71`.
+- UPDATE harness: `_stub_update_repo(svc, current_row)` at `tests/test_analysis_servicer.py:2501-2516` (its `update_locked` genuinely awaits `apply_fn(current_row)`, so the locked-row hash is exercised); `_update_req(strategy_id="s1", rhs=1, mask_paths=None)` at `:2471`; `_updated_row(strategy_id="s1", rhs=1)` at `:2519`; `_owned_ctx()` at `:72`.
 - Existing UPDATE-recompute test to keep green: `tests/test_grade_fundamentals_exclusion.py:320-333` (`test_update_keeps_db_grade_and_forwards_trio`).
-- Write-path formula outage is swallowed (design R-7, `servicer.py` `_fetch_formula_outputs` / `_formula_status_warnings` on the UPDATE path at `:3338-3342`) — confirm by the test itself: the rename must return successfully with `GetFormula` UNAVAILABLE; if it does not, stop and report (do not weaken the scenario).
+- Write-path formula outage is swallowed (design R-7, `servicer.py` `_fetch_formula_outputs` / `_formula_status_warnings` on the UPDATE path at `:3342-3346`) — confirm by the test itself: the rename must return successfully with `GetFormula` UNAVAILABLE; if it does not, stop and report (do not weaken the scenario).
 
 **Lands with**: `Step 13`
 
