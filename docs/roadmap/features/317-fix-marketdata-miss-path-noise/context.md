@@ -782,3 +782,31 @@ Up-front confirmation: the operator approved the plan with this record (binding,
   present, and there is no `r.pool.Exec`.
 - Files modified: `services/xstockstrat-portfolio/internal/service/portfolio_service.go`, `services/xstockstrat-portfolio/internal/repository/portfolio_repo.go`
 - Deviations: Deviation 2 (shared).
+
+## Session 2026-11-27 — sdd-execute sequential (sdd-batch-execute), unit B1 (Steps 5+6)
+
+- Tree: detached at `origin/feature/fix-marketdata-miss-path-noise` @ `c7cd98b7`. Anchors re-grepped:
+  `TIMEOUT_KEY_FORMS` `setConfigScalarBounds.test.ts:270`, neighbour row `:283`; `SCALAR_BOUNDS_REGISTRY`
+  `configServiceImpl.ts:114`, neighbour entry `'marketdata.stream.bar_ingest_backoff_ms'` now `:165`;
+  `lookupScalarBounds` `:187-189`. No `miss_backoff` string existed under `services/` before this unit.
+- Tooling: Node v24.22.3 (`/opt/node24/bin`, prepended to `PATH`) · pnpm 9.15.9 · main-checkout `node_modules` linked;
+  no install.
+- Config-key wiring gate: the product spec has no `## Config Key Changes` section and the unit adds no migration;
+  Step 6's own Verification runs `node scripts/check-config-wiring.mjs --final`, which exited 0 (two pre-existing
+  `REPORTED: … readers-disagree` lines, analysis `fundamentals.provider` and trading `trading_state`, unrelated).
+
+### Step 5 — test: `SetConfig` bounds for `marketdata` / `bars.miss_backoff_ms` [done]
+- Unit B1 (Steps 5+6, one commit). Added one `TIMEOUT_KEY_FORMS` row after the `stream.bar_ingest_backoff_ms` row;
+  the existing loops generate the accept, reject and prefixed-refusal cases.
+- TDD red (pre-unit tree): "rejects marketdata/bars.miss_backoff_ms just outside [0, 21600000] and writes nothing"
+  failed with `AssertionError: -1 must be rejected` (`undefined !== 3`), tests 407 / pass 406 / fail 1 → green:
+  tests 407 / pass 407 / fail 0, All files 92.32% lines, lint clean, union Verification exit 0.
+- Files modified: `services/xstockstrat-config/src/__tests__/setConfigScalarBounds.test.ts`
+- Deviations: Deviation 3 (Verification shell framing).
+
+### Step 6 — service: `SCALAR_BOUNDS_REGISTRY` entry for `marketdata.bars.miss_backoff_ms` [done]
+- Unit B1. Added `'marketdata.bars.miss_backoff_ms': { minValue: 0, maxValue: 21600000 }` after the feature-291
+  entry, with a two-line constraint comment (0 = kill switch; 6h ceiling bounds the first-live-fetch delay).
+- TDD: green per Step 5 (unit red→green); the grep finds one entry (`:168`); `--final` exit 0.
+- Files modified: `services/xstockstrat-config/src/grpc/configServiceImpl.ts`
+- Deviations: Deviation 3 (shared).

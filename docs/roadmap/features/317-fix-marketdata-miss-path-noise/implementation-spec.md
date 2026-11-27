@@ -499,7 +499,7 @@ Plus Step 3's Verification (tests, coverage, lint), which is the unit's green ru
 
 ### Step 5 — test: `SetConfig` bounds for `marketdata` / `bars.miss_backoff_ms`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/__tests__/setConfigScalarBounds.test.ts` — modify (one row)
@@ -536,7 +536,7 @@ All pass with Step 6 applied.
 
 ### Step 6 — service: `SCALAR_BOUNDS_REGISTRY` entry for `marketdata.bars.miss_backoff_ms`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/grpc/configServiceImpl.ts` — modify
@@ -1071,3 +1071,14 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Anchors**: lines moved after BRANCH SYNC (e.g. `processAccountDeregistered` `:1569` → `:1590`,
   `processBracketUpdate` `:1725` → `:1746`, `processBalanceSync` `:1773` → `:1794`). Every symbol was found, so
   this is not a deviation (F-04).
+
+### Deviation 3 — Steps 5+6: union Verification shell framing; Node 24 on PATH (2026-11-27)
+
+- **Spec said**: the Step 5 and Step 6 `**Verification**` blocks, each line run as written.
+- **Actual**: the same framing as Deviation 1. Run in one shell, line 1's `cd services/xstockstrat-config` makes the
+  repo-relative `grep` paths, the second `cd` and `node scripts/check-config-wiring.mjs --final` fail. Each line ran
+  unchanged in its own subshell from the repo root, chained with `&&`; the trailing `# …` comments were dropped.
+  The run used `PATH=/opt/node24/bin:$PATH` (root `CLAUDE.md` pins Node 24; the PATH default is v22).
+- **Disposition**: CI-equivalent fallback. The commands and the judgment are unchanged; only the shell framing.
+- **Anchors**: the neighbour registry entry moved from `configServiceImpl.ts:163` to `:165`; the test row anchor
+  `:283` is unchanged. Every symbol was found, so this is not a deviation (F-04).

@@ -163,6 +163,9 @@ const SCALAR_BOUNDS_REGISTRY: Record<string, { minValue: number; maxValue: numbe
   // feature 291: bar-ingest dead-symbol back-off. 0 is the documented kill switch; the 24h ceiling bounds how long a
   // false-positive hold can freeze a warm symbol's daily bar.
   'marketdata.stream.bar_ingest_backoff_ms': { minValue: 0, maxValue: 86400000 },
+  // feature 317: GetBars miss-path back-off. 0 is the documented kill switch; the 6h ceiling bounds how long a
+  // newly populated symbol can go without its first live fetch.
+  'marketdata.bars.miss_backoff_ms': { minValue: 0, maxValue: 21600000 },
   // feature 240: FR-5 last-close search window for offline marks (default 21 days).
   'portfolio.marketdata.last_close_lookback_days': { minValue: 5, maxValue: 60 },
   // feature 281: mirrors the portfolio reader clamp (60..86400), so no writable value is silently re-clamped.
