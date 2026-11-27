@@ -418,7 +418,7 @@ grep -n "analysis.pipeline\." services/xstockstrat-config/src/grpc/configService
 
 ### Step 4 — migration: analysis `031_pipeline_job_graph` (jobs and dependency edges)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/migrations/031_pipeline_job_graph.up.sql` — create

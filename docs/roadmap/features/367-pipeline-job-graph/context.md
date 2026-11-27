@@ -445,3 +445,14 @@ Carried from design.md § Open Risks; each needs an owner at `/sdd-spec` or late
   `services/xstockstrat-analysis/tests/{test_job_graph_settings,test_config_read_classification,test_config_zero_clamps}.py`,
   `services/xstockstrat-analysis/CLAUDE.md`, `docs/patterns/config-governance.md`.
 - Deviations: stored-set route and tooling versions (Deviation Log); none to the plan.
+
+### Step 4 — migration `031_pipeline_job_graph` [done]
+- Two plain tables `analysis.pipeline_jobs` (fillfactor 70, four table checks) and
+  `analysis.pipeline_job_deps`, with the four job indexes and the child index; `migration-rerun.py`
+  analysis clean end version 30 → 31.
+- TDD: N/A (migration). Verified offline: up/down pair at `031` (highest + 1); 2 `CREATE TABLE` ↔ 2
+  `DROP TABLE` (edges first); migration-order gate ok; `pipeline_job` mentioned only by `031`. Live
+  apply is CI's (`migration-rerun`); Step 8's fixture also executes the up file.
+- Files modified: `services/xstockstrat-analysis/migrations/031_pipeline_job_graph.{up,down}.sql`,
+  `scripts/migration-rerun.py`.
+- Deviations: none.
