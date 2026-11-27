@@ -3395,3 +3395,17 @@ Tooling (step 21): go1.27.0 ✓ · golangci-lint ✓ v2.14.0 (built with go1.27.
 - Deviations: Deviation Log, "Step 21 — Verification block stops after its first line; the DB lines cannot run here" and "Step 21 — how Instructions 1-3 were met".
 - Step 22 needs to know: the job must set `TRADING_DB_TEST_URL` and apply every trading migration (`012` included). Its green run must show 0 `--- SKIP`. The first real run of the 22021 atomicity case is there; on a different code, use the step's non-UUID `OrderID` fallback.
 - Context read: this file was read in full (lines 1-3363) before the step.
+
+## Session 2026-11-27 — sdd-execute sequential (sdd-batch-execute), Step 22
+
+Tooling (step 22): go1.27.0 ✓ · golangci-lint ⬇ v2.14.0 (built with go1.27.0, at `/root/go/bin`, put first on `PATH` for the lint runs)
+
+### Step 22 — config: CI job `trading-db-test` and the lint build tag [done]
+- `.github/workflows/ci.yml`: added the `trading-db-test` job ("Trading DB test (TimescaleDB)") between `marketdata-db-test` and `markdown-lint`. It copies `portfolio-db-test` and uses the same comment line. Its `if:` has `xstockstrat-trading` in place of `xstockstrat-portfolio`, its `cache-dependency-path` is `services/xstockstrat-trading/go.sum`, and its test step sets `GOWORK=off`, `CI=true` and `TRADING_DB_TEST_URL`, then runs `go test -tags dbtest -race -count=1 ./internal/repository/...`. The timescaledb service, checkout, migrator build and apply-migrations steps are unchanged copies. `ci-gate` gained `- trading-db-test` in `needs:` and an echo line after `marketdata-db-test`. `services/xstockstrat-trading/.golangci.yml`: `run:` gained `build-tags: [dbtest]`, in the same form as portfolio's.
+- TDD: N/A (config). Baseline before the edit (`.sdd-logs/v-1.log`, `exit=1`) printed `0` and no URL line, four `go test -tags dbtest` lines and no `build-tags`. GREEN (`v-2.log`, `exit=1`, because line 6 hit the `cd` pattern) printed `3`, one URL line (`:1166`), six dbtest lines and `28: build-tags:`/`29- - dbtest`. It listed all 10 `TestBracketLegsDB_*`/`TestTradingRepoLegsDB_*` cases with `ok …/internal/repository`. Line 6 alone (`v-3.log`) printed `0 issues.`, `exit=0`, with the Step 21 dbtest files now linted. A YAML parse confirmed the job and the `ci-gate` needs entry.
+- Config-wiring gate (C-16, step typed `config`): `node scripts/check-config-wiring.mjs --declared-from …/product-spec.md` (`v-4.log`) gave `exit=0` with no output. The step adds no key.
+- The job's first green run, with 0 `--- SKIP`, happens only in CI. The integration PR must quote it (Instruction 4).
+- Files modified: `.github/workflows/ci.yml`, `services/xstockstrat-trading/.golangci.yml`
+- Deviations: Deviation Log, "Step 22 — Verification block stops before its last line; the job cannot run here".
+- Open: `git diff --quiet origin/main-dev -- pnpm-lock.yaml` still prints `rc=1`. As in Steps 18-20, the cause is `main-dev` commit `eb3839d9`. This branch's only lockfile commits are the two `main-dev` merges. This step is not Node.
+- Context read: this file was read in full (lines 1-3397) before the step.

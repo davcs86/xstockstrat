@@ -1013,7 +1013,7 @@ Never start a database for this step. Without `TRADING_DB_TEST_URL` the compile 
 
 ### Step 22 — config: CI job `trading-db-test` and the lint build tag
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading` (CI and lint configuration only)
 **Files**:
 - `.github/workflows/ci.yml` — modify
@@ -1549,3 +1549,8 @@ _Populated by /sdd-execute as implementation proceeds._
 - **The empty-string `KnownBrokerOrderIDs` member.** The case seeds one bracket whose leg columns are `''` and one whose columns are NULL. It queries real ids only and asserts the result has no `""` key. If `""` were in the input it would match a `''` column. No caller is known to pass `""`, and this step does not test that input.
 - **The atomicity case** asserts SQLSTATE `22021` for a NUL byte in `Symbol`. This was not run against a server. If the CI server returns another code or rejects the value client-side, the case fails loudly. The fix is then the step's named fallback (a non-UUID `parent.OrderID`) with the same three assertions.
 - **Disposition**: these stay within the listed **Files** and the instructions' intent. No step body changed.
+
+### Step 22 — Verification block stops before its last line; the job cannot run here (2026-11-27)
+- **Spec said**: a six-line block. Lines 1-4 are repo-root greps, and lines 5 and 6 each start `cd services/xstockstrat-trading && …`.
+- **Actual**: the same pattern as Steps 3-21. Inside the one subshell the `cd` on line 5 persists, so line 6 fails with `cd: services/xstockstrat-trading: No such file or directory`. Run verbatim (`.sdd-logs/v-2.log`, `exit=1`), lines 1-5 ran and printed what the spec expects: `3`, one `TRADING_DB_TEST_URL` line (`:1166`, in the new job), six `go test -tags dbtest` lines (`:1059,1065,1110,1116,1161,1167`), `28: build-tags:` / `29- - dbtest`, and all 10 Step 21 case names from `-list` with `ok …/internal/repository`. The `trading-db-test` job needs GitHub Actions and a database, so it cannot run here (Instruction 4).
+- **Disposition**: line 6 ran unchanged, alone, from the repo root (`v-3.log`, `0 issues.`, `exit=0`, with v2.14.0 first on `PATH`). The integration PR quotes the job's first run (Instruction 4). The step body was not changed (F-09).
