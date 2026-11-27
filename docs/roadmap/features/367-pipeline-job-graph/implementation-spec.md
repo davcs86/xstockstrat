@@ -557,7 +557,7 @@ git diff origin/main-dev --numstat -- app/repositories/read_budget.py | awk '$2 
 
 ### Step 6 — test: `bounded_txn` against real PostgreSQL, and the asyncpg pins
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_bounded_txn_real_pg.py` — create

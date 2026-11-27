@@ -468,3 +468,20 @@ Carried from design.md § Open Risks; each needs an owner at `/sdd-spec` or late
   pass; 148 additions, 0 deletions against `origin/main-dev`.
 - Files modified: `services/xstockstrat-analysis/app/repositories/read_budget.py`.
 - Deviations: `control_pool_reset` is a no-op (Step 6 ruling, Deviation Log).
+
+### Step 6 — `bounded_txn` against real PostgreSQL, and the asyncpg pins [done]
+- 10 real-PG pins (`tests/test_bounded_txn_real_pg.py`) and 9 fake-connection unit tests
+  (`tests/test_bounded_txn.py`, injected clock, no sleeps).
+- asyncpg 0.31.0 pins: terminate wakes an in-flight await ✓ (no child-task fallback); `reset=` ✓;
+  `min_size=0` ✓; the reset-callback in-transaction refusal ✗ → operator ruling "Adopt asyncpg's
+  behaviour" (Deviation Log), re-pinned as two tests.
+- TDD: red — with the COMMIT-tag check and the client timer disabled in a scratch copy,
+  `test_commit_that_returns_rollback_raises` failed (`DID NOT RAISE TxnNotCommitted`) and
+  `test_frozen_backend_…` hit its 10 s hang guard (`TimeoutError`). Green — the four `bounded_txn` /
+  `read_budget` files 59 passed; full suite 2026 passed, coverage 92.17% (≥ 40); ruff clean; no real-PG
+  test skipped.
+- Test-harness note: a first draft wrapped `PoolConnectionProxy.execute` by attribute assignment and
+  hung; replaced by the `sent` spy on `asyncpg.Connection` (no product-code change).
+- Files modified: `services/xstockstrat-analysis/tests/test_bounded_txn_real_pg.py`,
+  `services/xstockstrat-analysis/tests/test_bounded_txn.py`.
+- Deviations: the reset pin (Deviation Log).
