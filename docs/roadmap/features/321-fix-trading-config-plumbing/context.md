@@ -274,3 +274,12 @@ Read-back taken 2026-11-27T03:13Z by the main session (get_config namespace `tra
 - Homelab staging (`xstockstrat_homelab_staging`, environment=staging, config version `d6b3f8be0d742264`): `broker.timeout_ms` = 10000 (int), `order_intent.stale_multiplier` = 4.0 (float).
 - Pass condition (`timeout_ms` int >= 10000, `stale_multiplier` >= 4.0): met on both, each at the boundary. Both deployments report the same opaque version, which is consistent with identical content; it is not proof that the two stores are independent.
 - Outstanding: the `config.config_audit` rows (operator-run read-only query A8 on each database). Step 13 is not marked done until they are recorded.
+
+## Session 2026-11-27 — Step 13 audit rows, homelab staging, supplied by the operator (verbatim)
+
+Operator pasted the A8 result (`config.config_audit`, namespace `trading`, keys `broker.timeout_ms` and `order_intent.stale_multiplier`) from the **homelab** database, 6 rows:
+- id 874, staging, `order_intent.stale_multiplier`: 3 → 4, changed_by `a169f6e3-9ab1-450d-9f03-faa2496f572b`, reason "Feature 321 fix-trading-config-plumbing pre-deploy operator action (D-20): S = 40 s so Alpaca 429 retry and pacing are kept at broker.timeout_ms = 10000.", 2026-11-20 13:59:39.11027+00.
+- id 873, staging, `broker.timeout_ms`: 5000 → 10000, same changed_by, reason "Feature 321 fix-trading-config-plumbing pre-deploy operator action (D-13/D-20): keep IBKR signed requests at 10 s once they honour this key.", 2026-11-20 13:59:38.664314+00.
+- ids 766 / 765 (`order_intent.stale_multiplier`, production / staging) and 751 / 750 (`broker.timeout_ms`, production / staging): `system:config-migration-044` "feature 296: renamed from trading.…", 2026-11-10 08:22:20+00, old = new (3 and 5000).
+
+Read against the main-session `get_config` read-back of 2026-11-27 (homelab staging `broker.timeout_ms` = 10000, `order_intent.stale_multiplier` = 4.0): the current staging values equal the new_value of the latest audit row for each key, so no later write has reverted them. Production rows were not touched by this feature (production out of scope). Outstanding for Step 13: the same A8 query result from **DO staging**.
