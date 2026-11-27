@@ -1082,3 +1082,9 @@
 - TDD: RED/GREEN via Step 53's e2e and the existing list cases. Verification: typecheck, lint, build exit 0; "page is a server component". Regression (`local`): host Playwright `e2e/accounts` (incl. `authorized-apps.spec.ts` `@feature-350 @AC-4/6/9`), `e2e/theme`, `mobile-overflow`, `nav-reachability` 85 passed.
 - Files modified: `services/xstockstrat-ui/src/app/accounts/authorized-apps/{page,AuthorizedAppsList,SsoAppsCard}.tsx` (`AuthorizedAppsList`/`SsoAppsCard` new), `services/xstockstrat-ui/src/components/accounts/ConnectorUrlField.tsx` (new)
 - Deviations: none. Gaps filled: `SsoAppsCard` keeps the "My Authorized Apps" heading; the issuer link text is "Open your sign-in provider" (new tab, `noopener noreferrer`).
+
+### Step 48 — service: Mode-aware discovery documents [done]
+- New `src/lib/mcpScopes.ts` (`MCP_SCOPES_SUPPORTED`, the four `xstockstrat.*` scopes). PRM: `local`/`both`/`'error'` → today's document unchanged; `oidc` → `loadAgentIssuer()`: valid → `{resource: AGENT_PUBLIC_URL, authorization_servers: [issuer], scopes_supported}`, invalid/empty/`'error'` → `503` empty body with `Cache-Control: no-store`. AS: `oidc` → 404 (empty), otherwise unchanged. Both keep `dynamic = 'force-dynamic'`.
+- TDD: recorded under Step 49. Verification: typecheck, lint, build exit 0.
+- Files modified: `services/xstockstrat-ui/src/app/api/oauth/{protected-resource,authorization-server}/route.ts`, `services/xstockstrat-ui/src/lib/mcpScopes.ts` (new)
+- Deviations: none. Gap filled: the AS route reads the mode only (no agent-issuer read), so an AS request in `oidc` never touches the agent namespace.

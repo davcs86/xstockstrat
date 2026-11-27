@@ -1847,7 +1847,7 @@ grep -n "'use client'" src/app/accounts/authorized-apps/page.tsx || echo "page i
 
 ### Step 48 — service: Mode-aware discovery documents
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/api/oauth/protected-resource/route.ts` — modify
