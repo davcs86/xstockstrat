@@ -1165,3 +1165,20 @@ What changed in `implementation-spec.md` (sdd-spec amendment, same date):
 - [x] The export's `correlation_id` meaning change on mcp_client rows is recorded (Step 1 consumer-surface note above).
 - [ ] The `@AC-3` PRESERVE comment (spec text, landed verbatim) places `@AC-41 @feature-294` in `services/xstockstrat-ingest/acceptance/signal-map-instrumentation.feature`; that file holds `@AC-28`, `@AC-29` and `@AC-53` only. `@AC-41 @FR-15 @feature-294` is at `docs/sdd/business-rules/platform.feature:1346`. Target: operator (reword the comment before C-16 promotion, or leave it).
 - [ ] Carried: `**kw` spy rename risk (Step 7), two-header residual (Step 6), analysis findings `:24`/`:32` stale after Steps 2-3 (no step), merge-order row for 313/309.
+
+## Session 2026-11-27 — Verification block fixes (operator ruling precedent from 316), recorded by the orchestrator
+
+Defect class (reported by the batch executor on Step 2): a leading `cd services/<svc> && ...` persists in the shell, so the following root-relative lines ran inside the service directory (the `git diff --stat HEAD -- <file>` printed nothing either way; the `grep -n ... services/...` failed with "No such file or directory"). Ruling: the 2026-11-26 operator precedent from feature 316 ("Re-spec the Verification first": one subshell per `cd`, non-failing count checks, then re-run the step verbatim) applies to 313. Only Verification blocks of the pending Steps 2-8 changed; no scope, instruction, evidence or done step (Step 1) was touched.
+
+Fixes, applied identically to every pending block:
+- Every `cd services/<svc> && ruff ... && pytest ...` became `( cd services/<svc> && ... )`; all other lines run from the repo root.
+- Step 2: old `git diff --stat HEAD -- .../tests/test_identity.py` (vacuous once committed, empty regardless) became `test -z "$(git diff --stat "$(git merge-base HEAD origin/main-dev)" -- .../tests/test_identity.py)"`; old `grep -n "is_real_owner" identity.py pnl_pattern_consumer.py  # 2 + 4 lines` became two `test "$(grep -c ...)" = 2` / `= 4` checks.
+- Step 3: old trailing `grep -n "def .*fixture\|from .conftest\|conftest" .../test_pnl_pattern_consumer.py` (exit 1 on the expected no-match) became `test "$(grep -c ...)" = 0`.
+- Step 4: old `grep -n -A6 'event_type="ingest.signal.ingested"' ... | grep -n "user_id=owner"` became a count check `= 1` over `-B3 -A8` (the instruction does not fix where `user_id=owner,` sits in the request).
+- Step 5: old `grep -n "from tests.test_signal_ownership import\|from tests.conftest import" ...` became `test "$(grep -c ...)" = 2`.
+- Step 6: old `grep -n "trace_id" servicer.py mcp_client_loop.py` (passes if either file matches) became one `grep -q` per file; old `grep -n "x-user-id" mcp_client_loop.py  # no new match` (exit 1 on the expected result) became `test "$(grep -c ...)" = 0`.
+- Step 7: old `grep -n "async def spy" -A2 ...` (prints, always passes) became two `test "$(grep -c ...)" = 1` checks on the exact spy signature and the forwarded `orig(signal, propagation_meta, owner=owner, **kw)` call.
+- Step 8: each `grep -c ... # N` became `test "$(... | grep -c ...)" = N`; old `git diff --name-only HEAD -- services/` (empty once steps are committed, and it would also list Steps 4-7's files) became a diff against the merge-base with main-dev, scoped to `services/xstockstrat-ingest/docs` and `services/xstockstrat-ingest/CLAUDE.md`, compared with the two expected paths.
+- Merge-base is used in place of bare `origin/main-dev` because the branch is not always synced to `main-dev` (Step 8's evidence records `CLAUDE.md` differing between the two trees).
+
+Steps fixed: 2, 3, 4, 5, 6, 7, 8. Re-run Step 2 onward with the updated blocks verbatim.

@@ -305,11 +305,12 @@ grep -c '2026-11-26' debate.md                                                  
 **Verification**:
 
 ```bash
-cd services/xstockstrat-analysis && ruff check . && ruff format --check . \
-  && pytest tests/test_identity.py tests/test_pnl_pattern_consumer.py tests/test_owner_header_guard.py -q
-git diff --stat HEAD -- services/xstockstrat-analysis/tests/test_identity.py   # empty: file unedited
-grep -n "is_real_owner" services/xstockstrat-analysis/app/identity.py \
-  services/xstockstrat-analysis/app/engine/pnl_pattern_consumer.py            # 2 + 4 lines
+( cd services/xstockstrat-analysis && ruff check . && ruff format --check . \
+  && pytest tests/test_identity.py tests/test_pnl_pattern_consumer.py tests/test_owner_header_guard.py -q )
+# from the repo root: test_identity.py is unedited (empty diff against the merge-base with main-dev)
+test -z "$(git diff --stat "$(git merge-base HEAD origin/main-dev)" -- services/xstockstrat-analysis/tests/test_identity.py)"
+test "$(grep -c "is_real_owner" services/xstockstrat-analysis/app/identity.py)" = 2
+test "$(grep -c "is_real_owner" services/xstockstrat-analysis/app/engine/pnl_pattern_consumer.py)" = 4
 ```
 
 ---
@@ -380,11 +381,11 @@ grep -n "is_real_owner" services/xstockstrat-analysis/app/identity.py \
 **Verification**:
 
 ```bash
-cd services/xstockstrat-analysis && ruff check . && ruff format --check . \
+( cd services/xstockstrat-analysis && ruff check . && ruff format --check . \
   && pytest tests/test_pnl_pattern_consumer.py -q -k feature313_ac2 \
-  && pytest --cov=app --cov-fail-under=40
-grep -n "def .*fixture\|from .conftest\|conftest" services/xstockstrat-analysis/tests/test_pnl_pattern_consumer.py
-# C-13 verdict: single-consumer inline spread; no second inline copy introduced
+  && pytest --cov=app --cov-fail-under=40 )
+# from the repo root; C-13 verdict: single-consumer inline spread, no fixture or conftest entry added (count 0)
+test "$(grep -c "def .*fixture\|from .conftest\|conftest" services/xstockstrat-analysis/tests/test_pnl_pattern_consumer.py)" = 0
 ```
 
 ---
@@ -439,10 +440,11 @@ grep -n "def .*fixture\|from .conftest\|conftest" services/xstockstrat-analysis/
 **Verification**:
 
 ```bash
-cd services/xstockstrat-ingest && ruff check . && ruff format --check . \
-  && pytest tests/test_mcp_client_loop.py tests/test_signal_ownership.py tests/test_ingest_servicer.py -q
-grep -n -A6 'event_type="ingest.signal.ingested"' services/xstockstrat-ingest/app/handlers/servicer.py \
-  | grep -n "user_id=owner"
+( cd services/xstockstrat-ingest && ruff check . && ruff format --check . \
+  && pytest tests/test_mcp_client_loop.py tests/test_signal_ownership.py tests/test_ingest_servicer.py -q )
+# from the repo root: exactly one `user_id=owner` in the request around the ingest.signal.ingested event_type
+test "$(grep -B3 -A8 'event_type="ingest.signal.ingested"' services/xstockstrat-ingest/app/handlers/servicer.py \
+  | grep -c "user_id=owner")" = 1
 ```
 
 ---
@@ -524,12 +526,11 @@ grep -n -A6 'event_type="ingest.signal.ingested"' services/xstockstrat-ingest/ap
 **Verification**:
 
 ```bash
-cd services/xstockstrat-ingest && ruff check . && ruff format --check . \
+( cd services/xstockstrat-ingest && ruff check . && ruff format --check . \
   && pytest tests/test_mcp_client_loop.py -q -k feature313_ac1 \
-  && pytest --cov=app --cov-fail-under=40
-grep -n "from tests.test_signal_ownership import\|from tests.conftest import" \
-  services/xstockstrat-ingest/tests/test_mcp_client_loop.py
-# C-13 verdict: helpers imported, no second inline copy of a domain literal
+  && pytest --cov=app --cov-fail-under=40 )
+# from the repo root; C-13 verdict: helpers imported (2 import lines), no second inline copy of a domain literal
+test "$(grep -c "from tests.test_signal_ownership import\|from tests.conftest import" services/xstockstrat-ingest/tests/test_mcp_client_loop.py)" = 2
 ```
 
 ---
@@ -608,12 +609,13 @@ grep -n "from tests.test_signal_ownership import\|from tests.conftest import" \
 **Verification** (run as one unit with Step 7):
 
 ```bash
-cd services/xstockstrat-ingest && ruff check . && ruff format --check . \
+( cd services/xstockstrat-ingest && ruff check . && ruff format --check . \
   && pytest tests/test_mcp_client_loop.py tests/test_signal_ownership.py tests/test_ingest_servicer.py \
-       tests/test_telemetry_allowlist.py -q
-grep -n "trace_id" services/xstockstrat-ingest/app/handlers/servicer.py \
-  services/xstockstrat-ingest/app/engine/mcp_client_loop.py
-grep -n "x-user-id" services/xstockstrat-ingest/app/engine/mcp_client_loop.py   # no new match
+       tests/test_telemetry_allowlist.py -q )
+# from the repo root: trace_id appears in both files; the loop builds no x-user-id entry (count 0)
+grep -q "trace_id" services/xstockstrat-ingest/app/handlers/servicer.py
+grep -q "trace_id" services/xstockstrat-ingest/app/engine/mcp_client_loop.py
+test "$(grep -c "x-user-id" services/xstockstrat-ingest/app/engine/mcp_client_loop.py)" = 0
 ```
 
 ---
@@ -679,10 +681,12 @@ grep -n "x-user-id" services/xstockstrat-ingest/app/engine/mcp_client_loop.py   
 **Verification** (run as one unit with Step 6):
 
 ```bash
-cd services/xstockstrat-ingest && ruff check . && ruff format --check . \
+( cd services/xstockstrat-ingest && ruff check . && ruff format --check . \
   && pytest tests/test_mcp_client_loop.py -q -k "feature313_ac3 or second_identical_cycle" \
-  && pytest --cov=app --cov-fail-under=40
-grep -n "async def spy" -A2 services/xstockstrat-ingest/tests/test_mcp_client_loop.py   # **kw taken and forwarded
+  && pytest --cov=app --cov-fail-under=40 )
+# from the repo root: the spy takes and forwards **kw
+test "$(grep -c 'async def spy(signal, propagation_meta=None, owner=None, \*\*kw):' services/xstockstrat-ingest/tests/test_mcp_client_loop.py)" = 1
+test "$(grep -c 'orig(signal, propagation_meta, owner=owner, \*\*kw)' services/xstockstrat-ingest/tests/test_mcp_client_loop.py)" = 1
 ```
 
 ---
@@ -760,10 +764,11 @@ grep -n "async def spy" -A2 services/xstockstrat-ingest/tests/test_mcp_client_lo
 ```bash
 F=services/xstockstrat-ingest/docs/context-constitution-findings.md
 ! sed -n '/^## Open questions/,/^## Resolved/p' $F | grep -n 'propagation_meta'
-sed -n '/^## Resolved/,/^## Filed as defect reports/p' $F | grep -c 'RESOLVED .*feature 313'   # 1
-grep -c 'ingest-mcp-loop-ledger-events-ownerless-defect' $F                                    # 1 (row stays)
-grep -n '^| `ingest.signal.ingested`' services/xstockstrat-ingest/CLAUDE.md | grep -c 'user_id.*correlation_id'   # 1
-git diff --name-only HEAD -- services/                                      # exactly the two files above
+test "$(sed -n '/^## Resolved/,/^## Filed as defect reports/p' $F | grep -c 'RESOLVED .*feature 313')" = 1
+test "$(grep -c 'ingest-mcp-loop-ledger-events-ownerless-defect' $F)" = 1   # row stays
+test "$(grep '^| `ingest.signal.ingested`' services/xstockstrat-ingest/CLAUDE.md | grep -c 'user_id.*correlation_id')" = 1
+# exactly the two files above changed under the ingest docs and CLAUDE.md, against the merge-base with main-dev
+test "$(git diff --name-only "$(git merge-base HEAD origin/main-dev)" -- services/xstockstrat-ingest/docs services/xstockstrat-ingest/CLAUDE.md | sort | tr '\n' ' ')" = "services/xstockstrat-ingest/CLAUDE.md services/xstockstrat-ingest/docs/context-constitution-findings.md "
 ```
 
 ---
