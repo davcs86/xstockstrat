@@ -272,7 +272,7 @@ grep -n "pe_ratio 0.0\|diverges" acceptance/fix-fundsignal-neutral-score.feature
 
 ### Step 5 — test: pin `value_quality` on a dividend-only input and its [0,1] range
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/tests/test_fundamentals_formula.py` — modify

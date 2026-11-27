@@ -673,3 +673,14 @@ Tooling setup (steps 3+4): uv ✓ 0.11.32 · `uv sync --extra dev` ⬇ (worktree
 - GREEN `.sdd-logs/v-3.log` `exit=0` — `88 passed`; full suite `1827 passed`, `Required test coverage of 40% reached. Total coverage: 91.88%`; ruff clean; the `pe_ratio 0.0|diverges` grep found nothing.
 - Files modified: `services/xstockstrat-analysis/tests/test_fundsignal_loop.py`, `services/xstockstrat-analysis/tests/test_fundamentals_formula_operand.py`, `services/xstockstrat-analysis/acceptance/fix-fundsignal-neutral-score.feature`, `services/xstockstrat-analysis/acceptance/fundamentals-formula-inputs.feature`
 - Deviations: none (the `pe_ratio` assertion sat at `:967`, not `:966` — line drift only, recorded at the 2026-11-26 up-front confirm).
+
+## Session 2026-11-27 — sdd-execute sequential (step 5)
+
+Tooling setup (step 5): uv ✓ 0.11.32 · `uv sync --extra dev` ⬇ (worktree `.venv`, Python 3.12.3 per the service's `.python-version`) · ruff ✓ 0.16.9 · no Node install. Config-key wiring gate: not applicable (no key, no config migration).
+
+### Step 5 — test: pin `value_quality` on a dividend-only input and its [0,1] range [done]
+- Added `test_dividend_only_input_has_no_pb_or_de_subscore` (`@AC-1 @feature-309`: `{"dividend_yield": 0.013}` → value 0.325, quality 0.5, composite 0.4125) and the parametrized `test_composite_in_unit_range_on_partial_and_extreme_rows` (11 rows: empty, each single metric, negative `pe_ratio`, `roe` 5.0, `debt_to_equity` 50, and all three together; every output in [0,1]). Formula source unchanged.
+- TDD: AC-1 red N/A — no behavior change; characterization test added (the formula already omits absent keys). Baseline `.sdd-logs/v-1.log` `exit=0`: `13 passed` in the step file. GREEN `.sdd-logs/v-2.log` `exit=0`: `25 passed`; full suite `622 passed`, `Required test coverage of 50% reached. Total coverage: 87.10%`; ruff `All checks passed!`, `65 files already formatted`.
+- Pre-existing flake, not touched: `tests/test_sandbox_watchdog.py::test_ac8_fork_bomb_is_not_a_success_the_service_recovers_and_nothing_is_unobservable` failed once in the baseline full run (`sandbox memory watchdog cannot observe child` logged) and went pass/fail/pass in three isolated re-runs; it passed in the GREEN run. Candidate for `/sdd-qa defect`.
+- Files modified: `services/xstockstrat-indicators/tests/test_fundamentals_formula.py`
+- Deviations: none
