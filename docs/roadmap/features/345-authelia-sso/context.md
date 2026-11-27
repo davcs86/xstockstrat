@@ -471,7 +471,8 @@
 - [x] `/sdd-review authelia-sso product-spec` on the design-round amendments (O-94). Done 2026-11-24 (post-design re-review).
 - [ ] Cutover gates (homelab-edge): rate-limit zone over `POST /accounts/api/sso/confirm`; S17 fresh `auth_time` with
       `prompt=login` + `max_age=0`; Authelia web client ID-token claims `email`, `preferred_username`, `auth_time`; seed-row
-      `reset-password`. Due before `set-auth-mode both` on a homelab deployment.
+      `reset-password`. Due before `set-auth-mode both` on a homelab deployment. S17 part done 2026-11-27, with
+      `max_age=1` instead (D-139; session "S17: max_age=1" below).
 - [ ] Config migration number: next free at execute (`056` contested by 314/317/321). Due at the seed step.
 - [x] Draft feature 280-third-party-sso-oidc overlaps (owner decision). Done 2026-11-24: 280 `demoted/canceled`, superseded by 345.
 - [ ] Identity-less `oidc`: idea for the owner's xstockstrat-only Authentik exploration (out of scope, D-112).
@@ -612,7 +613,8 @@
       over `POST /accounts/api/sso/confirm` (and the other password-accepting Link/re-auth POSTs); S17 extended to
       `prompt=login` + `max_age=0` returning a fresh `auth_time`; `sso.md` § 6 listing design § 6 gates 1–4; `sso.md` § 4
       "Change an xstockstrat role" noting the web delay up to `jwt.access_ttl_seconds` (finding 11). Due before
-      `set-auth-mode both` on a homelab deployment.
+      `set-auth-mode both` on a homelab deployment. S17 part done 2026-11-27: the SSO spec's S17 and § 3 "Linking"
+      read `max_age=1` @ `0bbe7ca` and `sso.md` § 6 lists the gate (D-139; session "S17: max_age=1" below).
 - [x] Owner sign-off on the 24 h stale-key window (`_JWKS_STALE_MAX_S`). Due before Step 19. Superseded 2026-11-27: the
       owner removed the window (D-138; session below).
 - [ ] Remaining impl-review ⚠ items (Step 52 firefox `testIgnore`, Step 37 `bffAllowlist`, Step 1/2 `buf breaking`
@@ -674,3 +676,43 @@
     a capability statement, not a homelab claim.
 - Status stays `implementation-ready`: no FR changed and the new scenario is covered (C-15), so no SDD rule forces a
   re-review; an advisory `/sdd-review authelia-sso impl-spec` pass over Steps 19/20/24/54 is optional.
+
+## Session 2026-11-27 — S17: max_age=1
+
+- Source: spike S17 on the edge droplet (Authelia v4.39.28, 2026-11-27) and the owner's decision on it; davcs86/homelab-edge
+  `docs/superpowers/specs/2026-11-23-authelia-sso-respec.md` § 3 "Linking" and § 11 S17 @ `0bbe7ca` (branch
+  `ccr-589817f0-cyg7gy`) now read `max_age=1`. Tree: `ccr-589817f0-cyg7gy` @ `2d1316a` (PR #1631). Docs only; execution
+  has not started (every step `pending`), so the step-body edits below are allowed (F-09 binds only during execution).
+- **Spike evidence.**
+  - `prompt=login` + `max_age=0` on a live portal session: the consent API reports `require_login: true` and issues no
+    code until the person re-authenticates (re-authentication is forced).
+  - After a correct re-authentication (`POST /api/firstfactor/reauthenticate`), with `max_age=0` the consent is still
+    refused: `require_login` stays true and `POST /api/oidc/consent` → `{"status":"KO"}`; no code, ever. Authelia's
+    `internal/oidc/util.go` `RequestFormRequiresLogin` returns true whenever `max_age == 0`.
+  - `prompt=login` + `max_age=1`: the same re-authentication completes; code issued; the ID token's `auth_time` is fresh
+    (≥ the request's start) and `email` and `preferred_username` are present.
+- **Decision (owner).** Every Link SSO authorization request sends `prompt=login` and `max_age=1` instead of
+  `max_age=0`. Unchanged: D-111's check (`auth_time` present and `≥ txn.created_at − OIDC_CLOCK_SKEW_S`) is the
+  enforcement line, and `checks.maxAge` is still not passed to openid-client.
+  - debate.md: **P-7** (target: D-119's `max_age=0` sentence; user reopened) and **D-139** (`max_age=1`, with the spike
+    evidence). D-119's Status cell points at D-139; its decision text is unchanged. D-111 is not touched: its text never
+    named `max_age` and its check stands.
+  - design.md: header register line; the post-approval amendment section (now "Amendments") gains D-139; § 3 link-route
+    row (`max_age=1`; D-119, D-139); § 6 heading cites D-139 and gate 2 reads `max_age=1`, proven 2026-11-27 on the spike
+    (it stays a listed gate, as homelab-edge `sso.md` § 6 lists it); Open Risks "S17 unproven" ticked as resolved by the
+    spike (re-authentication forced, fresh `auth_time` with `max_age=1`).
+  - product-spec.md: **Amended** line; FR-16.1 link request `max_age=1` (with why not `0`); Feature Workflow Notes: S17
+    removed from "still to be proven" and recorded as proven with `max_age=1`.
+  - acceptance.feature: **AC-65** (same ID) names `max_age=1`; header comment records the change.
+  - implementation-spec.md: Step 32 `buildSsoAuthorizationUrl` (`max_age: '1'`; D-119, D-139); Step 33 `oidcClient.test.ts`
+    link URL case; Step 43 `/link` happy path; Step 53 e2e @AC-65 (the stub sees `prompt=login&max_age=1`); Step 54
+    cutover-runbook S17 gate text, cite list (+D-139) and its grep (`"max_age=1"` replaces `"max_age=0"`). Step 50's stub
+    IdP only records `prompt`/`max_age` (no value asserted there), so it is unchanged.
+  - feature.md: an `(unchanged)` Status History row and the Artifacts register range.
+  - Open Threads (2026-11-24 re-run; 2026-11-24 final pre-merge review): the S17 part of each gate item is noted done.
+- Not changed: design § 6 gate 3 still says `auth_time` is present "by default or through the policy, as S17 shows"; the
+  spike observed `auth_time`, `email` and `preferred_username` in the ID token but this record does not say whether the
+  claims policy lists `auth_time`.
+- Status stays `implementation-ready`: FR-16.1's parameter value changed with the owner's decision and AC-65 is still
+  covered by Steps 33/43/53 (C-15); an advisory `/sdd-review authelia-sso impl-spec` pass over Steps 32/33/43/53/54 is
+  optional.

@@ -1,7 +1,7 @@
 # Product Spec: authelia-sso
 
 **Created**: 2026-11-15
-**Amended**: 2026-11-24 (re-spec against homelab-edge `docs/superpowers/specs/2026-11-23-authelia-sso-respec.md`; see `context.md`); 2026-11-27 (owner: no stale signing keys, no Claude Code clients on the homelab; see `context.md`)
+**Amended**: 2026-11-24 (re-spec against homelab-edge `docs/superpowers/specs/2026-11-23-authelia-sso-respec.md`; see `context.md`); 2026-11-27 (owner: no stale signing keys, no Claude Code clients on the homelab; Link requests send `max_age=1`, spike S17; see `context.md`)
 
 ---
 
@@ -236,8 +236,8 @@ routes `GET /accounts/api/sso` (status), `POST /accounts/api/sso/link` (start) a
 (confirm) (amended 2026-11-24); the anonymous `/api/auth/sso/start` stays login-only.
 1. "Link SSO" posts to `/accounts/api/sso/link`. The transaction cookie binds the purpose `link`, the
    signed-in user (from the verified session, not a value the browser supplies) and the start time, and the
-   authorization request carries `prompt=login` and `max_age=0`, so the issuer re-authenticates even while another issuer session is live
-   (SSO spec S17). Because the issuer may ignore `prompt=login`, the callback also requires the ID token's `auth_time`
+   authorization request carries `prompt=login` and `max_age=1`, so the issuer re-authenticates even while another issuer session is live
+   (SSO spec S17; not `max_age=0`, with which Authelia v4.39.28 refuses consent even after re-authentication, owner 2026-11-27). Because the issuer may ignore `prompt=login`, the callback also requires the ID token's `auth_time`
    to be no earlier than the link start (minus clock skew); a missing or older `auth_time` is refused with "Sign-in
    failed. Try again." and nothing is written (owner, 2026-11-24).
 2. The callback validates the ID token as FR-1 does, calls neither `ResolveExternalIdentity` nor `IssueSessionForUser`,
@@ -444,11 +444,12 @@ clients with RFC 8707 `resource`, the `scp` array, custom `xstockstrat.*` scopes
 on refresh, and `error=access_denied` for a person outside the group. Its email findings now matter only for the link
 confirmation's label (FR-16.2). Still to be proven by homelab-edge, before this feature's cutover: Claude.ai against
 the deployed portal (SSO spec S1, S5; the homelab registers no Claude Code client and S9 is retired, SSO spec § 4.6 and
-§ 11 as amended 2026-11-27), `prompt=login` with `max_age=0` returning a fresh `auth_time` in
-the ID token (S17), the web client registered with scopes `openid profile email` (SSO spec § 4.6 as amended 2026-11-24;
+§ 11 as amended 2026-11-27), the web client registered with scopes `openid profile email` (SSO spec § 4.6 as amended 2026-11-24;
 the UI requests all three) and its ID-token claims `email`, `preferred_username` and `auth_time` (by default or via the claims policy, per S17),
 and refresh after
-leaving the group (S24).
+leaving the group (S24). S17 is proven (spike on the edge droplet, Authelia v4.39.28, 2026-11-27): `prompt=login`
+with `max_age=1` forces re-authentication and returns a fresh `auth_time`, `email` and `preferred_username` in the ID
+token; with `max_age=0` Authelia issues no code even after re-authentication, so Link requests send `max_age=1`.
 
 ## Acceptance Criteria
 

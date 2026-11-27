@@ -9,6 +9,7 @@ Feature: authelia-sso
   # AC-41, AC-44, AC-45, AC-47, AC-50, AC-21, AC-35, AC-46, AC-65, AC-69 (no RED test cites them yet).
   # Added 2026-11-24: AC-73..AC-78.
   # Added 2026-11-27 (owner: no tokens on stale keys, D-138): AC-79.
+  # Changed 2026-11-27, same ID (owner, spike S17, D-139): AC-65's link request names max_age=1 instead of max_age=0.
 
   Background:
     Given the issuer is "https://auth.example.test"
@@ -447,7 +448,7 @@ Feature: authelia-sso
   Scenario: A password user links SSO and then signs in by SSO
     Given staging identity/auth.mode is "both"
     And "alice@example.test" (user_id "11111111-1111-4111-8111-111111111111") is signed in with a password and has no link
-    When she chooses "Link SSO" and the issuer re-authenticates subject "a1b2" for a request with prompt=login and max_age=0, returning a fresh auth_time
+    When she chooses "Link SSO" and the issuer re-authenticates subject "a1b2" for a request with prompt=login and max_age=1, returning a fresh auth_time
     Then the confirmation reads "You are linking alice.sso@example.test to alice@example.test." and asks for her xstockstrat password
     And after she confirms with her correct password, identity.external_identities holds ("https://auth.example.test", "a1b2") -> "11111111-1111-4111-8111-111111111111"
     And the ledger holds one "identity.external.linked" event for that user_id with outcome "linked" and no email or subject field
