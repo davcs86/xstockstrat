@@ -773,3 +773,14 @@ Tooling setup (step 14): uv ✓ 0.11.32 · `uv sync --extra dev` ⬇ (worktree `
 - TDD: red with the pre-Step-13 `client.py` (`385ce947`) temporarily checked out, `.sdd-logs/v-1.log`: `1 failed, 78 passed` (`assert False is True` at `tests/test_client.py:481`); full suite `1 failed, 832 passed`; that block printed `exit=0` because ruff ran last → green `.sdd-logs/v-2.log` `exit=0`: `79 passed`; full suite `833 passed`, `Required test coverage of 40% reached. Total coverage: 88.47%`; ruff `All checks passed!`, `79 files already formatted`.
 - Files modified: `services/xstockstrat-agent/tests/test_client.py`
 - Deviations: RED run against the pre-Step-13 client (Deviation Log).
+
+## Session 2026-11-27 — sdd-execute sequential (step 15)
+
+Tooling setup (step 15): docs step, none needed · no Node install. Config-key wiring gate: not applicable (no key, no config migration).
+
+### Step 15 — docs: conviction-presence invariant [done]
+- INGEST-4 rewritten: "given" iff `conviction_provided or conviction != 0.0`; write stores NULL only when not given (a stored 0 is a real zero); read sets `conviction` + `conviction_provided=True` for every non-NULL row and leaves both unset for NULL; the surviving legacy sentinel (a pre-flag client's deliberate 0.0 without the flag still reads as not given, 0.5 in the analysis scorer) is stated; anchors refreshed to the Step 9/11 symbols (`servicer.py` ~L1366/~L1386-1387/~L1639-1641, `mcp_client_loop.py#_build_external_signal` ~L95, `ingest.proto` ~L130/~L140, `scoring.py#compute_signal_score` ~L31-32). The "unknown confidence" wording is gone. This closes the "document the surviving legacy sentinel" Open Thread. `add-data-source.md` snippet: the `conviction = 4` comment now names the flag, and `bool conviction_provided = 12;` is shown.
+- TDD: N/A (docs). Verification `.sdd-logs/v-1.log` `exit=0`: `conviction_provided` at `context-constitution.md:18`, `add-data-source.md:358` and `:364`; no `unknown confidence` hit.
+- Not touched (outside Step 15's instructions; noted for a follow-up): other stale conviction text in `docs/runbooks/add-data-source.md` — `:289` ("otherwise `NULL`"), `:405` (`conviction=signal.conviction or None`, which contradicts the new invariant) and `:591` (`sig.get("conviction", 0.5)`).
+- Files modified: `services/xstockstrat-ingest/docs/context-constitution.md`, `docs/runbooks/add-data-source.md`
+- Deviations: none

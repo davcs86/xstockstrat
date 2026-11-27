@@ -651,7 +651,7 @@ ruff check . && ruff format --check .
 
 ### Step 15 — docs: conviction-presence invariant
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest` (docs), `docs/runbooks/`
 **Files**:
 - `services/xstockstrat-ingest/docs/context-constitution.md` — modify
