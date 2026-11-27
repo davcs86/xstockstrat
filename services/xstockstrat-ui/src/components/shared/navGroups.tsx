@@ -102,6 +102,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { label: 'Audit log', href: '/config-ui/audit' },
       { label: 'Fundamentals Scan', href: '/config-ui/fundamentals-scan' },
       { label: 'Authorized apps', href: '/accounts/authorized-apps' },
+      { label: 'Single sign-on', href: '/accounts/sso' },
       { label: 'MCP tools', href: '/accounts/mcp-tools' },
     ],
   },

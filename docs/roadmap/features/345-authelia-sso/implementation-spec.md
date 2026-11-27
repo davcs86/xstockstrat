@@ -1750,7 +1750,7 @@ grep -n "'use client'" src/app/auth/login/page.tsx || echo "page is a server com
 
 ### Step 45 — service: /accounts/sso page and its nav registrations
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/accounts/sso/page.tsx` — create
@@ -2250,3 +2250,8 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Expected**: the step Instructions; several helper shapes and refusal branches were left open.
 - **Actual**: as recorded per step in context.md (Steps 26–44): logOnce keyed on message + key; `originHost` → `'null'`/`'invalid'`; `raceDeadline` rejects `deadline exceeded`; a non-string `auth.mode` reads as absent; config-read timeouts via the transport `timeoutMs` only; `exchangeCode` drops wrongly typed claims; `sealSsoTxn` stamps `exp`/`created_at`, refuse only when `now > exp`; `SSO_ERROR_MESSAGES`/`LINK_ERROR_MESSAGES` with `not_linked` both/oidc variants and the bare `?error=` code; refusal→code maps typed on `SSO_REFUSALS`; logout without a session cookie is `unverified`; the issuer logout redirect also requires `appOrigin()`; the Step 40 fault/failed split, txn-cookie retention and `redirect_uri` construction; the Step 42 `sso_link_failed` scope, unknown-detail 503 and empty-password 400; the Step 44 `LoginForm` `children` slot and the `not_linked` wording in local/error.
 - **Disposition**: owner accepted all (this session, 2026-11-27); no code change. Open pre-merge item: the Step 32 UI compose build + boot smoke needs a host whose build containers reach registry.npmjs.org.
+
+### Step 45 — /accounts/sso page and its nav registrations
+- **Expected**: only Step 45's Files (`accounts/sso/page.tsx`, `navGroups.tsx`, `PlatformHeader.tsx`).
+- **Actual**: `SSO_ERROR_CODES`, `LINK_ERROR_CODES`, `SSO_ERROR_MESSAGES` and `LINK_ERROR_MESSAGES` (and their types) moved verbatim into a new client-safe `src/lib/ssoErrorCodes.ts` and re-exported from `src/lib/ssoErrors.ts`, because a `'use client'` page cannot import `ssoErrors.ts` (it pulls `ssoTxn.ts` → `node:crypto`; the build failed with `UnhandledSchemeError`). No behaviour change; the unit suite is unchanged (1089 passed).
+- **Disposition**: owner chose Option A (2026-11-27).

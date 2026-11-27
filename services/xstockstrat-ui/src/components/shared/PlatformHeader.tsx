@@ -94,6 +94,7 @@ export const PLATFORM_SUBNAV: Record<PlatformSegment, SubNavItem[]> = {
     { label: 'Profile', href: '/accounts/profile', match: 'exact' },
     { label: 'Notifications', href: '/accounts/notifications', match: 'prefix' },
     { label: 'Authorized Apps', href: '/accounts/authorized-apps', match: 'exact' },
+    { label: 'Single Sign-On', href: '/accounts/sso', match: 'exact' },
     { label: 'MCP Tools', href: '/accounts/mcp-tools', match: 'exact' },
   ],
 };
