@@ -1200,3 +1200,20 @@ Steps fixed: 2, 3, 4, 5, 6, 7, 8. Re-run Step 2 onward with the updated blocks v
 - [ ] The Step 2 Verification block's `exit=` reflects only its last command (no `set -e`), so an earlier `test` line failing would not change it. Steps 3-8 share the shape. Target: operator, or the executor re-checking each line as done here.
 - [ ] Step 3 RED must run on the pre-Step-2 tree (its instruction 4). Step 2 is now on the branch, so on the current tree the new test passes at once. The probe output above shows the expected RED message. Target: Step 3.
 - [ ] Carried: `@AC-3` PRESERVE comment file placement (operator), `**kw` spy rename risk (Step 7), two-header residual (Step 6), analysis findings `:24`/`:32` stale after Steps 2-3 (no step), merge-order row for 313/309.
+
+## Session 2026-11-27 — sdd-execute sequential (sdd-batch-execute), step 3
+
+- Tooling (step 3): uv ✓ · `uv sync --extra dev` in `services/xstockstrat-analysis` ⬇ (the `.venv` resolved Python 3.12.3, not the 3.13 pin, as in Step 2) · ruff ✓ (host) · pytest ✓ (service `.venv`, put first on `PATH` for each run). Hook check hook=0.
+
+### Step 3 — test: AC-2, a system-owned order event is processed on its first attempt [done]
+- Added `test_feature313_ac2_system_owned_order_event_degrades_on_first_attempt(sleeps)` after the feature-259 helpers in `tests/test_pnl_pattern_consumer.py`. It drives `_process_with_retry` on `{**ORDER_PAYLOAD, "user_id": "system"}`, uses `_MetaRecordingComposer` and the real `_compose`/`owner_metadata`, and spies on `process_event`. It asserts no awaited sleep, one run, one snapshot with empty indicators and signals, degraded and not captured, no window, no park, `metas == {"ohlcv": []}` and `pool.cursor == 1`.
+- TDD: AC-2 red: `sleeps.assert_not_awaited()` failed → green: passed. RED was run on the pre-Step-2 tree by checking out the two Step 2 app files from `878bd1a0^` into the worktree for one run, then restoring them from `HEAD` (empty diff confirmed before GREEN). RED `.sdd-logs/v-1.log`: `AssertionError: Expected mock to not have been awaited. Awaited 2 times.`, with `attempt 1/3`, `2/3` and `3/3 failed: ValueError("owner-scoped call needs a real owner, got 'system'")` and `parking event seq=1`; `1 failed, 50 deselected`. GREEN `.sdd-logs/v-2.log` `exit=0`: `All checks passed!`, `143 files already formatted`, `1 passed, 50 deselected`, `1827 passed`, `Total coverage: 91.89%`. The block's `exit=` reflects only its last line (the C-13 count check, `= 0`); the earlier lines were confirmed from the log.
+- C-13: the `system` payload is a single-consumer inline spread; no fixture or conftest entry added.
+- Config-key wiring gate: not applicable (no config key).
+- Files modified: `services/xstockstrat-analysis/tests/test_pnl_pattern_consumer.py`
+- Deviations: none
+
+## Open Threads
+
+- [x] Step 3 RED on the pre-Step-2 tree. Closed by Step 3 (see above).
+- [ ] Carried: Verification `exit=` reflects only the last line (Steps 4-8), `@AC-3` PRESERVE comment file placement (operator), `**kw` spy rename risk (Step 7), two-header residual (Step 6), analysis findings `:24`/`:32` stale after Steps 2-3 (no step), merge-order row for 313/309.

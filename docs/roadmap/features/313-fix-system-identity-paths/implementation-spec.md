@@ -317,7 +317,7 @@ test "$(grep -c "is_real_owner" services/xstockstrat-analysis/app/engine/pnl_pat
 
 ### Step 3 — test: AC-2, a system-owned order event is processed on its first attempt
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_pnl_pattern_consumer.py` — modify
