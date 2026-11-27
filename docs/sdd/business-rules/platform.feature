@@ -383,11 +383,21 @@ Feature: Platform-wide guarantees
     And after "migrate force 25" for the analysis schema, "scripts/db-migrate.sh up" exits 0
     And the analysis migration state is clean at version 27 and "analysis.backtest_runs.user_id" is NOT NULL
 
+  # Changed by @feature-318 (fix-migration-tooling-safety), operator-signed 2026-11-20 (C-16 CHANGE, 318 context.md O-3):
+  # the guard no longer allows a force-0 recovery for any dirty state.
   @AC-19 @FR-8 @feature-225
-  Scenario: Dirty recovery below the contract floor is unchanged
-    Given a migrations directory whose only contract file "027_x.up.sql" declares "-- contract-of: services/xstockstrat-x/migrations/026_y.up.sql"
-    When the dirty guard evaluates "20 (dirty)", and separately a directory with no contract file evaluates "27 (dirty)"
-    Then both evaluations allow the automatic force-0 recovery
+  Scenario Outline: The dirty guard refuses every dirty state and names a recovery it can compute
+    Given a migrations directory for schema "x" holding up-files <files>
+    When the dirty guard evaluates "<version>"
+    Then it exits <exit> and its output names "<names>"
+
+    Examples:
+      | files                                             | version    | exit | names                               |
+      | 001, 002, 003, 005, 006                           | 5 (dirty)  | 3    | force 3                             |
+      | 001, 002, 003, 005, 006                           | 1 (dirty)  | 3    | TRUNCATE public.x_schema_migrations |
+      | 001, 002, 003, 005, 006                           | 4 (dirty)  | 2    | cannot compute recovery             |
+      | (none)                                            | 5 (dirty)  | 2    | cannot compute recovery             |
+      | 019, 020, 026, 027 (027 declares contract-of 026) | 20 (dirty) | 3    | force 19                            |
 
   @AC-1 @FR-1 @regression @feature-226
   Scenario Outline: A backend service exports traces over OTLP/HTTP to a path-prefixed gateway URL

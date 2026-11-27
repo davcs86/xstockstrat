@@ -5,7 +5,7 @@
 **GitHub Issue**: none (Issues disabled) — reports: docs/reports/2026-10-07-db-migrate-dirty-recovery-replay-unsafe-defect.md, docs/reports/2026-10-19-config-seed-migration-late-lower-nnn-defect.md
 **Severity**: SEV-2
 **Created**: 2026-11-10
-**Last Updated**: 2026-11-21
+**Last Updated**: 2026-11-27
 
 ---
 
@@ -18,6 +18,7 @@
 | 2026-11-20 | `spec-ready` → `design-approved` | /sdd-design | Design debated (3 rounds, full) and approved; recon.md + debate.md + design.md written |
 | 2026-11-20 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 13 steps |
 | 2026-11-21 | `implementation-ready` → `in-progress` | /sdd-execute | → in-progress (sdd-batch-execute setup) |
+| 2026-11-27 | `in-progress` → `code-completed` | /sdd-execute | All 13 steps done; `check-config-wiring.mjs --final` exit 0 |
 
 ---
 

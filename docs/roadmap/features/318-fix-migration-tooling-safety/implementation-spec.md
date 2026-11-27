@@ -1,6 +1,6 @@
 # Implementation Spec: fix-migration-tooling-safety
 
-**Status**: `pending`
+**Status**: `complete`
 **Created**: 2026-11-20
 **Feature**: `docs/roadmap/features/318-fix-migration-tooling-safety/feature.md`
 **Total Steps**: 13
@@ -898,7 +898,7 @@ npx --yes markdownlint-cli2 --config .markdownlint.yaml docs/context-constitutio
 
 ### Step 13 — docs: operator-signed changes to two durable business rules (C-16)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/sdd/business-rules/`, `services/xstockstrat-config/acceptance/`
 **Files**:
 - `docs/sdd/business-rules/platform.feature` — modify

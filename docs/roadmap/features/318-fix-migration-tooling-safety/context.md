@@ -750,3 +750,17 @@ Effect: option A — expand Step 11 scope to fix the 17 pre-existing findings in
 - Config-key wiring gate: N/A (no config key, no config migration).
 - Files modified: `docs/context-constitution-findings.md`
 - Deviations: scope expanded to fix 3 pre-existing markdownlint findings in the same file (operator decision 2026-11-27, option A; Deviation Log)
+
+### Step 13 — docs: operator-signed changes to two durable business rules (C-16) [done]
+- Instruction 0: `grep -n '^- \*\*O-3: C-16 sign-off\*\*' context.md` matched `:524`. `docs/sdd/business-rules/platform.feature` `@AC-19 @FR-8 @feature-225`: tags kept, scenario replaced by the refuse-all Scenario Outline (five Examples rows) under a two-line `# Changed by @feature-318 ...` comment. `services/xstockstrat-config/acceptance/fix-config-keys-drift.feature` `@AC-28`: change comment added above the tag line and the last clause reworded to "the dirty guard refuses a dirty 041 with exit 3 naming force 40 ... migrate force 40 and up converge"; its other lines unchanged.
+- TDD: N/A (docs). Pre-edit baseline `.sdd-logs/v-1.log` `exit=0` but with `390:    Then both evaluations allow the automatic force-0 recovery` and `109:    And an automatic force 0 from a dirty 041 ...` printed (the block's status is its last line only) → Verification `.sdd-logs/v-2.log` `exit=0`: `feature-318` at `platform.feature:386` and `fix-config-keys-drift.feature:102`, both `!` greps print nothing, `@AC-19 @FR-8 @feature-225` count 1.
+- Config-key wiring gate (`--final`, last step) `.sdd-logs/v-3.log` `exit=0`: two baseline `REPORTED:` lines (analysis `marketdata/fundamentals.provider`, trading `platform/trading_state`, both `readers-disagree`), neither touched by 318. Status: in-progress → code-completed.
+- At integration the scenario-promoter promotes `@AC-1`…`@AC-5` from the branch-tip `acceptance.feature` and dedups `@AC-3`…`@AC-5` against the rewritten `@AC-19` (Step 13 instruction 3).
+- Files modified: `docs/sdd/business-rules/platform.feature`, `services/xstockstrat-config/acceptance/fix-config-keys-drift.feature`
+- Deviations: none
+
+## Session 2026-11-27 — sdd-execute
+**Steps this session**: 11, 12, 13
+**Progress**: 13 done / 13 total
+**Stopped at**: Step 13 (all complete)
+**Next**: integration PR `feature/fix-migration-tooling-safety` → `main-dev` (name 345's config `053` renumber, the `FORBID_NEW` first-run checks and the four `[ ] unaddressed` impl-spec warnings in its description)
