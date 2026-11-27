@@ -792,3 +792,16 @@ The operator ran the A1 read-only check (BEGIN READ ONLY ... ROLLBACK, three que
 ```
 
 No saved formula on DO staging lacks a `result` binding by either static heuristic (tier A: the word never appears; tier B: mentioned but no assignment form), so none will start failing with "formula did not assign result". The Tier A and Tier B listings were empty (the counts are 0). Homelab staging: the first two pastes carried no result tables (the echoed queries only, backslashes stripped); a backslash-free replacement script was sent to the operator and its result is outstanding. Production half waived (standing ruling). OQ1 is reported as the DO staging check done; the homelab staging result will be appended when it arrives.
+
+## Session 2026-11-27 — OQ1 check, homelab staging, supplied by the operator (verbatim)
+
+The operator ran the A1 totals query on the **homelab staging** database:
+
+```
+ total_rows | live_rows | soft_deleted_rows | tier_a_never_mentions_result | tier_b_mentions_but_no_assignment
+------------+-----------+-------------------+------------------------------+-----------------------------------
+          3 |         3 |                 0 |                            0 |                                 0
+(1 row)
+```
+
+No saved formula on homelab staging lacks a `result` binding by either static heuristic. With the DO staging result recorded in the previous entry (0 of 14), the OQ1 dev/staging check is done for both staging stacks; the production half stays waived (standing ruling). Per the 2026-11-27 ruling, PR #1617 may be squash-merged once its CI is green.
