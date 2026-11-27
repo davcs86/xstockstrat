@@ -1908,7 +1908,7 @@ cd services/xstockstrat-ui && pnpm run typecheck && pnpm run lint && pnpm run te
 
 ### Step 50 — test: e2e SSO fixtures and the stub IdP
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/helpers/stubIdp.ts` — create
