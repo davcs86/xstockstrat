@@ -685,3 +685,9 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - [ ] UI instantiate writer stays unpinned (O-25).
 - [ ] `docs/repo-surveyor/debt-radar-findings.md:553` is unanswered and outside this feature's file set.
 - Next: `/sdd-execute fix-agent-bearer-secret-orphan`.
+
+## Session 2026-11-27 — operator ruling on the Step 4 gate and the two-seed-user reading, recorded by the orchestrator (verbatim)
+
+Operator answer (2026-11-27) to the orchestrator list item "328: Settle the Step 4 target-database and cadence gate, and the two-seed-user reading.": "B2 use defaults".
+
+Effect: use the defaults recorded in this file and in the implementation spec for the Step 4 target database, the sweep cadence and the two-seed-user reading (sweep328-v1 / sweep328-v2). The Step 4 operator gate is cleared on those defaults. Orchestrator note (not an operator quote): if the executor cannot identify a single default for any of the three, it must stop with a blocker rather than choose.
