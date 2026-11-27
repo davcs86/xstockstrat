@@ -186,3 +186,14 @@
 ## Session 2026-11-27 — sdd-design gate after round 10
 
 - **OPERATOR (design gate): "Run a full round 11"** — round 11 started. Not approved.
+
+## Session 2026-11-27 — sdd-design round 11
+
+- Round 11 run as a full pass. The proposer's verdict: SOUND, wording only (first round with no
+  substance from a reviewer). The adversary found no worker-mechanism defect; one low-severity
+  lock-mode point in the printed recovery SQL (O-84, petition P-7 pending the operator) and
+  runbook wording (O-83, applied). Both printed SQL blocks are valid, satisfy every table check
+  and are safe run twice or concurrently. A recovered failed or dead job's "every declared child
+  succeeded" assumption was confirmed true in every case.
+- No Floor breach, no C-16 regression, no register violation. FR-1..FR-9, `@AC-1`..`@AC-18` PASS.
+  Both sides rate a further full round as low value.

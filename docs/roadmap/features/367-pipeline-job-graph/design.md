@@ -1,7 +1,7 @@
 # Design: pipeline-job-graph
 
 **Created**: 2026-11-27
-**Rounds**: 10 (full; round cap lifted by the operator; termination: pending operator approval)
+**Rounds**: 11 (full; round cap lifted by the operator; termination: pending operator approval)
 **Approved by**: pending
 **Grounded in**: recon.md
 **Debate register**: debate.md
@@ -13,7 +13,7 @@
 Internal only: no UI segment and no agent tool consumes this feature (product-spec § Consumer
 Surface). Decision IDs refer to debate.md.
 
-### Data model (D-1, D-10, D-23, D-24, D-27, D-38)
+### Data model (D-1, D-10, D-23, D-24, D-27, D-38, D-59)
 
 Analysis migration `031_pipeline_job_graph` creates two plain tables, disjoint from
 `analysis.job_schedule` (`services/xstockstrat-analysis/migrations/020_job_schedule.up.sql:8-11`).
@@ -53,11 +53,11 @@ State transitions:
 ### Clocks, fencing and at-least-once (D-2, D-3, D-14, D-20, D-54)
 
 The database clock decides lease expiry, next-attempt time, retention cutoffs and ready age. The
-instance clock decides only the prune's UTC-date epoch and local timers. Every report is one statement, and every
-park one transaction whose first statement is, fenced by `job_id`, `lease_token` and
-`state = 'running'`; zero rows means the report or park is rejected. Execution is at-least-once, so effects outside the fenced report must be idempotent.
-Correctness rests on the fence and on idempotent effects alone; the local self-fence only limits
-duplicate work. Expiry alone does not end a lease; a reap does. A heartbeat or report against an
+instance clock decides only the prune's UTC-date epoch and local timers. Every report is one statement fenced by `job_id`,
+`lease_token` and `state = 'running'`; every park is one transaction whose first statement is
+fenced the same way; zero rows means the report or park is rejected. Execution is at-least-once, so effects outside the fenced report must be idempotent.
+Correctness rests on the fence and on idempotent effects alone; the local self-fence (a per-attempt timer that stops a running handler at its fence deadline, 3 s
+before the lease it last renewed would expire; see Lease timing) only limits duplicate work. Expiry alone does not end a lease; a reap does. A heartbeat or report against an
 expired lease that has not been reaped succeeds. A reap skips a row that a heartbeat, report or
 park holds; one of those that waits on a reap's lock re-checks token and state on the new row
 version and matches nothing.
@@ -101,7 +101,7 @@ pooled services (`docs/patterns/database.md:150-152,185`), so a control operatio
 queue behind another service's transaction. Only the client timer bounds that wait. A missed
 heartbeat costs duplicate work and one attempt, never a double-recorded result.
 
-### Repository and SQL (D-4, D-5, D-18, D-22, D-30, D-35, D-38, D-41, D-44, D-49, D-52, D-55, D-56, D-57, D-58)
+### Repository and SQL (D-4, D-5, D-18, D-22, D-30, D-35, D-38, D-41, D-44, D-49, D-52, D-55, D-56, D-57, D-58, D-59)
 
 `PipelineJobsRepository` in `app/repositories/pipeline_jobs.py` follows the existing repository
 shape (`app/repositories/opportunities.py:82-92`); every method takes `conn=None`. Without `conn`,
@@ -378,7 +378,10 @@ UPDATE analysis.pipeline_jobs
  WHERE job_id = <id> AND state = '<failed|dead>';
 ```
 
-For a `blocked` parent, in one transaction; the lock holds the row in `blocked` until commit:
+For a `blocked` job (a parent, or a job blocked by its own handler's verdict, whose edge delete
+then removes nothing), in one transaction; the lock holds the row in `blocked` until commit. If
+the `SELECT` returns no row, `ROLLBACK` and stop. If the transaction fails, for example on a
+deadlock with the daily prune, run it again; every statement is guarded, so a re-run is safe:
 
 ```sql
 BEGIN;
@@ -394,10 +397,14 @@ UPDATE analysis.pipeline_jobs
 COMMIT;
 ```
 
-Recover a `failed` or `dead` child before its `blocked` parents: a parent recovered first
-re-declares the child, finds it still failed, and is blocked again. Requeuing a child does not
-unblock parents that are already `blocked`; recover each one, and any ancestor blocked by its
-verdict, as a `blocked` parent. The same page names what to watch:
+Recover bottom-up: a `failed` or `dead` job before the jobs that wait on it, and a `blocked` job
+before the `blocked` jobs that wait on it. A parent recovered before its child re-declares the
+child, finds it still failed or blocked, and is blocked again. Requeuing a job does not unblock
+jobs already `blocked` on it. Find them through `pipeline_job_deps` (`child_id = <id>`, then
+upward), not through the verdict, which names no child. A job's incoming edges survive its own
+recovery, so walk upward one level at a time, recovering each `blocked` parent with the block
+above. A recovered `failed` or `dead` job keeps its `wait_round` and edges and re-runs its current
+stage, as a transient retry does; a recovered `blocked` job restarts at round 0. The same page names what to watch:
 `lease_events{outcome=handler_abandoned}`, `oldest_ready_age`, `attempts{outcome=dead}`, and that
 an instance whose slots are all held by unresponsive handlers needs a restart.
 
@@ -442,7 +449,7 @@ test rows and the docs rows land in one step and one commit.
   than 45 s reports nothing.
 - No alert ships in this feature.
 
-### Build order
+### Build order (D-13)
 
 1. Config seed, bounds, settings reader, wiring and docs rows (one step).
 2. Analysis migration `031`.

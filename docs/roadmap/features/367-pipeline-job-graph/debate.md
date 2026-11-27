@@ -2,7 +2,7 @@
 
 **State**: in-debate
 **Mode**: full (round cap lifted by operator override, context.md 2026-11-27)
-**Rounds run**: 10 (round 11 in progress)
+**Rounds run**: 11
 
 ## Rounds
 
@@ -18,6 +18,7 @@
 | 8 | 2026-11-27 | /sdd-design | 2 | 0 | 4 | 4 | 0 | yes |
 | 9 | 2026-11-27 | /sdd-design | 1 | 0 | 3 | 3 | 0 | yes |
 | 10 | 2026-11-27 | /sdd-design | 1 | 0 | 2 | 2 | 0 | yes |
+| 11 | 2026-11-27 | /sdd-design | 0 | 0 | 1 | 2 | 1 | yes |
 
 ## Settled Decisions
 
@@ -195,6 +196,8 @@
 | O-80 | 9 | A prune batch's cost grows with the edges its rows cascade, not with the 500-row batch size; a wide parent deleted before its children can exceed the 30 s block and roll the batch back. | no | closed @ round 9 (recorded under Open Risks) |
 | O-81 | 10 | The `blocked`-parent recovery's edge delete was unguarded: run twice (or by two operators), the second run deletes the new edges of a parent that was requeued and parked again, its guarded update matches nothing, and settle wakes the parent over zero edges with its children unfinished. `@AC-8`. Found independently by both sides. | yes | closed @ round 10 (D-59) |
 | O-82 | 10 | Text-level gaps: D-13 (test clocks) and D-39's allow-list additions were missing from design.md; the unfinished-rows index predicate was unstated (a `finished_at IS NULL` predicate would not be implied by the queries' `state` filters); settle's statement shape unstated; the in-memory attempt key and "terminal" undefined; "every result write is one statement" contradicted park; three claims depended on unstated conditions (reap candidates "bounded by slots held"; a dead row surviving at `retention_days` + 1; "at most 30 s" for a service connection); measurements for program feature 3 referenced by ID only. | no | closed @ round 10 (text in design.md) |
+| O-83 | 11 | Runbook wording: the recovery order was stated only for failed or dead children before blocked parents, not for a blocked job before the blocked jobs that wait on it, and "blocked by its verdict" cannot be checked from the data because a verdict names no child; what to do when the recovery's lock finds no row or the transaction deadlocks with the prune was unstated; a job blocked by its own verdict was not covered; one sentence was ungrammatical; "self-fence" was used before it was defined; decision IDs missing from three headings. | no | closed @ round 11 (text in design.md) |
+| O-84 | 11 | The printed recovery SQL locks the blocked row `FOR UPDATE`, which conflicts with the `FOR KEY SHARE` a park takes on that row as a child; an operator who leaves the recovery transaction open stalls every park that names the row. `FOR NO KEY UPDATE` excludes everything the lock must exclude (a second recovery, the prune) without that conflict. Low severity; needs petition P-7. | no | open |
 
 ## Reopen Petitions
 
@@ -207,3 +210,4 @@
 | P-4 | 6 | D-49 (lock-strength clause) | PostgreSQL's row-lock conflict table: `FOR UPDATE` conflicts with `FOR KEY SHARE`, `FOR NO KEY UPDATE` does not; park (D-22) and edge-insert foreign-key checks take `FOR KEY SHARE`. O-58 considered only instance-versus-instance blocking (O-67). Proposed: reap and settle select with `ORDER BY job_id FOR NO KEY UPDATE SKIP LOCKED`; prune and claim unchanged. | user reopened (context.md 2026-11-27) |
 | P-5 | 6 | D-47 (invariants 1 and 3) | `app/config/live_limits.py:13` (a shrink never interrupts holders) with D-46 makes invariant 1 false after a decrease; invariant 3's terms are undefined (O-64). Proposed: invariant 1 in terms of slots held (never more than 16); settle batches are separate lane operations, a tick issues at most 3 lane operations besides settle and at most 20 settle batches, starting none once 8 s have passed. | user reopened (context.md 2026-11-27) |
 | P-6 | 7 | D-4 / D-52 (claim lock strength) | The claim UPDATE sets only non-key columns; under D-22 a park takes `FOR KEY SHARE` on a child that may already be `ready`; P-4 said "claim unchanged" without a reason (O-73). Proposed: the claim selects with `FOR NO KEY UPDATE SKIP LOCKED`; exclusion between claimers still holds because that lock conflicts with itself; prune keeps `FOR UPDATE`. | user reopened (context.md 2026-11-27) |
+| P-7 | 11 | D-59 (lock mode of the recovery's row lock) | The PostgreSQL row-lock conflict table with park's `FOR KEY SHARE` child lock; round 10 judged the lock only against a second recovery and the prune, not against a concurrent park (O-84). Proposed: `SELECT … WHERE job_id = <id> AND state = 'blocked' FOR NO KEY UPDATE`, plus a test that a park naming a blocked row as a child is not blocked by an open recovery transaction. | pending user |
