@@ -70,6 +70,7 @@ only", close config findings `:14`, and review config findings `:4,:33` and
 (recon.md:59), and resolve marketdata findings `:33` (recon.md:60). Gate:
 `GOWORK=off go build ./... && go vet ./...`.
 
+<!-- Superseded 2026-11-26 by operator rulings O-1/O-2: signal_extraction.md and noop.py are kept; see context.md (D-3: `noop.py` is no longer deleted; `tests/test_extractor.py` is still deleted and a replacement `tests/test_noop_extractor.py` is added) -->
 **Step 5 — ingest (D-3).** Delete `example_simple_email.py`, `noop.py` and the whole of
 `tests/test_extractor.py`, which tests only the two orphans (recon.md:67,77-82). Trim the five
 non-MCP dataclasses and keep the `RawInput` name, narrowed to `McpClientInput` (recon.md:68-74).
@@ -78,6 +79,7 @@ Close ingest findings `:23`; annotate `:24` with the now-dangling labels `app.ex
 opaque fixture strings unchanged (recon.md:76,83,164). Refresh the INGEST-6 line anchors. Gate:
 `uv run pytest --cov=app --cov-fail-under=40` plus `ruff`.
 
+<!-- Superseded 2026-11-26 by operator rulings O-1/O-2: signal_extraction.md and noop.py are kept; see context.md (this agent deletion step is dropped) -->
 **Step 6 — agent.** Delete `app/prompts/signal_extraction.md` and resolve agent findings `:34`
 (recon.md:90-91). `list_correlation.md` and the `app/config/` package stay (recon.md:87-89,92). Gate:
 `uv run pytest`, which includes `tests/test_config_watcher.py` (covers AC-3).

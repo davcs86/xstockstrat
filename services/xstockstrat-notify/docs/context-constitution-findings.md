@@ -27,9 +27,7 @@ _None open in this section_ — open doc-lie rows are in the additions section b
 
 ## Dead / orphaned code
 
-| What | Why it looks dead | Evidence |
-|---|---|---|
-| `jsonwebtoken` + `bcrypt` (+ `@types`) deps | no usage in `src/` — copied from the identity template (re-verified 2026-10-14: still in `package.json`, grep zero in `src/`) | `package.json` (grep zero in `src/`) |
+_None open._
 
 ## Open questions (unresolved *why* — needs a maintainer)
 
@@ -47,6 +45,7 @@ _None open in this section_ — open doc-lie rows are in the additions section b
 
 - **RESOLVED 2026-11-26 — Severity filter type/runtime mismatch (latent bug), by feature `316-fix-notify-stream-contract`.** `StreamSubscriber.severities` is `AlertSeverity[]` (`src/grpc/notifyServiceImpl.ts#StreamSubscriber`), matching the string enum the filter compares at runtime; the `@AC-1` test in `src/__tests__/notifyServiceImpl.test.ts` covers the string form, and the severity fixtures there are string enums.
 
+- **RESOLVED 2026-11-27 — dead `jsonwebtoken` + `bcrypt` (+ `@types`) deps and the dead `migrate` npm script, by feature 323 (`fix-orphaned-code`).** The four dependency lines, the `migrate` script and the `node-pg-migrate` devDependency are removed from `package.json`; the root `pnpm-lock.yaml` is regenerated. `grep -n 'jsonwebtoken\|bcrypt\|node-pg-migrate' package.json` is empty and `src/` never used them.
 - **RESOLVED 2026-11-15 — the six feature-338 commsgun rows (found 2026-11-15), by feature `346-fix-commsgun-email-channel`.** Each was confirmed by a regression test that failed on `d1c9727` and passes after the fix (`npm test`: 393 pass / 6 fail before, 399 / 0 after):
   - ⚠ non-https `commsgun.enqueue_url`: `src/fanout/emailProvider.ts#commsgunSettings` reads a URL failing `src/fanout/webhookUrlRule.ts#checkHttpsUrl` (the webhook URL rule without its allowlist: `https` only, ≤ 2048 characters, no whitespace or control characters, no userinfo, no trailing-dot host) as empty. The base is then not set (`unconfigured` when pinned, SendGrid in `auto`) and no POST is made (`emailProvider.test.ts` "@AC-1 (346)", "@AC-6 (346)"; `commsgunWorker.test.ts` "the enqueue URL is http" → `no_endpoint`, zero client calls). The pinned-mode alert explains the rule only when the URL is the missing key. An https-only rule cannot break a valid deployment, because the edge serves the tailnet name only on tcp:443 with its ACME wildcard certificate (feature 338 `recon.md` § Tailnet path, pruned: `git show 662413d7:docs/roadmap/features/338-notify-commsgun-channel/recon.md`).
   - Unsanitised subject: `src/fanout/emailRender.ts#renderEmail` replaces CR/LF runs with a space and cuts the subject to 998 code points, matching the producer exactly (`api/internal/enqueue/validate.go#emailContent`: `strings.ContainsAny(subject, "\r\n")` or `utf8.RuneCountInString(subject) > SubjectMaxLen`, re-read at commsgun `4e3e58d`). SendGrid gets the same subject. Rows already queued keep their stored subject (NOTIFY-17) (`sendgridSender.test.ts` "@AC-2 (346)").

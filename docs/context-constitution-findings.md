@@ -61,7 +61,8 @@ module's `context-constitution-findings.md`.
 | What | Why it looks dead | Evidence |
 |---|---|---|
 | ~~`middleware/propagation.ts`~~ **RESOLVED (feature 175)**: deleted from all four leaves (ledger/notify/config/identity) — zero importers | resolved | n/a (files removed) |
-| Unused `"migrate": "node-pg-migrate up"` script plus the `node-pg-migrate` devDependency in `services/xstockstrat-{ledger,identity,notify,config}/package.json` (found 2026-11-04) | Migrations are golang-migrate `*.up.sql` driven by `scripts/db-migrate.sh`; the service CLAUDE.md files say "not node-pg-migrate" and nothing in `src/` imports it, so running the script applies nothing useful. | `services/xstockstrat-{ledger,identity,notify,config}/package.json#node-pg-migrate` (~L11, ~L50-57) |
+| ~~Unused `"migrate": "node-pg-migrate up"` script plus the `node-pg-migrate` devDependency in `services/xstockstrat-{ledger,identity,notify,config}/package.json`~~ **RESOLVED (feature 323)**: script and devDependency removed from all four leaves, root `pnpm-lock.yaml` regenerated (found 2026-11-04) | resolved | n/a (lines removed) |
+| The four `services/xstockstrat-{config,identity,ledger,notify}/pnpm-lock.yaml` files are vestigial and now stale against their manifests (new 2026-11-27, feature 323) | The leaf `Dockerfile:13` copies only the root `pnpm-lock.yaml` (`pnpm install --frozen-lockfile` at `:17`), so the per-service locks are not build input; feature 323 regenerated only the root lock, so they still list the removed `node-pg-migrate` (and, in notify, `jsonwebtoken`/`bcrypt`). Not touched by 323 (D-11). | `services/xstockstrat-{config,identity,ledger,notify}/pnpm-lock.yaml` vs `services/xstockstrat-ledger/Dockerfile:13,17`; action: delete the four files or regenerate them, in a feature of their own |
 
 ## Open questions (unresolved *why* — needs a maintainer)
 
