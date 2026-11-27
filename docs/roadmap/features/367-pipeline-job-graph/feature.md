@@ -11,6 +11,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-11-27 | `idea` → `draft` | /sdd-story | Product spec generated. Feature 1 of 9 in `docs/roadmap/program-job-graph-analysis-pipeline.md` |
+| 2026-11-27 | `draft` → `spec-ready` | /sdd-review | Product spec approved (2 warnings, both fixed in the spec). Round 1 failed on criteria 6 and 9; round 2 passed. Overlap clean |
 
 ---
 
@@ -43,4 +44,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-review pipeline-job-graph product-spec` — AI review of product spec before running /sdd-spec
+`/sdd-design pipeline-job-graph` — full design recommended (DB migration and 2 affected services)

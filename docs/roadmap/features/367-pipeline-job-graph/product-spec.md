@@ -37,10 +37,12 @@ with the attempt number is a design output.
 FR-4. **Park-and-wake dependencies.** A job can declare that it waits on other jobs. It is not
 claimable while any of them is unfinished, and becomes ready when they succeed. When one of them
 ends with a terminal unsatisfiable verdict, the waiting job ends blocked with that verdict and does
-not run again.
+not run again. A verdict is an opaque label set by the handler; `no_vendor_data` in `@AC-9` is an
+example value, not a job kind this feature ships.
 
 FR-5. **Priority lanes.** Each job has a lane. A ready job in a higher lane is claimed before a
-ready job in a lower lane, whatever their enqueue order.
+ready job in a lower lane, whatever their enqueue order. This feature defines two lanes, `held`
+above `watchlist`; the full lane set is a design output. The prune job runs in the lowest lane.
 
 FR-6. **Universe-run id.** Each job carries the id of the universe run that created it, and a
 run's jobs can be listed with their states through the job repository. No RPC exposes this.
@@ -164,6 +166,5 @@ See `acceptance.feature` (scenarios `@AC-*`) — the single source of acceptance
 
 - [x] **A core with no consumer.** Resolved 2026-11-27: the operator chose to make the retention
   prune the first real job kind (FR-7), so the core runs in production from this feature on.
-- [ ] **Worker default.** FR-9 sets `analysis.pipeline.worker_enabled` to `true` by default so the
-  prune runs without an operator step. That default is the story author's inference from the
-  decision above, not an operator statement. Operator to confirm.
+- [x] **Worker default.** Resolved 2026-11-27: the operator confirmed
+  `analysis.pipeline.worker_enabled` defaults to `true`, so the prune runs with no operator step.

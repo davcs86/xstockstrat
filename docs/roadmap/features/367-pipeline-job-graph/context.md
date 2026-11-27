@@ -45,3 +45,18 @@
   `@AC-5` and `@AC-15` wording made concrete (IDs unchanged).
 - Still open: the worker default (`worker_enabled` = `true`) needs the operator. Re-run the review
   after that answer.
+
+## Session 2026-11-27 — operator decision on the worker default
+
+- **OPERATOR DECISION: "Default true"** — `analysis.pipeline.worker_enabled` defaults to `true`.
+  The last open question in product-spec.md is closed.
+
+## Session 2026-11-27 — sdd-review product-spec (round 2)
+
+- Product spec approved. Status: draft → spec-ready.
+- Warnings: lane set and order undefined (FR-5 / `@AC-10`); `no_vendor_data` in `@AC-9` read as
+  pipeline meaning. Both fixed in product-spec.md after the verdict.
+- Overlap findings: none (round-1 scan reused; only this feature's docs changed since).
+- Recommended design depth: full (DB migration, 2 affected services).
+- Design-phase watch items from the reviewer: F-06 pool contention for `worker_concurrency` 4;
+  C-18 on lanes and dependency edges with no production consumer yet.
