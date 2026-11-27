@@ -637,3 +637,10 @@ Effect: the C-14 agent scope addition (the agent-surface scope the design propos
 ```sdd-batch-setup
 {"mainDev":"f802b184b13bd899d858c4b0349a616e9981b9d9","date":"2026-11-27"}
 ```
+
+### Step 1 — service: entry-backfill reads live strategies through `list_live_enabled` [done]
+- `entry_backfill.run_once` now reads `rows = await StrategiesRepository(db_pool).list_live_enabled()` inside the unchanged try/except → warning → return; module-top import `from app.repositories.strategies import StrategiesRepository` (no name-bound `LIVE_ENABLED_PREDICATE_SQL`, R-3).
+- TDD: red (structural) — the pre-implementation Verification run printed `65:            "SELECT * FROM analysis.strategies WHERE live_enabled = TRUE AND active = TRUE"` and no `list_live_enabled` hit; the behavioural AC-2 red is produced in Step 2 instruction 3, per the spec's Step Dependencies. Green: `65:        rows = await StrategiesRepository(db_pool).list_live_enabled()`, `46 passed`, `All checks passed!`, `143 files already formatted`, exit=0.
+- Tooling: `uv sync --extra dev` in services/xstockstrat-analysis (worktree-local .venv). Config-key wiring gate: not applicable (no config key, not a config step).
+- Files modified: `services/xstockstrat-analysis/app/engine/entry_backfill.py`
+- Deviations: none

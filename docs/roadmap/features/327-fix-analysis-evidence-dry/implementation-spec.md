@@ -121,7 +121,7 @@ them; IDs are append-only).
 
 ### Step 1 — service: entry-backfill reads live strategies through `list_live_enabled`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/engine/entry_backfill.py` — modify
