@@ -1237,7 +1237,7 @@ grep -n "MYSZ_EVALUATION_FAILED_OPPORTUNITY" e2e/fixtures/INVENTORY.md e2e/trade
 
 ### Step 21 — service: `evaluation_failed` arm in the Signal-detail "Why this fired" card
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/insights/SignalReadiness.tsx` — modify
@@ -1761,3 +1761,38 @@ _Populated by /sdd-execute as implementation proceeds._
       `HEAD`, without the Step 20 edit (`1 failed`), so it was already failing in this worktree.
 - **Disposition**: CI-equivalent fallback for `tsc`. The e2e failures are pre-existing or environmental,
   shown against the baseline. No file outside Step 20's **Files** is committed.
+
+### Step 21: probe RED, stale linked proto dist and baseline-failing tests (2026-11-27)
+
+- **Expected**: Step Dependencies has Step 22's test capture RED for Step 21. The Verification block
+  (`lint`, `tsc --noEmit`, `playwright test e2e/trader/position-detail.spec.ts`, three greps) passes
+  as written.
+- **Actual**:
+  - RED and GREEN came from a temporary untracked probe, `e2e/trader/tmp-step21-probe.spec.ts`. It
+    routed the watchlist binding, `MYSZ_EVALUATION_FAILED_OPPORTUNITY` and `EvaluateReadiness`
+    through `page.route`, in two tests: an empty row (`symbolReadiness('MYSZ')` with no conditions)
+    and the factory's own 2/3 row. It ran with `--project=chromium --no-deps --timeout=240000`.
+    - RED: `getByTestId('readiness-evaluation-failed')` `element(s) not found`, and the card read
+      "This strategy has no entry conditions to evaluate." under the `evaluation failed` header
+      (`1 failed, 1 passed`; the 2/3 case is not red before the change, as Step 22 states).
+    - GREEN: `2 passed (29.6s)`.
+    - The probe was deleted before the commit.
+  - The verbatim block exited 1.
+    - Lint passed, with warnings in untouched files only.
+    - The greps hit `:13,48,58,102,103,106`; `readiness.conditions.length === 0` counts `1`; the
+      `'evaluation_failed'` literal grep printed nothing (its no-match status is the block's exit).
+    - `tsc` reported `BackfillSymbolOutcome.INCOMPLETE` in two untouched files (stale linked proto
+      dist). Against this branch's dist, through a `paths` override under `.sdd-logs/`, it exited 0
+      and compiled `SignalReadiness.tsx`.
+    - The Playwright warmup timed out at 10 s (`62 did not run`).
+  - A re-run with only `--timeout=240000` added gave `4 failed, 59 passed`. None of the failures is in
+    a test that exercises the new arm, and the readiness-card tests (feature 083/125, AC-13 firing
+    cue, feature 215, feature 289 `@AC-7`) passed:
+    - the two AAPL `Single Position page` tests and `@AC-5 INCOMPLETE-only partial`, already shown
+      failing at the pre-Step-19 baseline (Steps 19 and 20);
+    - `feature 139: the section nav lets you jump to a group …`. Run alone (`-g "feature 139"`) it
+      fails the same way with `SignalReadiness.tsx` restored to `HEAD` (`2 failed, 2 passed`), so it
+      was already failing in this worktree.
+- **Disposition**: CI-equivalent fallback for `tsc`. The e2e failures are pre-existing or
+  environmental, shown against the baseline. No file outside Step 21's **Files** is committed.
+  Step 22 still adds the permanent Playwright tests, its own RED and the mutation run as specced.

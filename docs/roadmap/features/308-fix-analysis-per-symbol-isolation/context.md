@@ -910,3 +910,24 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 
 ### Open Threads
 - [ ] `position-detail.spec.ts` `a backtest over a data-less symbol surfaces INSUFFICIENT_DATA inline …` also fails on the host harness in this worktree with and without this feature's edits. As with the two AAPL tests (Step 19), CI's Docker e2e is the arbiter; triage separately from 308 if it fails there.
+
+## Session 2026-11-27 — sdd-execute sequential (sdd-batch-execute), step 21
+
+- Tooling: pnpm 9.15.9 ✓ · chromium ✓ (`/opt/pw-browsers`) · hook check hook=0. No install was run. Lockfile gate: `git diff --quiet origin/main-dev -- pnpm-lock.yaml` rc=0.
+- Discovery: the advisory digest read the main checkout's pre-re-spec spec, which ends at Step 17. At `origin/feature/fix-analysis-per-symbol-isolation@1f8d6635`, Step 21 exists and every evidence symbol is in place: the `readinessCue` import at `SignalReadiness.tsx:13`, `isHeld` at `:47`, `readiness` at `:56`, the body chain at `:80-103`, `CardNotice` (`children`, `variant`), and `EVALUATION_FAILED_PROVENANCE` at `readinessCue.ts:27` (Step 15).
+
+### Step 21 — service: `evaluation_failed` arm in the Signal-detail "Why this fired" card [done]
+- `SignalReadiness` imports `EVALUATION_FAILED_PROVENANCE`, derives `evalFailed` from `pairRow.provenance` after `isHeld`, and `noConditions` (`!readiness || readiness.conditions.length === 0`) after `readiness`. The chain gains an `evalFailed && noConditions` arm after the unreadable arm and before the `noConditions` "no conditions" arm: `role="status"`, `readiness-evaluation-failed`, `<CardNotice>Evaluation failed for {symbol}.</CardNotice>`. The `error` arm still wins, and real conditions render as before (operator ruling 2026-11-27). No literal token, no colour literal.
+- TDD:
+  - RED (temporary probe spec, `.sdd-logs/v-1.log`): `getByTestId('readiness-evaluation-failed')` `element(s) not found`, with the card reading "This strategy has no entry conditions to evaluate." (`1 failed, 1 passed`).
+  - GREEN (`.sdd-logs/v-2.log`): `2 passed (29.6s)`, the empty-row arm and the 2/3 conditions case. The probe was then deleted.
+- Verification:
+  - The verbatim block (`.sdd-logs/v-3.log`) exited 1. Lint passed (warnings in untouched files only); the greps hit `:13,48,58,102,103,106`, the `=== 0` count is `1`, and the literal grep printed nothing.
+  - tsc failed on `BackfillSymbolOutcome.INCOMPLETE` (stale linked proto dist). Against this branch's dist it exited 0 and compiled `SignalReadiness.tsx` (`.sdd-logs/v-4.log`).
+  - The warmup timed out at 10 s. A re-run with `--timeout=240000` gave `4 failed, 59 passed` (`.sdd-logs/v-5.log`): the two AAPL tests and `@AC-5 INCOMPLETE-only` seen in Steps 19-20, plus `feature 139` section nav, which fails the same way with `SignalReadiness.tsx` at `HEAD` (`.sdd-logs/v-9.log`, `2 failed, 2 passed`).
+- Config-wiring gate: not applicable (no config key, no migration).
+- Files modified: `services/xstockstrat-ui/src/components/insights/SignalReadiness.tsx`
+- Deviations: probe RED, the stale linked proto dist and baseline-failing e2e tests (Deviation Log "Step 21").
+
+### Open Threads
+- [ ] `position-detail.spec.ts` `feature 139` section-nav tests fail on the host harness in this worktree with and without Step 21 (one also passed in a full-spec run during Step 19). CI's Docker e2e is the arbiter; triage separately from 308 if they fail there.
