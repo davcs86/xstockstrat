@@ -1327,7 +1327,7 @@ docker run --rm -d --name ui-smoke -p 3999:3000 -e JWT_SECRET="$(openssl rand -h
 
 ### Step 33 — test: oidcClient through a fetch stub, and the logout URLs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/oidcClient.test.ts` — create
