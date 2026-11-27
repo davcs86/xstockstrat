@@ -727,3 +727,13 @@ Tooling setup (step 9): uv ✓ 0.11.32 · `uv sync --extra dev` ⬇ (worktree `.
 - TDD: RED via an uncommitted scratch probe `.sdd-logs/v-2.log` `exit=1` — `3 failed, 2 passed` (explicit 0.0 stored `(None, None)`; QuerySignals gave `(False, …)` for every row; mcp builder `conviction_provided` `False`). The Verification block before the change, `.sdd-logs/v-1.log` `exit=0`: `210 passed`, the grep printed nothing. GREEN `.sdd-logs/v-3.log` `exit=0` — `210 passed`, grep hits `servicer.py:1387`, `:1641`, `mcp_client_loop.py:95`, ruff `All checks passed!`, `58 files already formatted`; probe `.sdd-logs/v-4.log` `exit=0` `5 passed`. The block has no coverage command; Step 10 runs the coverage gate.
 - Files modified: `services/xstockstrat-ingest/app/handlers/servicer.py`, `services/xstockstrat-ingest/app/engine/mcp_client_loop.py`
 - Deviations: RED shown by a scratch probe, not a committed test (Deviation Log).
+
+## Session 2026-11-27 — sdd-execute sequential (step 10)
+
+Tooling setup (step 10): uv ✓ 0.11.32 · `uv sync --extra dev` ⬇ (worktree `.venv`) · ruff ✓ 0.16.9 · no Node install. Config-key wiring gate: not applicable (no key, no config migration).
+
+### Step 10 — test: explicit-zero store, read-back and mcp_client presence [done]
+- `TestIngestSignalConvictionValidation` gains `test_explicit_zero_conviction_is_stored_as_zero` (`@AC-5`: INSERT `args[4]` and claim `args[6]` are 0.0, not None) and `test_omitted_conviction_is_stored_as_null` (both None), each on its own `transaction_conn`. The `test_in_range_conviction_proceeds` comment now says 0.0 without the flag is stored NULL. `TestQuerySignals.test_conviction_presence_round_trip`: rows `Decimal("0.000")` / `None` / `0.9` → `(True, 0.0)`, `(False, 0.0)`, `(True, 0.9)`. `test_mcp_client_loop.py::test_explicit_zero_conviction_marks_presence` (`_run_cycle_with` + `_item(conviction=0.0)`): `conviction == 0.0`, `conviction_provided is True`.
+- TDD: AC-5 red: with the pre-Step-9 service files (`faea4d0f`) temporarily checked out, `.sdd-logs/v-1.log` shows `3 failed, 211 passed` (`assert (None is not None)`; `At index 0 diff: (False, 0.0) != (True, 0.0)`; `assert False is True`) → green: `.sdd-logs/v-2.log` `exit=0`, `214 passed`; full suite `626 passed`, `Required test coverage of 40% reached. Total coverage: 87.70%`; ruff `All checks passed!`, `58 files already formatted`; the helpers grep prints the `tests._helpers` imports.
+- Files modified: `services/xstockstrat-ingest/tests/test_ingest_servicer.py`, `services/xstockstrat-ingest/tests/test_mcp_client_loop.py`
+- Deviations: RED run against the pre-Step-9 service files (Deviation Log).

@@ -458,7 +458,7 @@ ruff check . && ruff format --check .
 
 ### Step 10 — test: explicit-zero store, read-back and mcp_client presence
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/tests/test_ingest_servicer.py` — modify
@@ -834,3 +834,8 @@ _Populated by /sdd-execute as implementation proceeds._
 **Spec said**: `**TDD**: red-green required`, with the Verification block (the existing `test_ingest_servicer.py` / `test_mcp_client_loop.py` suites, a grep and ruff) as the run; Step 10 owns the new tests and is not a unit with Step 9.
 **Actual**: The block passes before and after the change (210 passed both times; only its grep line changes, from no output to three hits). RED → GREEN was shown with an uncommitted scratch probe (`.sdd-logs/probe_step9.py`, five cases mirroring Step 10 tests 1, 2, 4 and 5): 3 failed / 2 passed before the change, 5 passed after. The probe is not staged; Step 10 commits the real tests.
 **Reason**: No existing ingest test changes result under Step 9 (Step Dependencies), and Step 10's test files are outside Step 9's **Files** (F-08). **Disposition**: in-scope TDD evidence, no scope change.
+
+### Deviation: Step 10 — test: explicit-zero store, read-back and mcp_client presence
+**Spec said**: `**TDD**: red-green required`; RED "today: `conviction_provided` is unknown / the value is `None`".
+**Actual**: Step 9 had already landed, so the new tests pass on the branch tip. RED ran the Verification block with the two Step 9 service files temporarily checked out from `faea4d0f` (pre-Step-9) and restored before GREEN: 3 failed (`test_explicit_zero_conviction_is_stored_as_zero`, `test_conviction_presence_round_trip`, `test_explicit_zero_conviction_marks_presence`). `test_omitted_conviction_is_stored_as_null` passes on both trees because it pins the unchanged not-given behaviour. That block printed `exit=0` because its last command (the grep) passed.
+**Reason**: Step 9 lands before Step 10 (Step Dependencies; not an atomic unit). **Disposition**: in-scope TDD evidence, no scope change.
