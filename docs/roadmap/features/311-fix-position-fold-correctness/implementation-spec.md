@@ -1059,7 +1059,7 @@ No Go coverage threshold applies to this step: it edits no Go source, and the un
 
 ### Step 23 — service: bracket-leg fill observer
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/service/trading.go` — modify
@@ -1120,7 +1120,7 @@ cd services/xstockstrat-trading && GOWORK=off golangci-lint run --modules-downlo
 
 ### Step 24 — test: leg observer and its ledger events
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/service/trading_bracket_leg_poll_test.go` — create
@@ -1554,3 +1554,17 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Spec said**: a six-line block. Lines 1-4 are repo-root greps, and lines 5 and 6 each start `cd services/xstockstrat-trading && …`.
 - **Actual**: the same pattern as Steps 3-21. Inside the one subshell the `cd` on line 5 persists, so line 6 fails with `cd: services/xstockstrat-trading: No such file or directory`. Run verbatim (`.sdd-logs/v-2.log`, `exit=1`), lines 1-5 ran and printed what the spec expects: `3`, one `TRADING_DB_TEST_URL` line (`:1166`, in the new job), six `go test -tags dbtest` lines (`:1059,1065,1110,1116,1161,1167`), `28: build-tags:` / `29- - dbtest`, and all 10 Step 21 case names from `-list` with `ok …/internal/repository`. The `trading-db-test` job needs GitHub Actions and a database, so it cannot run here (Instruction 4).
 - **Disposition**: line 6 ran unchanged, alone, from the repo root (`v-3.log`, `0 issues.`, `exit=0`, with v2.14.0 first on `PATH`). The integration PR quotes the job's first run (Instruction 4). The step body was not changed (F-09).
+
+### Steps 23+24 — Verification blocks stop after their first line (2026-11-27)
+- **Spec said**: Step 23 gives a five-line block and Step 24 a three-line block. Each line starts `cd services/xstockstrat-trading && …` or names a repo-root-relative path.
+- **Actual**: the same pattern as Steps 3-22. Inside the one subshell the first line's `cd` persists, so later lines fail with `cd: services/xstockstrat-trading: No such file or directory`. Run verbatim, Step 24's block (`.sdd-logs/v-2.log`) ran only the `internal/service` `go test -race`, and Step 23's block (`v-5.log`) ran `go build` and then lines 2-4 from inside the service directory, where the repo-root paths do not resolve: its `git diff` line printed a vacuous `0` and both greps printed `No such file or directory`. Both blocks exited 1 for this reason alone.
+- **Disposition**: each block was run verbatim once. Then every line that had not run, or had run from the wrong directory, was run unchanged, alone, from the repo root, with its own log. All passed: `golangci-lint` v2.14.0, the line both blocks share, printed `0 issues.` (`v-3.log`); the coverage line printed `total: (statements) 84.9%` with every package `ok` (`v-4.log`); the `StartFillPoller` count printed `0` against a 193-line diff (`v-6.log`); the `pollBracketLegFills` grep printed the call at `:1878` after `logTick` and the definition at `:1890` (`v-7.log`); the `applyBrokerOrderStatus|maybeSubmitBracket` count printed `0` (`v-8.log`). The step bodies were not changed (F-09).
+
+### Steps 23+24 — how the Instructions were met (2026-11-27)
+- **Not-found count on a listed leg.** Instruction 5 resets `not_found_ticks` to 0 on a fallback `GetOrder` success. A leg present in a successful list is also an observed order, so its observation writes 0 too; otherwise an earlier not-found streak would survive a sighting and retire a live leg.
+- **Retiring `UNKNOWN`** writes the status with the existing cursor through `AdvanceLegEmit`; a not-found below the threshold writes only the count, keeping the last `observed_filled_qty`.
+- **A terminal status with no new fill** (or a fill already at the cursor) retires the leg with no emit, so it is not held back by an earlier emit failure in the tick; only emits are skipped after a failure.
+- **A failed `RecordLegObservation` or `AdvanceLegEmit`** is a WARN and processing continues: the emit is keyed, so a repeat after an unadvanced row is deduplicated by the ledger.
+- **Fixtures.** `trading_order_race_test.go` (`notCancelableSvc`) and `trading_rate_limit_test.go` (`newRateLimitHarness`) already set a `fakeBracketRepo`, so neither needed an edit and both are unchanged. The whole-package run found no other nil-`bracketRepo` `pollFills` fixture; the three in `trading_telemetry_test.go` were fixed.
+- **Reuse.** The new test file reuses `legRow` (`trading_bracket_legs_test.go`), `captureLogs`, `logsWithMsg` and `fakeLegKey`/`putLeg`; its ledger fake is inline (one consumer, C-13).
+- **Disposition**: these stay within the listed **Files** and the instructions' intent. No step body changed.

@@ -31,9 +31,12 @@ type fakeBroker struct {
 	cancelOrderFn       func(ctx context.Context, brokerOrderID string) error
 	getOrderFn          func(ctx context.Context, brokerOrderID string) (*broker.BrokerOrder, error)
 	replaceOrderFn      func(ctx context.Context, brokerOrderID string, req broker.OrderRequest) (*broker.BrokerOrder, error)
+	listOrdersFn        func(ctx context.Context) ([]broker.BrokerOrder, error)
 
 	mu               sync.Mutex
 	cancelOrderCalls []string
+	getOrderCalls    []string
+	listOrdersCalls  int
 }
 
 func (f *fakeBroker) SubmitOrder(ctx context.Context, req broker.OrderRequest) (*broker.BrokerOrder, error) {
@@ -61,6 +64,9 @@ func (f *fakeBroker) ReplaceOrder(ctx context.Context, brokerOrderID string, req
 }
 
 func (f *fakeBroker) GetOrder(ctx context.Context, brokerOrderID string) (*broker.BrokerOrder, error) {
+	f.mu.Lock()
+	f.getOrderCalls = append(f.getOrderCalls, brokerOrderID)
+	f.mu.Unlock()
 	if f.getOrderFn != nil {
 		return f.getOrderFn(ctx, brokerOrderID)
 	}
@@ -86,10 +92,21 @@ func (f *fakeBroker) SubmitBracketLegs(ctx context.Context, parentBrokerOrderID,
 	panic("fakeBroker.SubmitBracketLegs not implemented")
 }
 
-// ListOrders (feature 102) — not exercised by any of this file's bracket-state-machine
-// tests, so it panics like every other unused method on this fake.
+// ListOrders panics without listOrdersFn, so a test that reaches the leg observer's list by accident fails loudly.
 func (f *fakeBroker) ListOrders(ctx context.Context) ([]broker.BrokerOrder, error) {
+	f.mu.Lock()
+	f.listOrdersCalls++
+	f.mu.Unlock()
+	if f.listOrdersFn != nil {
+		return f.listOrdersFn(ctx)
+	}
 	panic("fakeBroker.ListOrders not implemented")
+}
+
+func (f *fakeBroker) calls() (lists int, gets []string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.listOrdersCalls, append([]string(nil), f.getOrderCalls...)
 }
 
 var _ broker.Broker = (*fakeBroker)(nil)

@@ -1875,6 +1875,165 @@ func (s *TradingService) pollFills(ctx context.Context) {
 		s.applyBrokerOrderStatus(ctx, order, entry, brokerOrder)
 	}
 	s.logTick(ctx, telemetry.LoopFillPoller, start, len(candidates), polled, failed)
+	s.pollBracketLegFills(ctx, brokerMap)
+}
+
+const (
+	// legGetOrderFallbackCap bounds GetOrder calls per account per tick for legs absent from a list.
+	legGetOrderFallbackCap = 5
+	// legNotFoundRetireTicks consecutive definitive not-founds retire a leg UNKNOWN.
+	legNotFoundRetireTicks = 3
+)
+
+// pollBracketLegFills emits the fills of tracked bracket legs. It must never touch s.orders,
+// trading.orders, applyBrokerOrderStatus or maybeSubmitBracket: a leg is not a trading order.
+func (s *TradingService) pollBracketLegFills(ctx context.Context, brokerMap map[string]brokerPoolEntry) {
+	legs, err := s.bracketRepo.ListTrackedLegs(ctx)
+	if err != nil {
+		slog.WarnContext(ctx, "bracket leg poll: list tracked legs failed", "error", err)
+		return
+	}
+	var accounts []string
+	byAccount := make(map[string][]*repository.BracketLegRecord)
+	for _, leg := range legs {
+		if _, seen := byAccount[leg.AccountID]; !seen {
+			accounts = append(accounts, leg.AccountID)
+		}
+		byAccount[leg.AccountID] = append(byAccount[leg.AccountID], leg)
+	}
+	emitBlocked := false
+	for _, accountID := range accounts {
+		entry, ok := brokerMap[accountID]
+		if !ok {
+			continue
+		}
+		s.pollAccountLegs(ctx, accountID, entry, byAccount[accountID], &emitBlocked)
+	}
+}
+
+func (s *TradingService) pollAccountLegs(ctx context.Context, accountID string, entry brokerPoolEntry, legs []*repository.BracketLegRecord, emitBlocked *bool) {
+	listCtx, cancelList := s.alpacaCallContext(ctx, entry)
+	listed, err := entry.client.ListOrders(listCtx)
+	cancelList()
+	if err != nil {
+		if errors.Is(err, broker.ErrInvalidCredentials) {
+			slog.WarnContext(ctx, "bracket leg poll: broker rejected credentials, skipping account", "account_id", accountID, "error", err)
+		} else {
+			slog.WarnContext(ctx, "bracket leg poll: broker ListOrders failed", "account_id", accountID, "error", err)
+		}
+		return
+	}
+	byID := make(map[string]*broker.BrokerOrder, len(listed))
+	for i := range listed {
+		byID[listed[i].BrokerOrderID] = &listed[i]
+	}
+	fallbacks := 0
+	for _, leg := range legs {
+		if o, ok := byID[leg.LegOrderID]; ok {
+			s.observeLeg(ctx, leg, o, emitBlocked)
+			continue
+		}
+		if fallbacks >= legGetOrderFallbackCap {
+			continue
+		}
+		fallbacks++
+		getCtx, cancelGet := s.alpacaCallContext(ctx, entry)
+		o, err := entry.client.GetOrder(getCtx, leg.LegOrderID)
+		cancelGet()
+		switch {
+		case errors.Is(err, broker.ErrOrderNotFound):
+			s.recordLegNotFound(ctx, leg)
+		case err != nil:
+			slog.WarnContext(ctx, "bracket leg poll: broker GetOrder failed", "account_id", accountID, "leg_order_id", leg.LegOrderID, "error", err)
+		default:
+			s.observeLeg(ctx, leg, o, emitBlocked)
+		}
+	}
+}
+
+func (s *TradingService) recordLegNotFound(ctx context.Context, leg *repository.BracketLegRecord) {
+	ticks := leg.NotFoundTicks + 1
+	if ticks < legNotFoundRetireTicks {
+		if err := s.bracketRepo.RecordLegObservation(ctx, leg.AccountID, leg.LegOrderID, leg.ObservedFilledQty, ticks); err != nil {
+			slog.WarnContext(ctx, "bracket leg poll: record leg observation failed", "account_id", leg.AccountID, "leg_order_id", leg.LegOrderID, "error", err)
+		}
+		return
+	}
+	slog.WarnContext(ctx, "bracket leg poll: leg retired UNKNOWN after repeated not-found",
+		"account_id", leg.AccountID, "leg_order_id", leg.LegOrderID, "order_id", leg.OrderID, "not_found_ticks", ticks)
+	if err := s.bracketRepo.AdvanceLegEmit(ctx, leg.AccountID, leg.LegOrderID, leg.FilledQty, repository.LegStatusUnknown); err != nil {
+		slog.WarnContext(ctx, "bracket leg poll: retire leg failed", "account_id", leg.AccountID, "leg_order_id", leg.LegOrderID, "error", err)
+	}
+}
+
+// legOrderStatus lower-cases first because IBKR passes its capitalised statuses through raw.
+func legOrderStatus(brokerStatus string) tradingv1.OrderStatus {
+	return alpacaStatusToProto(strings.ToLower(brokerStatus))
+}
+
+var legRetireStatus = map[tradingv1.OrderStatus]string{
+	tradingv1.OrderStatus_ORDER_STATUS_CANCELED: repository.LegStatusCanceled,
+	tradingv1.OrderStatus_ORDER_STATUS_EXPIRED:  repository.LegStatusExpired,
+	tradingv1.OrderStatus_ORDER_STATUS_REJECTED: repository.LegStatusRejected,
+}
+
+func (s *TradingService) observeLeg(ctx context.Context, leg *repository.BracketLegRecord, o *broker.BrokerOrder, emitBlocked *bool) {
+	if err := s.bracketRepo.RecordLegObservation(ctx, leg.AccountID, leg.LegOrderID, o.FilledQty, 0); err != nil {
+		slog.WarnContext(ctx, "bracket leg poll: record leg observation failed", "account_id", leg.AccountID, "leg_order_id", leg.LegOrderID, "error", err)
+	}
+	status := legOrderStatus(o.Status)
+	switch status {
+	case tradingv1.OrderStatus_ORDER_STATUS_PARTIALLY_FILLED:
+		if o.FilledQty > leg.FilledQty && s.emitLegFill(ctx, leg, o, "order.partially_filled", emitBlocked) {
+			s.advanceLeg(ctx, leg, o.FilledQty, repository.LegStatusOpen)
+		}
+	case tradingv1.OrderStatus_ORDER_STATUS_FILLED:
+		if s.emitLegFill(ctx, leg, o, "order.filled", emitBlocked) {
+			s.advanceLeg(ctx, leg, o.FilledQty, repository.LegStatusFilled)
+		}
+	case tradingv1.OrderStatus_ORDER_STATUS_CANCELED, tradingv1.OrderStatus_ORDER_STATUS_EXPIRED, tradingv1.OrderStatus_ORDER_STATUS_REJECTED:
+		cursor := leg.FilledQty
+		if o.FilledQty > cursor {
+			if !s.emitLegFill(ctx, leg, o, "order.partially_filled", emitBlocked) {
+				return
+			}
+			cursor = o.FilledQty
+		}
+		s.advanceLeg(ctx, leg, cursor, legRetireStatus[status])
+	}
+}
+
+func (s *TradingService) advanceLeg(ctx context.Context, leg *repository.BracketLegRecord, filledQty float64, status string) {
+	if err := s.bracketRepo.AdvanceLegEmit(ctx, leg.AccountID, leg.LegOrderID, filledQty, status); err != nil {
+		slog.WarnContext(ctx, "bracket leg poll: advance leg emit failed", "account_id", leg.AccountID, "leg_order_id", leg.LegOrderID, "error", err)
+	}
+}
+
+// emitLegFill appends synchronously under the leg's deterministic key; after one failure every later
+// leg emit in the tick is skipped. It reports whether the event was appended.
+func (s *TradingService) emitLegFill(ctx context.Context, leg *repository.BracketLegRecord, o *broker.BrokerOrder, eventType string, emitBlocked *bool) bool {
+	if *emitBlocked {
+		return false
+	}
+	payload := map[string]interface{}{
+		"order_id": leg.LegOrderID, "symbol": leg.Symbol, "fill_price": o.FilledAvgPrice,
+		"user_id": leg.UserID, "trading_mode": leg.TradingMode, "account_id": leg.AccountID,
+		"fees": o.Fees, "side": leg.Side.String(),
+	}
+	kind := strings.TrimPrefix(eventType, "order.")
+	if eventType == "order.filled" {
+		payload["qty"] = o.FilledQty
+	} else {
+		payload["filled_qty"] = o.FilledQty
+	}
+	key := fmt.Sprintf("bracket-leg:%s:%s:%s:%s", leg.AccountID, leg.LegOrderID, kind, strconv.FormatFloat(o.FilledQty, 'f', -1, 64))
+	if err := s.appendLedgerEvent(ctx, eventType, leg.LegOrderID, leg.UserID, key, payload); err != nil {
+		*emitBlocked = true
+		slog.WarnContext(ctx, "bracket leg poll: leg fill emit failed; skipping further leg emits this tick",
+			"account_id", leg.AccountID, "leg_order_id", leg.LegOrderID, "event_type", eventType, "error", err)
+		return false
+	}
+	return true
 }
 
 // logTick writes the loop's tick record unless every item that reached the fallible call failed.
