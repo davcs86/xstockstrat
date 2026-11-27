@@ -457,3 +457,16 @@ note, not a table row (statuses read 2026-11-26; none has merged):
   `emitEvent` next to 315's `emitRiskAlert`), different functions; rebase-only.
 
 Recorded as a prose note (315 debate.md D-11) so it does not gate either integration PR.
+
+## Integration-PR checklist: 311 position-fold cutover (2026-11-27, unenforced)
+
+`fix-position-fold-correctness` (311) has a stop-then-start cutover with no write fence
+(`docs/runbooks/position-fold-cutover.md`). Its integration PR body carries this checklist item, and no tool
+enforces it:
+
+- [ ] portfolio stopped on every enabled staging target, `T_stop` recorded, `main-dev` frozen
+
+Every enabled staging target means DO `xstockstrat-staging` and, while `HOMELAB_STAGING_ENABLED` is `true`, the
+homelab staging VM. A `main-dev` push that deploys while portfolio is stopped breaks the cutover: an old and a new
+portfolio can then overlap and apply a fill twice. Only the per-database result the runbook records (§2) shows
+this. Peer features need not wait. They must not merge to `main-dev` between `T_stop` and 311's green Deploy run.

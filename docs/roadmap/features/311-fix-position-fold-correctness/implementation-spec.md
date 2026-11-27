@@ -1338,7 +1338,7 @@ New logic is in an excluded package — no coverage threshold applies to it.
 
 ### Step 28 — docs: cutover runbook
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/runbooks/`
 **Files**:
 - `docs/runbooks/position-fold-cutover.md` — create
