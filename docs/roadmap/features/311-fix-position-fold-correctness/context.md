@@ -3502,3 +3502,100 @@ Tooling (step 29): none needed (docs step; the Verification block is `grep` and 
 - Deviations: none.
 - Open: the contract doc's "redelivered-post-close `existing == nil` edge" sentence was left as is (out of this step's instruction); under the signed fold a fill with no row opens a position, so that edge may no longer occur. The O-61 runbook confirmations, the integration PR's first `trading-db-test` run and the unenforced cutover checklist remain for integration.
 - Context read: the execution sessions (2026-11-20 sdd-design approval onward) and the operator-ruling sessions were read in full; the design-round JSON blocks (lines 34-2874) were searched for the flip and O-30 text, not read line by line.
+
+## Session 2026-11-27 — sdd-batch-execute promotion plan (awaiting operator confirm)
+
+```sdd-batch-promotion-plan
+## Promotion plan — fix-position-fold-correctness (feature 311)
+
+Source: /home/user/xstockstrat/docs/roadmap/features/311-fix-position-fold-correctness/acceptance.feature. I read the working-tree copy, which already carries the signed-off @AC-5 amendment (qty 10, D-38). I did not read it from origin/feature/fix-position-fold-correctness; I could not check that the branch copy matches.
+
+### Verdicts
+| @AC | target suite (path) | CREATE/APPEND | verdict | note |
+|---|---|---|---|---|
+| @AC-1 | services/xstockstrat-portfolio/acceptance/fix-position-fold-correctness.feature | CREATE | NEW | Subject is the portfolio position row after a restart of the order.filled consumer. |
+| @AC-2 | services/xstockstrat-portfolio/acceptance/fix-position-fold-correctness.feature | CREATE | NEW | Subject is the portfolio row qty with two portfolio processes. |
+| @AC-3 | services/xstockstrat-portfolio/acceptance/fix-position-fold-correctness.feature | CREATE | NEW | The live fold closes the row and emits portfolio.position.closed. This is distinct from the feature-251 GetPnL query-time folds in fix-getpnl-source-service.feature. |
+| @AC-4 | docs/sdd/business-rules/platform.feature | APPEND | NEW | Cross-service contract: trading emits a ledger fill event for a bracket leg, then portfolio GetPnL realizes it. See Notes. |
+| @AC-5 | docs/sdd/business-rules/platform.feature | APPEND | NEW | Same contract as @AC-4, and also asserts the position qty is 0. It is complementary to 251 @AC-17, not a duplicate; see Notes. |
+
+### Ready-to-write blocks
+
+--- /home/user/xstockstrat/services/xstockstrat-portfolio/acceptance/fix-position-fold-correctness.feature (CREATE) ---
+# Promoted from docs/roadmap/features/311-fix-position-fold-correctness/acceptance.feature at launch
+# (Constitution C-16). Source-feature provenance is carried on every scenario's `@feature-311` tag.
+# Durable business rules xstockstrat-portfolio already guarantees — a rule enters only by promotion
+# from a reviewed feature acceptance.feature, never by hand-authoring. These cover the live position
+# fold applying each order.filled fill exactly once and with the correct sign.
+
+Feature: xstockstrat-portfolio — the live position fold applies each fill exactly once, with the correct sign
+  Regression guard for clustered defect reports: the portfolio live position fold applies each fill
+  exactly once, with the correct sign, including bracket-leg exits.
+
+  # guards: docs/reports/2026-10-06-portfolio-fill-fold-not-exactly-once-defect.md
+  @AC-1 @regression @feature-311
+  Scenario: A portfolio restart does not re-apply already-folded fills
+    Given a broker-account position for "AAPL" with qty 10, cost_basis 1000 and realized_accum 250
+    And no account.positions.synced event arrives
+    When xstockstrat-portfolio restarts and its order.filled consumer resumes
+    Then the "AAPL" row still has qty 10, cost_basis 1000 and realized_accum 250
+
+  # guards: docs/reports/2026-10-06-portfolio-fill-fold-not-exactly-once-defect.md
+  @AC-2 @regression @feature-311
+  Scenario: Two concurrently running portfolio processes apply one fill once
+    Given two xstockstrat-portfolio processes consume the same ledger against the same database
+    And a broker-account position for "AAPL" with qty 10
+    When one order.filled event for a buy of 5 "AAPL" is appended
+    Then the "AAPL" row has qty 15
+
+  # guards: docs/reports/2026-10-21-portfolio-live-fold-sell-sign-loss-defect.md
+  @AC-3 @regression @feature-311
+  Scenario: A sell fill closes the position and seals realized P&L
+    Given a broker account that bought 10 "AAPL" at 100 via order.filled
+    When an order.filled event for a sell of 10 "AAPL" at 150 is folded before any positions sync
+    Then the "AAPL" position row is closed
+    And portfolio.position.closed is emitted with realized_pnl 500
+
+--- /home/user/xstockstrat/docs/sdd/business-rules/platform.feature (APPEND) ---
+  # Promoted from feature 311 (fix-position-fold-correctness). Cross-service: trading emits the bracket-leg fill
+  # to the ledger and portfolio folds it into positions and GetPnL realized.
+  # guards: docs/reports/2026-10-21-trading-bracket-leg-fills-missing-from-realized-pnl-defect.md
+  @AC-4 @regression @feature-311
+  Scenario: A bracket take-profit leg fill reaches the ledger and realized P&L
+    Given trading.risk.bracket_orders_enabled is true
+    And an auto-sized market buy of 10 "AAPL" at 100 with a stop price filled and recorded its legs in trading.order_brackets
+    When the take-profit leg fills at the broker for 10 "AAPL" at 110
+    Then the ledger holds a fill event for that leg with symbol "AAPL", side sell, qty 10, price 110, and the order's account, trading mode and user
+    And GetPnL realized for the round trip is 100
+
+  # guards: docs/reports/2026-10-21-trading-bracket-leg-fills-missing-from-realized-pnl-defect.md
+  # amended 2026-11-20 (C-15, ID kept; C-16 CHANGE signed off by the operator, design.md D-38): the full-fill
+  # event carries the leg total (qty 10) at the cumulative average price, not the remaining 6, so it agrees
+  # with feature 251 @AC-17 (an order.filled qty is the order total). "qty 4" is the partial's cumulative filled_qty.
+  @AC-5 @regression @feature-311
+  Scenario: A bracket leg that fills in two parts reaches the ledger as a partial then a full fill
+    Given trading.risk.bracket_orders_enabled is true
+    And an auto-sized market buy of 10 "AAPL" at 100 with a stop price filled and recorded its legs in trading.order_brackets
+    When the take-profit leg reports ORDER_STATUS_PARTIALLY_FILLED for 4 "AAPL" at 110, then ORDER_STATUS_FILLED for the remaining 6 at 110
+    Then the ledger holds an order.partially_filled event with qty 4 and an order.filled event with qty 10 at average fill price 110 for that leg
+    And the "AAPL" position quantity is 0
+    And GetPnL realized for the round trip is 100
+
+### Notes / ambiguities / conflicts
+- **No @FR tags in the source.** The source acceptance.feature carries only @AC-n and @regression, and product-spec.md has no FR-n identifiers. I did not invent @FR tags, because the promoter must not add them. The business-rules/CLAUDE.md convention asks for at least one @FR per scenario. The orchestrator should accept the missing @FR tags or ask for a human ruling. The tag order @AC-n @regression @feature-311 follows 251's pattern.
+- **Attribution call for @AC-4 and @AC-5 (platform vs trading).** Their Then clauses assert across two services:
+  - A trading-owned ledger emit: fill events for bracket legs, plus the partial and then full events.
+  - Portfolio-owned outputs: GetPnL realized and the position qty.
+  - No single service owns the end-to-end guarantee, so I routed both to platform.feature (cross-service contract).
+  - The alternative is services/xstockstrat-trading/acceptance/fix-position-fold-correctness.feature, since the defect is trading's missing emit. Choose that only if the humans want the rule kept service-local.
+- **@AC-5 vs 251 @AC-17** (/home/user/xstockstrat/services/xstockstrat-portfolio/acceptance/fix-getpnl-source-service.feature:103). That scenario folds a partial then a full order.filled of qty 10 into realized P&L. It is not an OVERLAP, because the subject here is the trading emit for a bracket leg plus the live position qty. The amended qty 10 makes the two agree. design.md also says 311 EXTENDs 251 @AC-17, with a two-account dedup-key test in that suite. That EXTEND is test-only and is not part of this promotion, since a rule enters only from this feature's own acceptance.feature.
+- **Other EXTEND and PRESERVE items in design.md.** These cover 206 @AC-1, 294 @AC-56 and 251 @AC-10 in other suites. They are not scenarios of this feature, so they are out of scope here and I changed nothing.
+- **No CONFLICT.**
+  - No existing suite contains @feature-311.
+  - The portfolio suite has no scenario for a restart not re-applying fills, for concurrent processes, or for a live-fold sell closing the position.
+  - Trading and platform have no bracket-leg ledger-fill scenario. Grep hits for "bracket" in trading's alpaca-adaptive-rate-limit and signal-map-instrumentation concern cancels, the watchdog and metrics, not leg fills.
+- **Creation and idempotency.** The portfolio suite file does not exist yet and must be CREATEd. The acceptance/ directory exists already. Re-running is idempotent: the @AC-n plus @feature-311 pair will then be DUP.
+
+### Coverage check
+- Source scenarios: 5 (@AC-1..@AC-5). Planned (NEW+DUP+OVERLAP): 5 (5 NEW, 0 DUP, 0 OVERLAP, 0 CONFLICT). Nothing skipped. Counts match.
+```
