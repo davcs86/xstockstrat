@@ -755,3 +755,15 @@ Effect: use the defaults recorded in this file and in the implementation spec fo
 - `tsc` in the linked env: 2 errors `TS2339 'INCOMPLETE'`, present before and after the edit, from the stale main-checkout proto stubs. CI-equivalent `tsc` against this branch's stubs (`.sdd-logs/v-3.log`): `exit=0`. The config-key wiring gate does not apply (no config key).
 - Files modified: `services/xstockstrat-ui/src/app/config-ui/hooks/useSignalSourceMutations.ts`
 - Deviations: CI-equivalent `tsc` fallback (see Deviation Log)
+
+### Operator rulings on the Step 8 blockers (2026-11-27, relayed by the orchestrator, verbatim)
+
+"Operator rulings 2026-11-27, both recorded verbatim in context.md. (1) Option A of the first Step 8 blocker: scope the text assertion to the inline form error with page.getByRole('main').getByText('signal source dup-src already exists'), a locator deviation in the Deviation Log. (2) Option A of the second Step 8 blocker (cold secret-first BFF route compile ~24 s exceeds the 5000 ms expect timeout): give that assertion an explicit timeout, toBeVisible({ timeout: 30000 }), the same pattern as openPage's 15000 ms; log it as a second timeout deviation. Accept as the CI-equivalent green the real-browser host run with --no-deps --timeout=240000 of the @feature-328 grep and the whole file (the 2 pre-existing cold-start list failures are identical on the pre-edit tree), plus lint and the import grep; CI's frontend-e2e job on the integration PR is the full gate. Re-run until the standalone @feature-328 run is green, then commit."
+
+### Step 8 — test: Playwright pin for a failed config-ui register (AC-3) [done]
+- Added `@feature-328 @AC-3 a failed mcp_client register shows the error and writes exactly one secret` to the feature-224 block. It fulfills `ManageSignalSource` with 409 `already_exists`, then asserts four things: the inline error text is shown, the `Bearer token` input stays (count 1), there is exactly one `/SetConfig` request, and the body has no `TOKEN`.
+- TDD: red N/A. This step changes no behavior and adds a characterization test, which is green on the pre-fix tree by design (O-19). The Then-clause RED for AC-3 is Step 2 block 1.
+- Green: `.sdd-logs/v-1.log`, `exit=0`. The test passed alone (`✓ 1 … @feature-328 @AC-3 … (33.7s)`, `1 passed (43.6s)`). On the whole file: `21 passed (1.1m)` and `2 failed`. The two failures are the cold-start list tests at `:53` and `:64` (a 5000 ms cell wait), which the operator ruling records as pre-existing. Lint shows warnings only, none in this file. The C-12 grep finds both imports (`2:` `helpers/auth`, `9:` `'../fixtures'`). The config-key wiring gate does not apply, because no config key is involved.
+- `pnpm-lock.yaml` differs from `origin/main-dev` (rc=1). The cause is `main-dev`'s `eb3839d9`, which removed lockfile entries; this branch made no lockfile change (`git diff --quiet origin/main-dev...HEAD -- pnpm-lock.yaml` → rc=0). It will resolve at the next `main-dev` merge.
+- Files modified: `services/xstockstrat-ui/e2e/insights/signal-sources.spec.ts`
+- Deviations: locator scope, assertion timeout and host-run flags (operator-directed; see Deviation Log)

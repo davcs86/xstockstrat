@@ -818,7 +818,7 @@ git diff --stat -- src/app/config-ui/hooks/useSignalSourceMutations.ts          
 
 ### Step 8 — test: Playwright pin for a failed config-ui register (AC-3)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/insights/signal-sources.spec.ts` — modify
@@ -963,3 +963,11 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Planned**: `pnpm exec tsc --noEmit` in `services/xstockstrat-ui` (step Verification).
 - **Actual**: the linked `node_modules/@xstockstrat/proto` resolves to the main checkout's `packages/proto/gen/ts`, which predates `04d66e66`. So `tsc` reports two `TS2339 'INCOMPLETE'` errors (`e2e/fixtures/backfillJobs.ts:39`, `src/lib/backtestBackfill.ts:95`), the same before and after the edit; the block still exits 0 because `git diff` runs last. `tsc --noEmit` re-run with a scratch tsconfig (extends the UI tsconfig; maps `@xstockstrat/proto/*` to this worktree's `packages/proto/gen/ts/dist/*`) exits 0. Lint is clean (warnings only, none in the edited file).
 - **Disposition**: CI-equivalent fallback (CI type-checks against the branch's own stubs).
+
+### Step 8 — locator scope, assertion timeout and host-run flags (2026-11-27)
+- **Planned**: `await expect(page.getByText('signal source dup-src already exists')).toBeVisible();`, verified with the two `playwright test` lines of the step Verification as written.
+- **Actual**:
+  1. Locator deviation. The text assertion is scoped to the inline form error: `page.getByRole('main').getByText('signal source dup-src already exists')`.
+  2. Timeout deviation. The assertion uses `toBeVisible({ timeout: 30000 })`, because the cold compile of the secret-first SetConfig BFF route (~24 s) exceeds the 5000 ms local expect timeout. This follows the same pattern as `openPage`'s 15000 ms.
+  3. Both Playwright lines ran on the host with `--no-deps --timeout=240000 --reporter=list` added. Results: the `@feature-328` grep gave `1 passed`. The whole file gave `21 passed` and `2 failed`. The two failures are the cold-start `Own signal sources — list` tests (`:53`, `:64`, a 5000 ms cell wait), which the operator recorded as identical on the pre-edit tree.
+- **Disposition**: operator-directed (rulings 2026-11-27, Option A of both Step 8 blockers). CI's `frontend-e2e` job on the integration PR is the full gate.
