@@ -717,3 +717,13 @@ Tooling setup (step 8): docs step, none needed · no Node install. Config-key wi
 - A re-grep of `diverges by design|wire 0.0` across the analysis `acceptance/`, `docs/` and `CLAUDE.md` finds nothing (Step 4 already trimmed the `fundamentals-formula-inputs.feature` comment).
 - Files modified: `services/xstockstrat-analysis/docs/fundsignal.md`, `services/xstockstrat-analysis/docs/fundamentals-guard.md`, `services/xstockstrat-analysis/CLAUDE.md`
 - Deviations: none
+
+## Session 2026-11-27 — sdd-execute sequential (step 9)
+
+Tooling setup (step 9): uv ✓ 0.11.32 · `uv sync --extra dev` ⬇ (worktree `.venv`) · ruff ✓ 0.16.9 · no Node install. Config-key wiring gate: not applicable (no key, no config migration).
+
+### Step 9 — service: conviction presence on ingest write, read-back and the mcp_client builder [done]
+- `_ingest_external_signal` now stores `signal.conviction if (signal.conviction_provided or signal.conviction != 0.0) else None` (range check kept; comment says an explicit 0.0 is stored as 0 and an omitted conviction as NULL). The dedup upsert is untouched (R-8). The `QuerySignals` builder sets `conviction` and `conviction_provided=True` only for a non-NULL row and leaves both unset for NULL (D-8). `_build_external_signal` sets `conviction_provided=True` unconditionally.
+- TDD: RED via an uncommitted scratch probe `.sdd-logs/v-2.log` `exit=1` — `3 failed, 2 passed` (explicit 0.0 stored `(None, None)`; QuerySignals gave `(False, …)` for every row; mcp builder `conviction_provided` `False`). The Verification block before the change, `.sdd-logs/v-1.log` `exit=0`: `210 passed`, the grep printed nothing. GREEN `.sdd-logs/v-3.log` `exit=0` — `210 passed`, grep hits `servicer.py:1387`, `:1641`, `mcp_client_loop.py:95`, ruff `All checks passed!`, `58 files already formatted`; probe `.sdd-logs/v-4.log` `exit=0` `5 passed`. The block has no coverage command; Step 10 runs the coverage gate.
+- Files modified: `services/xstockstrat-ingest/app/handlers/servicer.py`, `services/xstockstrat-ingest/app/engine/mcp_client_loop.py`
+- Deviations: RED shown by a scratch probe, not a committed test (Deviation Log).

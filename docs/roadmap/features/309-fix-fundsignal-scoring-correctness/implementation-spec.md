@@ -420,7 +420,7 @@ grep -n "0.5 neutral" services/xstockstrat-analysis/CLAUDE.md
 
 ### Step 9 — service: conviction presence on ingest write, read-back and the mcp_client builder
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/app/handlers/servicer.py` — modify
@@ -829,3 +829,8 @@ _Populated by /sdd-execute as implementation proceeds._
 **Spec said**: `./scripts/buf-gen.sh && …` run on the host.
 **Actual**: The Verification block ran verbatim inside the pinned `xstockstrat-codegen` image (buf 1.72.0, Go plugins and grpcio-tools 1.80.0 pinned to CI `proto-freshness`), with the main checkout mounted read-only and its `packages/proto/gen/ts/node_modules` bind-mounted read-only so `tsc` could compile `gen/ts/dist`. The block ran twice: once before staging (line 3 printed `second run clean: 1`, as expected unstaged), then again after staging the regenerated stubs (`second run clean: 0`).
 **Reason**: buf and grpcio-tools are not on the host, and the worktree has no `packages/proto/gen/ts/node_modules`. Line 3 says "after staging", so a single pre-staging run cannot satisfy it. **Disposition**: CI-equivalent fallback.
+
+### Deviation: Step 9 — service: conviction presence on ingest write, read-back and the mcp_client builder
+**Spec said**: `**TDD**: red-green required`, with the Verification block (the existing `test_ingest_servicer.py` / `test_mcp_client_loop.py` suites, a grep and ruff) as the run; Step 10 owns the new tests and is not a unit with Step 9.
+**Actual**: The block passes before and after the change (210 passed both times; only its grep line changes, from no output to three hits). RED → GREEN was shown with an uncommitted scratch probe (`.sdd-logs/probe_step9.py`, five cases mirroring Step 10 tests 1, 2, 4 and 5): 3 failed / 2 passed before the change, 5 passed after. The probe is not staged; Step 10 commits the real tests.
+**Reason**: No existing ingest test changes result under Step 9 (Step Dependencies), and Step 10's test files are outside Step 9's **Files** (F-08). **Disposition**: in-scope TDD evidence, no scope change.
