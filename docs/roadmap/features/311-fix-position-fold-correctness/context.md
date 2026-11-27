@@ -3143,3 +3143,11 @@ Tooling (steps 7+8): go1.27.0 ✓ · golangci-lint ✓ v2.14.0 (built with go1.2
 - TDD: the RED/GREEN results above.
 - Files modified: `services/xstockstrat-portfolio/internal/service/portfolio_fill_floor_test.go`, `services/xstockstrat-portfolio/internal/testdata/ledger.go`
 - Deviations: the same Deviation Log entry (Steps 7+8).
+
+## Session 2026-11-27 — operator ruling recorded by the orchestrator (verbatim)
+
+Question (blocker on Steps 9+10): "Steps 9+10 cannot pass `go test ./internal/... -race`: `portfolio_fill_floor_test.go` (created by Step 8, not in Step 9's or Step 10's Files) has `TestFillFloor_SameMillisecondFolds` whose line 45 expects the old `GetPosition` read (`FROM portfolio.positions`) as the first DB call, but after Step 9 the first DB call past the floor check is the `FillApplied` pre-check, so the ordered pgxmock rejects it. Re-spec first, or another route?"
+
+Operator's answer (option selected): "B: re-spec first".
+
+Effect: `implementation-spec.md` re-specced minimally: Step 10 **Files** gains `portfolio_fill_floor_test.go`, a new Instruction 8 re-points that one expectation to ``FROM portfolio\.consumer_applied_events`` (intent unchanged: a fill at the floor reaches the DB path and is not acked), Codebase Evidence cites the verified lines, and a one-line Deviation Log entry records it. Steps 9 and 10 stay `pending`; no other step changed.

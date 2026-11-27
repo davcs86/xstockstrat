@@ -497,6 +497,7 @@ cd services/xstockstrat-portfolio && GOWORK=off golangci-lint run --modules-down
 - `services/xstockstrat-portfolio/internal/service/portfolio_telemetry_test.go` — modify
 - `services/xstockstrat-portfolio/internal/service/portfolio_offline_test.go` — modify
 - `services/xstockstrat-portfolio/internal/service/position_drain_dbtest_test.go` — modify
+- `services/xstockstrat-portfolio/internal/service/portfolio_fill_floor_test.go` — modify
 - `services/xstockstrat-portfolio/internal/repository/portfolio_repo_test.go` — modify
 
 **Reviewers**: xstockstrat-portfolio owner — P&L calculation accuracy, concurrent write safety
@@ -507,6 +508,7 @@ cd services/xstockstrat-portfolio && GOWORK=off golangci-lint run --modules-down
 - `portfolio_helpers_test.go:22-36` `computeNewPosition` is a test-local copy of the buggy add (`recon.md:83`); its tests are at `:42-99`.
 - `portfolio_telemetry_test.go:509-524` `runOrderFillBatch` drives the fill handler over `syncRecorderDB` (`portfolio_offline_test.go:220-236`), which has no `Begin`; `:491-499` the 4-event batch.
 - `portfolio_repo_test.go:97-137` tests `GetFeesAccum`. `position_drain_dbtest_test.go:67` seeds with `repo.UpsertPosition`.
+- Re-spec 2026-11-27 (operator ruling B), from `grep -n 'TestFillFloor_SameMillisecondFolds\|ExpectQuery' portfolio_fill_floor_test.go`: `:42` `TestFillFloor_SameMillisecondFolds`; `:45` `mock.ExpectQuery("FROM portfolio.positions").WithArgs(anyArgs(4)...).WillReturnError(errDBBlip)` expects the old `GetPosition` read as the first DB call. After Step 9 the first DB call past the floor check is `s.repo.FillApplied` (`repository/fill_apply_repo.go:81`), whose SQL (`:84-85`) is `SELECT event_id, outcome, pending_closed::text FROM portfolio.consumer_applied_events WHERE consumer=$1 AND user_id=$2 AND account_id=$3 AND order_id=$4` (`appliedKeyWhere`, `:33`; four args from `FillKey.args()`, `:31`), so the ordered pgxmock rejects `:45` and the package run cannot pass.
 
 **Lands with**: `Step 9`
 
@@ -534,6 +536,7 @@ cd services/xstockstrat-portfolio && GOWORK=off golangci-lint run --modules-down
 5. `portfolio_telemetry_test.go`: make `runOrderFillBatch` use a DB that supports `Begin` (pgxmock, or `syncRecorderDB` given a `Begin`). `TestOrderFillConsumer_AC56_OneTickRecordPerBatch` must still count 4 `ok` and one tick record.
 6. `portfolio_repo_test.go`: delete the `GetFeesAccum` tests. `position_drain_dbtest_test.go:67`: seed with a direct `INSERT`, as `seedPosition` does in `internal/repository/dbtest_helpers_test.go:67-75`.
 7. Fails-ledger rule (2026-11-16, feature 347): before finishing, run the whole package and list any other test that built a fill service with a nil dependency or a `recover()`; none was found by grep in this package, but the run is the proof.
+8. `portfolio_fill_floor_test.go` (created by Step 8): in `TestFillFloor_SameMillisecondFolds` (`:42-54`) change only the `:45` expectation to ``mock.ExpectQuery(`FROM portfolio\.consumer_applied_events`).WithArgs(anyArgs(4)...).WillReturnError(errDBBlip)``. The test's intent is unchanged: a fill stamped exactly at the floor reaches the DB path (now the `FillApplied` pre-check) and is not acked. Change nothing else in the file.
 
 **Verification**:
 ```bash
@@ -1458,3 +1461,6 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Spec said**: Step 7 and Step 8 each give a three-line block whose lines each start `cd services/xstockstrat-portfolio && …` or name a repo-root-relative path.
 - **Actual**: the same pattern as Steps 3-6. Inside the one subshell the first line's `cd` persists, so every later line fails with `cd: services/xstockstrat-portfolio: No such file or directory` (Step 8's `grep` prints `No such file or directory`). Run verbatim, Step 7's block ran only `go build` and `go vet -tags dbtest`, and Step 8's block ran only the filtered `go test -race`. Both exited 1 for this reason alone. Step 8's last line ends in a `#` comment, so the wrapper's closing `)` was put on its own line to keep it out of the comment.
 - **Disposition**: each block was run verbatim once, then every line that had not run was run unchanged, alone, from the repo root, with its own log. All passed: the whole-package `-race` run printed `ok`, `golangci-lint` v2.14.0 (the line both blocks share) printed `0 issues.`, and the `RecordedAt` grep printed nothing (`exit=1`, no match: no inline builder outside `testdata`). The step bodies were not changed (F-09).
+
+### Step 10 — re-spec: add `portfolio_fill_floor_test.go` (2026-11-27, operator ruling B)
+- Step 10 now lists `portfolio_fill_floor_test.go` and Instruction 8 re-points the `TestFillFloor_SameMillisecondFolds` expectation (`:45`) from the `GetPosition` read to the `FillApplied` pre-check; Steps 9 and 10 stay `pending` and no other step changed.
