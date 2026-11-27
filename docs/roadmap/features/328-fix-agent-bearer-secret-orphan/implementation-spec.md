@@ -251,14 +251,14 @@ ciphertext read
   INSERT, never UPDATE (D-10, R-11); `config_value_audit_insert` AFTER INSERT (`010:27-28`) writes
   one audit row per seed (O-18). No DELETE trigger exists (`grep -n "CREATE TRIGGER" migrations/*.up.sql`
   → only those two).
-- SetConfig's secret row shape: `services/xstockstrat-config/src/grpc/configServiceImpl.ts:825`
-  (`valueData = REDACTED`, `REDACTED = '[redacted]'` at `:33`) and the insert column list at
-  `:833-834` (`namespace, key, value_type, value_data, value_encrypted, is_secret, updated_by,
+- SetConfig's secret row shape: `services/xstockstrat-config/src/grpc/configServiceImpl.ts:832`
+  (`valueData = REDACTED`, `REDACTED = '[redacted]'` at `:34`) and the insert column list at
+  `:840-841` (`namespace, key, value_type, value_data, value_encrypted, is_secret, updated_by,
   update_reason, environment, user_id, caller_identity`).
 - `ingest.signal_sources`: `credentials_ref TEXT` nullable (`002:12`), `user_id TEXT NOT NULL` and PK
   `(user_id, slug)` (`013:24-32`), `mcp_client` allowed in the `source_type` CHECK (`011:9-10`).
 - CI filters: `.github/workflows/ci.yml:60` (`xstockstrat-config: ['services/xstockstrat-config/**']`),
-  `:88-97` (`migrations:` list, entries indented 14 spaces as `- '<glob>'`), job trigger `:898-903`.
+  `:88-98` (`migrations:` list, entries indented 14 spaces as `- '<glob>'`), job trigger `:898-903`.
 - **Executed at spec time (2026-11-20)** on PostgreSQL 16.15 against a stand-in schema (the three
   tables, the two audit triggers, both CHECKs and the unique index above): the file below exits 0;
   the sweep prints `deleted 4, notified 2`, the replay `0, 0`; nine single-conjunct mutations of the
@@ -389,7 +389,7 @@ ROLLBACK;
      `xstockstrat-config:     ['services/xstockstrat-config/**', 'scripts/config-heal/mcp-credential-orphan-sweep*.sql']`
      (keep the existing column alignment);
    - append `              - 'scripts/config-heal/mcp-credential-orphan-sweep*.sql'` to the
-     `migrations:` list (`:88-97`), after `- 'scripts/migration-assertions/**'`.
+     `migrations:` list (`:88-98`), after `- 'scripts/migration-assertions/**'`.
 
 C-13: the seed literals have one consumer (this file) — inline is compliant.
 
@@ -443,10 +443,10 @@ cross-schema read, run-order; Security — no ciphertext read, no widened secret
 - Ref semantics: `split_credentials_ref` splits on the first dot —
   `services/xstockstrat-ingest/app/config/watcher.py:21-26`; the consumer discards the namespace
   half — `app/engine/mcp_client_loop.py:140` (`_namespace, key = split_credentials_ref(credentials_ref)`).
-- Literal-prefix grant: `services/xstockstrat-config/src/grpc/authz.ts:146`
-  (`keyPrefixes: ['mcp_credential.']`), matched with `key.startsWith(prefix)` at `:190`.
+- Literal-prefix grant: `services/xstockstrat-config/src/grpc/authz.ts:153`
+  (`keyPrefixes: ['mcp_credential.']`), matched with `key.startsWith(prefix)` at `:199`.
 - Notify contract CONFIG-4: `services/xstockstrat-config/docs/context-constitution.md:17`; the
-  service's own producer is at `src/grpc/configServiceImpl.ts:846`.
+  service's own producer is at `src/grpc/configServiceImpl.ts:853`.
 - Migration order: `scripts/db-migrate.sh:152` (config) runs before `:173` (ingest) — why this is a
   script and not a config migration (D-1, R-1).
 - `scripts/config-heal/` holds no `mcp-credential*` file (`ls scripts/config-heal/`): **Not found** —
@@ -709,7 +709,7 @@ grep -n "orphan sweep" app/tools.py CLAUDE.md docs/context-constitution-findings
 **Reviewers**: `xstockstrat-agent` owner — MCP tool contract stability and `mcp-tools.md` parity
 
 **Codebase Evidence**:
-- Seam to extend: `tests/test_tools.py:149-197`
+- Seam to extend: `tests/test_tools.py:150-197`
   (`test_manage_signal_source_mcp_client_secret_first_two_write`): `AsyncMock` on
   `client.set_config` and `client.manage_signal_source` via `patch.object` (`:165-168`), the tool
   reached with `_tool_fn(server, "manage_signal_source")(_ctx(ADMIN), …)` (`:169-178`), and the ref
@@ -723,7 +723,7 @@ grep -n "orphan sweep" app/tools.py CLAUDE.md docs/context-constitution-findings
 - `instantiate_template` tool body calls `client.instantiate_template(kind, template_id,
   strategy_id=…, slug=…, credentials_ref=…)` (`app/tools.py:1498-1504`; client function at
   `app/client.py:1510`).
-- Parity precedent: `tests/test_template_tools.py:262-269` (`_catalog()` from
+- Parity precedent: `tests/test_template_tools.py:261-268` (`_catalog()` from
   `tests.test_tools_endpoint` — defined at `tests/test_tools_endpoint.py:78` — plus a section split
   of `docs/runbooks/mcp-tools.md`).
 - C-13: the Python fixture home `tests/conftest.py` exists; `_rpc_error`, `ADMIN`, `_ctx` come from
@@ -761,7 +761,7 @@ Add three tests after `test_manage_signal_source_mcp_client_secret_first_two_wri
    `instantiate_mock.await_args.kwargs["credentials_ref"] == f"ingest.{key}"`.
 3. `test_bearer_docs_name_the_orphan_sweep` (sync). `_catalog()["manage_signal_source"]["description"]`
    contains `orphan sweep`; the `### \`manage_signal_source\`` section of
-   `docs/runbooks/mcp-tools.md` (split as at `test_template_tools.py:266-268`) contains `orphan sweep`
+   `docs/runbooks/mcp-tools.md` (split as at `test_template_tools.py:266`) contains `orphan sweep`
    and `config-rollout.md`.
 
 Name the scenario in each pin's docstring (`@AC-1` / `@AC-2`, feature 328). Before accepting green,
@@ -891,13 +891,13 @@ No coverage threshold applies to the UI e2e suite; `INVENTORY.md` is unchanged (
 
 **Codebase Evidence**:
 - `docs/patterns/config-governance.md`: author-sentinel table header `:138`, rows `:140-144` (last
-  row `system:config-migration-feature-330`); feature-224 paragraph `:440-447` ("written secret-first
-  by the owner via `SetConfig(is_secret=true, create_key=true, user_id=<owner>)`"); feature-166
-  paragraph `:650-654`.
+  row `system:config-migration-feature-330`); feature-224 block `:461-467` (heading `:461`; "written
+  secret-first by the owner via `SetConfig(is_secret=true, create_key=true, user_id=<owner>)`" at
+  `:466-467`); feature-166 dynamic-secret-family sentence `:672-676` (section heading `:663`).
 - `docs/patterns/inter-service-mtls.md:58` ("config `GetSecret` ← `xstockstrat-ingest`, for the
   `ingest` caller's `mcp_credential.*` keys").
-- `services/xstockstrat-ingest/CLAUDE.md:167-175` (the "`mcp_client` bearer secret" note; "written
-  secret-first as the caller's own row" at `:170-171`).
+- `services/xstockstrat-ingest/CLAUDE.md:178-186` (the "`mcp_client` bearer secret" note; "written
+  secret-first as the caller's own row" at `:181`).
 - `docs/roadmap/ledger/insights.md:2836-2843` (2026-09-02 — 166-mcp-client-signal-source — design:
   "skip the compensating saga because a failed register leaves only a harmless *redacted* orphan
   secret").
@@ -922,13 +922,13 @@ No coverage threshold applies to the UI e2e suite; `INVENTORY.md` is unchanged (
 1. `config-governance.md` author-sentinel table: add a row after `:144` —
    `| \`system:config-heal-mcp-credential-sweep\` | operator SQL (\`scripts/config-heal/mcp-credential-orphan-sweep.sql\`) | Not a SetConfig write: the operator orphan sweep's \`config_audit.changed_by\` for each deleted per-user \`ingest\` / \`mcp_credential.*\` secret (\`new_value\` NULL, \`old_value\` the \`[redacted]\` sentinel, \`caller_identity\` NULL); feature 328 |`
    (O-20, C-10(c)).
-2. `config-governance.md:440-447` (feature 224): append one sentence — a secret left unreferenced by
+2. `config-governance.md:461-467` (feature 224): append one sentence — a secret left unreferenced by
    a failed register is reclaimed by the operator orphan sweep (runbook `docs/runbooks/config-rollout.md`).
-3. `config-governance.md:650-654` (feature 166): append "+ reclaimed by the orphan sweep (runbook)"
+3. `config-governance.md:672-676` (feature 166): append "+ reclaimed by the orphan sweep (runbook)"
    to the dynamic-secret-family sentence.
 4. `inter-service-mtls.md:58`: append that unreferenced `mcp_credential.*` rows are reclaimed by the
    operator orphan sweep (runbook), which changes no grant.
-5. `services/xstockstrat-ingest/CLAUDE.md:167-175`: append one sentence to the bearer note — a
+5. `services/xstockstrat-ingest/CLAUDE.md:178-186`: append one sentence to the bearer note — a
    secret no source of the same owner references is reclaimed by the operator orphan sweep after its
    grace window (`docs/runbooks/config-rollout.md`).
 6. `docs/roadmap/ledger/insights.md:2836-2843`: append one bullet to the feature-166 entry —
