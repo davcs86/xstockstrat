@@ -8,6 +8,7 @@
 | `phase5-deviations.md` | Phase 5 deviations — config-ui, trader, insights frontends. |
 | `phase6-deviations.md` | Phase 6 deviations — webhook paths, integration-test approach, auth scope. |
 | `phase7-deviations.md` | Phase 7 deviations — observability (feature 033). |
+| `program-job-graph-analysis-pipeline.md` | Program plan — replace the analysis loops with a Postgres job graph (operator decisions, feature order, retirements). |
 
 ---
 
