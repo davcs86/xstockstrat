@@ -19,6 +19,7 @@
 | 2026-11-20 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 18 steps |
 | 2026-11-26 | `implementation-ready` → `in-progress` | /sdd-execute | → in-progress (sdd-batch-execute setup) |
 | 2026-11-27 | `in-progress` (unchanged) | /sdd-spec re-spec | Steps 16-18 (ingest `019` retraction migration, fixture, cross-schema docs) dropped by operator ruling: the frozen retraction list is empty; spec now 15 steps, `@AC-4` closed by recorded zero-row evidence |
+| 2026-11-27 | `in-progress` → `code-completed` | /sdd-execute | All 15 steps done; @AC-1..@AC-3 and @AC-5 promoted to the durable analysis/ingest suites (C-16); @AC-4 not promoted (operator ruling, zero-row evidence) |
 
 ---
 
