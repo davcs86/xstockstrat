@@ -1,7 +1,7 @@
 # Product Spec: authelia-sso
 
 **Created**: 2026-11-15
-**Amended**: 2026-11-24 (re-spec against homelab-edge `docs/superpowers/specs/2026-11-23-authelia-sso-respec.md`; see `context.md`)
+**Amended**: 2026-11-24 (re-spec against homelab-edge `docs/superpowers/specs/2026-11-23-authelia-sso-respec.md`; see `context.md`); 2026-11-27 (owner: no stale signing keys, no Claude Code clients on the homelab; Link requests send `max_age=1`, spike S17; see `context.md`); 2026-11-27 (re-ground on `main-dev@187e9f8`: config seed number `060`; see `context.md`)
 
 ---
 
@@ -236,8 +236,8 @@ routes `GET /accounts/api/sso` (status), `POST /accounts/api/sso/link` (start) a
 (confirm) (amended 2026-11-24); the anonymous `/api/auth/sso/start` stays login-only.
 1. "Link SSO" posts to `/accounts/api/sso/link`. The transaction cookie binds the purpose `link`, the
    signed-in user (from the verified session, not a value the browser supplies) and the start time, and the
-   authorization request carries `prompt=login` and `max_age=0`, so the issuer re-authenticates even while another issuer session is live
-   (SSO spec S17). Because the issuer may ignore `prompt=login`, the callback also requires the ID token's `auth_time`
+   authorization request carries `prompt=login` and `max_age=1`, so the issuer re-authenticates even while another issuer session is live
+   (SSO spec S17; not `max_age=0`, with which Authelia v4.39.28 refuses consent even after re-authentication, owner 2026-11-27). Because the issuer may ignore `prompt=login`, the callback also requires the ID token's `auth_time`
    to be no earlier than the link start (minus clock skew); a missing or older `auth_time` is refused with "Sign-in
    failed. Try again." and nothing is written (owner, 2026-11-24).
 2. The callback validates the ID token as FR-1 does, calls neither `ResolveExternalIdentity` nor `IssueSessionForUser`,
@@ -359,9 +359,9 @@ Additive only (non-breaking), in `packages/proto/identity/v1/identity.proto`:
 ## Config Key Changes
 
 One seed migration: `services/xstockstrat-config/migrations/<NNN>_authelia_sso_keys` (up + down, C-07). `NNN` is the next
-free config number when the step executes: `056` on trunk on 2026-11-24, which features 314, 317 and 321 also plan, so
-whichever merges first keeps it and the others renumber. A number below trunk's highest is never used, because
-golang-migrate skips a lower version that lands after a higher one (`merge-order.md` row 345 vs 314/317/321). It seeds every key below for both
+free config number when the step executes: `060` on trunk on 2026-11-27 (features 314, 317 and 321 merged with
+`057`–`059`). A number below trunk's highest is never used, because golang-migrate skips a lower version that lands
+after a higher one (`merge-order.md` row 345 vs 314/317/321); the CI `migration-order-gate` refuses one. It seeds every key below for both
 `production` and `staging`. Operators then set the real values per environment.
 
 - `identity.auth.mode`
@@ -442,12 +442,14 @@ Rebase only: `324-fix-ci-enforcement-gaps` (CI gate over `manage-users.py`), and
 clients with RFC 8707 `resource`, the `scp` array, custom `xstockstrat.*` scopes, a stable per-user `sub`, `typ=at+jwt`,
 `requested_audience_mode: implicit` for `aud`, no `end_session_endpoint` (portal logout), group membership not re-checked
 on refresh, and `error=access_denied` for a person outside the group. Its email findings now matter only for the link
-confirmation's label (FR-16.2). Still to be proven by homelab-edge, before this feature's cutover: Claude.ai and Claude
-Code against the deployed portal (SSO spec S1, S5, S9), `prompt=login` with `max_age=0` returning a fresh `auth_time` in
-the ID token (S17), the web client registered with scopes `openid profile email` (SSO spec § 4.6 as amended 2026-11-24;
+confirmation's label (FR-16.2). Still to be proven by homelab-edge, before this feature's cutover: Claude.ai against
+the deployed portal (SSO spec S1, S5; the homelab registers no Claude Code client and S9 is retired, SSO spec § 4.6 and
+§ 11 as amended 2026-11-27), the web client registered with scopes `openid profile email` (SSO spec § 4.6 as amended 2026-11-24;
 the UI requests all three) and its ID-token claims `email`, `preferred_username` and `auth_time` (by default or via the claims policy, per S17),
 and refresh after
-leaving the group (S24).
+leaving the group (S24). S17 is proven (spike on the edge droplet, Authelia v4.39.28, 2026-11-27): `prompt=login`
+with `max_age=1` forces re-authentication and returns a fresh `auth_time`, `email` and `preferred_username` in the ID
+token; with `max_age=0` Authelia issues no code even after re-authentication, so Link requests send `max_age=1`.
 
 ## Acceptance Criteria
 
@@ -472,12 +474,14 @@ above is covered by ≥1 tagged scenario there; FR-5 is removed and has none.
   path-scoped rate-limit zone covering `POST /accounts/api/sso/confirm` is a **required cutover gate** before `both` is set on a homelab deployment
   (owner, 2026-11-24). homelab-edge is adding it to the SSO spec's § 4.3 zones and the gate to `sso.md` § 6 (owner,
   2026-11-24); until that change lands there, this gate is tracked only here and in design.md § 6.
-- **Stale signing keys (design D-31/D-37), pending owner sign-off before Step 19.** In `oidc` the agent verifies a token
-  whose key it already holds for up to `_JWKS_STALE_MAX_S` (24 h) after its last successful JWKS fetch while the JWKS
-  cannot be fetched again; with the JWKS reachable, a retired key stays usable only until the next refresh after the
-  300 s fresh window. So during a JWKS outage a key the issuer has retired or revoked is accepted for up to 24 h, longer
-  than the SSO spec § 4.7 rotation runbook's "retire the old" after one access-token lifetime. The cutover runbook
-  states it.
+- **Signing keys at most 3600 s old, no stale-key grace (owner, 2026-11-27; SSO spec § 3 "Signing keys"; design
+  D-138).** In `oidc` the agent verifies a token only with a key from an issuer key set fetched within the last 3600 s
+  (`_JWKS_MAX_AGE_S`). Past that, a token needs a refetch; if the refetch fails or is held by the cooldown, the call gets
+  HTTP 503 without `WWW-Authenticate` (as FR-2's unfetchable-keys case), never a verify with the old keys (AC-79). So a
+  JWKS outage that outlasts 3600 s from the last good fetch makes every `oidc` MCP call 503 until the JWKS is reachable
+  again; the owner accepts that availability cost. This supersedes the 24 h stale-key window (`_JWKS_STALE_MAX_S`) that
+  was pending owner sign-off. The web relying party already complies (openid-client refetches at 300 s and fails
+  closed). The cutover runbook states it.
 - **Identity runs in every mode** (owner, 2026-11-24): it holds users, roles, links and sessions. An identity-less `oidc`
   deployment is out of scope (an idea for the owner's xstockstrat-only Authentik exploration).
 
