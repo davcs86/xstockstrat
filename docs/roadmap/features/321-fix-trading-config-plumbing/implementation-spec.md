@@ -377,7 +377,7 @@ GOWORK=off golangci-lint run --modules-download-mode=mod
 
 ### Step 4 — service: bind `requires_approval` from the insert-time status
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/repository/trading_repo.go` — modify
@@ -998,3 +998,8 @@ integration PR is a draft until it exists.
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+### Step 4 — RED captured with a transient, uncommitted probe test (2026-11-27)
+- **Spec said**: Step 4 is `TDD: red-green required`; its paired test is Step 5, which runs after it, and Step 4's own Verification passes before the change (impl-spec review warning "Step 5: say how the RED before Step 4 run is captured").
+- **Actual**: a transient `TestTransientStep4RedProbe` (PENDING_APPROVAL → true, NEW → false at arg index 16) was appended to `internal/repository/trading_repo_test.go`, the Verification block run RED (`argument 16 expected [bool - true] does not match actual [bool - false]`), the bind changed, run GREEN, then the probe reverted with `git checkout` before a final Verification run. Nothing outside Step 4's **Files** is committed; Step 5 authors the real AC-3 tests.
+- **Disposition**: RED-capture method only; no scope or behavior change.

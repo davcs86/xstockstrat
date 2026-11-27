@@ -177,3 +177,14 @@ Up-front confirmation: the operator approved the plan with this record (binding,
 - Deviations: none
 - TDD: AC-2 red N/A — no behavior change: since feature 295 `GetFloat` widens an int row, so an int `order.max_retries` row is already honoured at HEAD; characterization test `TestFlattenAndHalt_IntRetryRowsSetAttempts_F321_AC2` added. Discrimination shown by mutation: hardwiring `maxRetries := 3` → "max_retries int 1: submissions = 4, want 2" / "int 5: submissions = 4, want 6" FAIL; hardwiring `retryDelay := 500 * time.Millisecond` → "max_retries int 1: elapsed 501.68131ms, want < 400ms" FAIL; both reverted → PASS.
 - Green: `ok  github.com/xstockstrat/trading/internal/service 7.638s`; `git diff --stat -- internal/service/trading.go` empty; `golangci-lint` `0 issues.`; verbose re-run 8 `TestFlattenAndHalt*` PASS incl. `--- PASS: TestFlattenAndHalt_IntRetryRowsSetAttempts_F321_AC2 (0.07s)`. Coverage: test-only change in `internal/service` (excluded package), no threshold applies.
+
+## Session 2026-11-27 — sdd-execute sequential (sdd-batch-execute), Step 4
+
+- Tree: detached at `origin/feature/fix-trading-config-plumbing@0053916b`. Discovery: `UpsertOrder` `trading_repo.go:53`, column list `:63-69` (`requires_approval` `$17`), `DO UPDATE SET` `:77-86` (no `requires_approval`), literal `false` `:93`; `trading.go` approval decision `:588` (spec `:586`, +2 drift), `Status: orderStatus` `:669`, first insert `:694`, approval return `:703`; column `001_orders_hypertable.up.sql:24`.
+- Tooling (step 4): go1.27 ✓ · golangci-lint ✓ v2.14.0 (`/root/go/bin`; lint is Step 5's Verification) · hook check hook=0. Config-key wiring gate: not applicable (no config key touched).
+
+### Step 4 — service: bind `requires_approval` from the insert-time status [done]
+- `UpsertOrder` binds `$17` as `o.Status == ORDER_STATUS_PENDING_APPROVAL` instead of `false`, with a one-line constraint comment (ON CONFLICT never updates the column). No signature, call-site, migration or proto change.
+- Files modified: `services/xstockstrat-trading/internal/repository/trading_repo.go`
+- Deviations: RED captured with a transient, reverted probe test (Deviation Log "Step 4 — RED captured…").
+- TDD: red (transient `TestTransientStep4RedProbe`, not committed): "argument 16 expected [bool - true] does not match actual [bool - false]", `FAIL github.com/xstockstrat/trading/internal/repository` → green: `ok github.com/xstockstrat/trading/internal/repository`. Final Verification after the probe revert: `:94` bind grep hit, `DO UPDATE SET` count `0`, `ok internal/repository`, `ok internal/service`, exit=0. Excluded packages — no coverage threshold. AC-3 coverage lands in Step 5; impl-spec warning "add a PARTIALLY_FILLED row (expect false)" stays for Step 5.
