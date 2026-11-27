@@ -139,7 +139,7 @@ identity edit is `services/xstockstrat-identity/package.json` only (D-13, F-08).
 
 ### Step 1 — service: portfolio — move the three `r.pool` stragglers to `r.db`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/repository/portfolio_repo.go` — modify
@@ -183,7 +183,7 @@ GOWORK=off golangci-lint run --modules-download-mode=mod
 
 ### Step 2 — test: portfolio — pgxmock tests for `GetSnapshot`, `CountPositions`, `UpdatePositionBracket`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/repository/portfolio_repo_test.go` — modify

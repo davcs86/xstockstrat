@@ -513,3 +513,20 @@ Two rulings on the open items the previous re-spec raised, relayed by the orches
 ```sdd-batch-setup
 {"mainDev":"f802b184b13bd899d858c4b0349a616e9981b9d9","date":"2026-11-26"}
 ```
+
+## Session 2026-11-27 — sdd-execute sequential (sdd-batch-execute), steps 1+2
+
+- Tooling setup (steps 1+2): go1.27 ✓ · golangci-lint ⬇ v2.14.0 (`GOTOOLCHAIN=go1.27.0 go install`, built with go1.27.0, at `/root/go/bin`; `/usr/local/bin` still holds v2.5.0, so the verification runs put `/root/go/bin` first on `PATH`).
+- Discovery re-verified at `origin/feature/fix-orphaned-code` @ `b0ee4e61`: `r.pool` at `portfolio_repo.go:57,247,271,379`; callers `portfolio_service.go:1212` (`GetSnapshot`), `:1755` (`UpdatePositionBracket`); `CountPositions` has none; findings rows `:37`, `:38`; the three tests absent.
+
+### Step 1 — service: portfolio — move the three `r.pool` stragglers to `r.db` [done]
+- Atomic unit steps 1+2. `GetSnapshot`, `CountPositions` and `UpdatePositionBracket` now use `r.db`; `Pool()` still returns `r.pool`. Portfolio findings `:37` marked `**RESOLVED (feature 323)**`; `:38` narrowed to "zero non-test callers" (kept open).
+- Files modified: `services/xstockstrat-portfolio/internal/repository/portfolio_repo.go`, `services/xstockstrat-portfolio/docs/context-constitution-findings.md`
+- Verification: `grep r\.pool` → only `57:	return r.pool`; build, vet, the three tests and `golangci-lint` (v2.14.0, `0 issues.`) pass.
+- Deviations: none
+
+### Step 2 — test: portfolio — pgxmock tests for `GetSnapshot`, `CountPositions`, `UpdatePositionBracket` [done]
+- Atomic unit steps 1+2. Added `TestGetSnapshot_UsesMockableDB` (subtests `row_returned`, `mock_error`), `TestCountPositions_UsesMockableDB` and `TestUpdatePositionBracket_UsesMockableDB`, each on `NewPortfolioRepoWithDB(mock)`.
+- TDD: AC-1 red: each test panicked with `invalid memory address or nil pointer dereference` in `pgxpool.(*Pool).Acquire(0x0, …)` from `portfolio_repo.go:247`, `:271`, `:379` → green: all three pass with both subtests listed; full race suite ok, coverage `total: (statements) 79.1%` (≥ 40%), `golangci-lint` `0 issues.`
+- Files modified: `services/xstockstrat-portfolio/internal/repository/portfolio_repo_test.go`
+- Deviations: none
