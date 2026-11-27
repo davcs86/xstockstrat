@@ -99,7 +99,7 @@ Names and seams the design leaves open. Each is this spec's choice and is open t
   lane is passed); `ClaimedJob.db` (the handler's `job.db()` entry point); `start_listening` and
   `JobGraphSettings.on_change` (the `cfg.on_change` registration); `set_pipeline_ready_stats(at=)` (the gauge snapshot setter);
   `heartbeat()` taking no `conn=`, because it never runs inside a caller's transaction;
-  `_create_pool` / `_create_pools` in `app/main.py`; `build_registry`; the constants `BATCH_SIZE`,
+  `_create_pool` / `_create_pools` in `app/main.py`; `build_registry`; `stats_step()`; the constants `BATCH_SIZE`,
   `PRUNE_BLOCK_BUDGET_S` and `PRUNE_SELF_STOP_S`; and `prune_batch(*, conn, state,
   older_than_days, cutoff=None)` returning `(candidates, deleted, cutoff, full)`.
 - **S-11. Step 1 lists eight files.** The design requires the seed, bounds, stored set and docs
@@ -550,7 +550,7 @@ grep -rn "pipeline_job" services/xstockstrat-analysis/migrations/ | grep -v "031
 cd services/xstockstrat-analysis
 ruff check . && ruff format --check .
 uv run --extra dev pytest tests/test_read_budget.py tests/test_read_budget_real_pg.py -q   # budgeted_read unchanged
-git diff --numstat -- app/repositories/read_budget.py | awk '$2 != 0 {exit 1}'   # additions only: 0 deletions
+git diff origin/main-dev --numstat -- app/repositories/read_budget.py | awk '$2 != 0 {exit 1}'   # additions only: 0 deletions (diff against the base the step branch was cut from)
 ```
 
 ---
@@ -757,7 +757,10 @@ grep -c "SKIP LOCKED" app/repositories/pipeline_jobs.py   # claim, reap, settle,
    - an async fixture `pipeline_pg(local_pg)` that opens a pool (`statement_cache_size=0`), runs
      `CREATE SCHEMA IF NOT EXISTS analysis`, drops `analysis.pipeline_job_deps` and
      `analysis.pipeline_jobs`, executes `migrations/031_pipeline_job_graph.up.sql`, asserts no other
-     `migrations/*.up.sql` mentions `pipeline_job`, yields the pool and closes it;
+     `migrations/*.up.sql` mentions `pipeline_job`, yields the pool and closes it. A test that
+     needs a second or third pool (`@AC-2`, `@AC-3`, `@AC-4`, the two-worker tests in Steps 12
+     and 14) also requests `local_pg` for the DSN and builds it with the same
+     `statement_cache_size=0`; the fixture still owns the schema;
    - a helper `insert_pipeline_job(pool, **overrides)` that inserts one row in any state with
      consistent defaults (kind `probe`, subject `AAPL`, epoch `2026-11-27`, run id
      `run-2026-11-27`, lane 10, state `ready`) and lets a test set `next_attempt_at`,
@@ -838,7 +841,9 @@ cd services/xstockstrat-analysis
 uv run --extra dev pytest tests/test_pipeline_jobs_real_pg.py -q
 uv run --extra dev pytest --cov=app --cov-fail-under=40
 ruff check . && ruff format --check .
-grep -n "pipeline_pg\|insert_pipeline_job" tests/conftest.py tests/test_pipeline_jobs_real_pg.py | head   # C-13: fixtures defined once in conftest, imported by the test
+test "$(grep -c "def pipeline_pg\|def insert_pipeline_job" tests/conftest.py)" -ge 2   # C-13: fixtures defined in conftest
+grep -n "def pipeline_pg\|def insert_pipeline_job" tests/test_pipeline_jobs_real_pg.py ; test $? -eq 1   # and not redefined by the test
+grep -q "pipeline_pg" tests/test_pipeline_jobs_real_pg.py   # and used by it
 test "$(grep -cE "^async def test_ac[0-9]+_" tests/test_pipeline_jobs_real_pg.py)" -ge 14   # one per covered scenario
 ```
 
@@ -996,7 +1001,9 @@ grep -n "pytest.fixture" tests/test_job_graph_core.py ; test $? -eq 1   # C-13: 
    0 when every free slot was filled; `poll_interval_ms` when some were; after an empty claim,
    double up to `max(poll_interval_ms, 5 s)`. `lease_seconds` is read once per claim.
 3. **Maintenance tick** (returns 5 s − elapsed, at least 0): reap, settle, the daily prune ensure,
-   and stats every third tick, each its own lane operation and transaction, each guarded on its
+   and stats every third tick (ticks 1, 4, 7, …: a zero-based counter, `n % 3 == 0`, so a fresh
+   worker publishes a snapshot on its first tick; the step is a named coroutine `stats_step()`
+   that tests call directly), each its own lane operation and transaction, each guarded on its
    own so one failing step does not skip the others (R-16). `worker_enabled` is read before each
    step and before queueing each settle batch. Settle repeats while a batch is `full`, stopping
    after 20 batches or 8 s. The "ensured for this UTC day" marker is set only after a committed
@@ -1036,7 +1043,8 @@ grep -n "pytest.fixture" tests/test_job_graph_core.py ; test $? -eq 1   # C-13: 
 9. Fixed constants (design.md § Build order, last paragraph) are named module constants: heartbeat
    period 7.5 s, maintenance period 5 s, self-fence margin 3 s, tolerated lag 2 s, attempt
    deadline 900 s, stop grace 10 s, report give-up 300 s, report retry 1 to 30 s, settle at most
-   20 batches or 8 s, stats every third tick, stats stale after 45 s, idle claim ceiling 5 s,
+   20 batches or 8 s, stats every third tick (the 45 s staleness bound is declared once, in `app/telemetry.py`, Step 15;
+   the engine does not declare it), idle claim ceiling 5 s,
    runner batch wait 6 s, claim acknowledgement window 7 s, handler block cap 30 s. The settle and
    prune batch size of 500 is one named constant in `app/repositories/pipeline_jobs.py` (Step 7),
    used by the SQL and by the "full batch" test. Timer lateness beyond 2 s is logged.
@@ -1052,7 +1060,7 @@ cd services/xstockstrat-analysis
 ruff check . && ruff format --check .
 uv run --extra dev python -c "from app.engine.job_graph import JobGraphWorker, ClaimedJob; from app.jobs import build_registry"
 grep -n "create_task(\|asyncio.Semaphore(\|asyncio.shield" app/engine/job_graph.py app/jobs/__init__.py ; test $? -eq 1   # spawn only; ResizableLimiter only
-grep -n "spawn(" app/engine/job_graph.py | head
+grep -q "spawn(" app/engine/job_graph.py   # the engine starts tasks through spawn
 uv run --extra dev pytest tests/test_job_graph_core.py tests/test_job_graph_settings.py tests/test_live_limits.py -q
 python3 ../../scripts/check-watcher-copies.py ../..
 ```
@@ -1149,7 +1157,7 @@ cd services/xstockstrat-analysis
 uv run --extra dev pytest tests/test_job_graph_worker.py tests/test_job_graph_worker_real_pg.py tests/test_job_handler_contract.py -q
 uv run --extra dev pytest --cov=app --cov-fail-under=40
 ruff check . && ruff format --check .
-grep -n "pipeline_pg\|snapshot_watcher\|from tests.conftest\|conftest" tests/test_job_graph_worker.py tests/test_job_graph_worker_real_pg.py | head   # C-13: shared helpers imported from conftest
+grep -q "snapshot_watcher" tests/test_job_graph_worker.py && grep -q "pipeline_pg" tests/test_job_graph_worker_real_pg.py   # C-13: shared helpers from conftest
 grep -c "asyncio.sleep(" tests/test_job_graph_worker.py ; test $? -eq 1   # 0 matches: virtual time only
 ```
 
@@ -1254,7 +1262,7 @@ cd services/xstockstrat-analysis
 uv run --extra dev pytest tests/test_retention_prune_job.py tests/test_job_handler_contract.py -q
 uv run --extra dev pytest --cov=app --cov-fail-under=40
 ruff check . && ruff format --check .
-grep -n "pipeline_pg\|insert_pipeline_job\|from tests.conftest\|conftest" tests/test_retention_prune_job.py | head   # C-13: fixtures from conftest
+grep -q "pipeline_pg" tests/test_retention_prune_job.py && grep -q "insert_pipeline_job" tests/test_retention_prune_job.py   # C-13: fixtures from conftest
 ```
 
 ---
@@ -1302,8 +1310,8 @@ grep -n "pipeline_pg\|insert_pipeline_job\|from tests.conftest\|conftest" tests/
    - Gauges `analysis.pipeline.ready_depth` and `analysis.pipeline.oldest_ready_age` (unit `s`),
      both labelled by `KEY_LANE`, reading one module-level snapshot;
      `set_pipeline_ready_stats(stats, *, at)` stores it with `at`, a `time.monotonic()` reading,
-     and the gauges report nothing when `time.monotonic() - at` exceeds 45 s (tests pass
-     `at=time.monotonic() - 46`); `register_pipeline_gauges()` registers both.
+     and the gauges report nothing when `time.monotonic() - at` exceeds `PIPELINE_STATS_STALE_S = 45`, a module constant
+     here and the only declaration (tests pass `at=time.monotonic() - (PIPELINE_STATS_STALE_S + 1)`); `register_pipeline_gauges()` registers both.
 2. `app/engine/job_graph.py`, record calls only:
    - the claim loop writes `log_tick_ok(log, Loop.PIPELINE_WORKER, …)` at most once per 60 s: no
      state after a claim that returned jobs, `idle` after an empty claim, `disabled` when disabled,
@@ -1376,7 +1384,8 @@ cd ../.. && python3 scripts/check-otel-produced-signals.py
    the scalar and `None` cases keep passing unchanged.
 4. `tests/test_pipeline_telemetry.py`:
    - `@AC-13` (`real_pg`): after the `metric_reader` fixture, call
-     `telemetry.register_pipeline_gauges()`; four ready `watchlist` rows, the oldest 120 s old; run the stats step;
+     `telemetry.register_pipeline_gauges()`; four ready `watchlist` rows, the oldest 120 s old; call
+     `worker.stats_step()`;
      collect through `metric_reader` → `analysis.pipeline.ready_depth{lane=watchlist}` is 4 and
      `analysis.pipeline.oldest_ready_age{lane=watchlist}` is at least 120. A snapshot older than
      45 s exports no point for either gauge. RED: the depth assertion.
@@ -1401,7 +1410,7 @@ cd services/xstockstrat-analysis
 uv run --extra dev pytest tests/test_pipeline_telemetry.py tests/test_telemetry_allowlist.py tests/test_telemetry_instruments.py tests/test_analysis_tick_telemetry.py -q
 uv run --extra dev pytest --cov=app --cov-fail-under=40
 ruff check . && ruff format --check .
-grep -n "metric_reader\|pipeline_pg\|from tests.conftest\|conftest" tests/test_pipeline_telemetry.py | head   # C-13: shared fixtures imported
+grep -q "metric_reader" tests/test_pipeline_telemetry.py && grep -q "pipeline_pg" tests/test_pipeline_telemetry.py   # C-13: shared fixtures used
 ```
 
 ---
@@ -1502,7 +1511,7 @@ uv run --extra dev pytest tests/test_supervision.py tests/test_pipeline_boot.py 
 uv run --extra dev pytest --cov=app --cov-fail-under=40
 ruff check . && ruff format --check .
 grep -c "spawn(" app/main.py   # 11
-git status --short -- ../../docker-compose.yml ../../.do ../../deploy/homelab/compose.yml   # empty: no new env var or port, so no deploy-file change
+test -z "$(git status --short -- ../../docker-compose.yml ../../.do ../../deploy/homelab/compose.yml)"   # empty: no new env var or port, so no deploy-file change
 ```
 
 ---
@@ -1591,7 +1600,7 @@ git status --short -- ../../docker-compose.yml ../../.do ../../deploy/homelab/co
 python3 scripts/check-context-map.py
 node scripts/check-config-wiring.mjs --doc-check
 grep -n "pipeline control 2" CLAUDE.md
-grep -n "advisory" docs/roadmap/program-job-graph-analysis-pipeline.md
+grep -n "transaction-scoped advisory lock pattern" docs/roadmap/program-job-graph-analysis-pipeline.md ; test $? -eq 1   # the old wording is gone
 grep -n "pipeline-jobs.md" services/xstockstrat-analysis/CLAUDE.md
 grep -c "FOR NO KEY UPDATE" services/xstockstrat-analysis/docs/pipeline-jobs.md   # the blocked-job recovery lock (D-60)
 grep -n "no new pool" services/xstockstrat-analysis/CLAUDE.md ; test $? -eq 1

@@ -378,3 +378,16 @@ Carried from design.md § Open Risks; each needs an owner at `/sdd-spec` or late
     N3 Step 15 no longer requires Step 13. N4 the stats step uses the real monotonic clock.
     N5 the handler gate is an `asyncio.Lock`. N6 `_create_pool` is async; `serve()` pool
     defaults stated. N7 `prune_batch` tests run inside a transaction. N8 two more greps gate.
+
+## Session 2026-11-27 — sdd-review impl-spec (advisory, round 4)
+
+- Overlap: clean. No other claimant of config `061`, analysis `031` or `analysis.pipeline.*`;
+  the shared-file overlaps (stored set, `config-wiring.json`, `config-governance.md` next to
+  feature 322's edits, `database.md`) are rebase-only and need no merge-order row.
+- Criteria: 0 failures, 2 warnings, 2 notes; all round-3 fixes verified. All applied:
+  - [x] W1 seven more verification commands always exited 0 (Steps 5, 8, 12, 14, 16, 18, 19,
+    and the `spawn(` grep in Step 11); each now fails on the wrong result.
+  - [x] W2 the 45 s stats-staleness bound was declared in both Step 11 and Step 15; it is now
+    `PIPELINE_STATS_STALE_S` in `app/telemetry.py` only.
+  - [x] N1 stats run on maintenance ticks 1, 4, 7, …; `stats_step()` is a named coroutine
+    (added to S-10). N2 tests needing more than one pool take the DSN from `local_pg`.
