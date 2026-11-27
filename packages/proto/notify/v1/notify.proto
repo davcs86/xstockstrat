@@ -104,7 +104,7 @@ message AcknowledgeAlertResponse {
 }
 
 message ListAlertsRequest {
-  string user_id = 1;
+  string user_id = 1 [deprecated = true]; // DEPRECATED: ignored; the owner is resolved from the x-user-id header.
   repeated string categories = 2;
   int32 limit = 3;
   string page_token = 4;

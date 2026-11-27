@@ -1857,7 +1857,7 @@ func TestConfirmOrder_AC48_UnconfirmHidesFeesAndFilledAt(t *testing.T) {
 	h.confirm(&tradingv1.ConfirmOrderRequest{OrderId: "ord-1", FilledQty: 10, FilledAvgPrice: 150, Fees: proto.Float64(2), FilledAt: timestamppb.New(at)})
 	resp := h.confirm(&tradingv1.ConfirmOrderRequest{OrderId: "ord-1", FilledQty: 0})
 
-	got, err := h.svc.GetOrder(context.Background(), &tradingv1.GetOrderRequest{OrderId: "ord-1"})
+	got, err := h.svc.GetOrder(ctxAsUser(testdata.S1UserID), &tradingv1.GetOrderRequest{OrderId: "ord-1"})
 	if err != nil {
 		t.Fatalf("GetOrder: %v", err)
 	}
@@ -2212,7 +2212,7 @@ func TestAppendLedgerEvent_RetriesUnavailableWithSameIdempotencyKey(t *testing.T
 		}
 		return nil
 	})
-	if err := svc.appendLedgerEvent(context.Background(), "account.positions.synced", "account:acc-1", "user-1", map[string]interface{}{}); err != nil {
+	if err := svc.appendLedgerEvent(context.Background(), "account.positions.synced", "account:acc-1", "user-1", "", map[string]interface{}{}); err != nil {
 		t.Fatalf("appendLedgerEvent: %v", err)
 	}
 	reqs := ledger.requestsByType("account.positions.synced")
@@ -2225,7 +2225,7 @@ func TestAppendLedgerEvent_RetriesUnavailableWithSameIdempotencyKey(t *testing.T
 
 	ledger.reset()
 	ledger.setFailFn(failSynced(codes.Internal))
-	if err := svc.appendLedgerEvent(context.Background(), "account.positions.synced", "account:acc-1", "user-1", map[string]interface{}{}); grpcstatus.Code(err) != codes.Internal {
+	if err := svc.appendLedgerEvent(context.Background(), "account.positions.synced", "account:acc-1", "user-1", "", map[string]interface{}{}); grpcstatus.Code(err) != codes.Internal {
 		t.Errorf("err = %v, want Internal", err)
 	}
 	if n := len(ledger.requestsByType("account.positions.synced")); n != 1 {

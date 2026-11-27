@@ -5,11 +5,14 @@ import (
 	"strconv"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/structpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	commonv1 "github.com/xstockstrat/contracts/gen/go/common/v1"
 	ledgerv1 "github.com/xstockstrat/contracts/gen/go/ledger/v1"
@@ -130,6 +133,13 @@ func PartialEvent(seq int64, orderID, userID, symbol, accountID, mode string, fi
 	p := fillPayload(orderID, userID, symbol, accountID, mode, price, side)
 	p["filled_qty"] = filledQty
 	return orderEvent(seq, "order.partially_filled", orderID, p)
+}
+
+// Stamped returns a copy of ev with the ledger's server write time set to at.
+func Stamped(ev *ledgerv1.LedgerEvent, at time.Time) *ledgerv1.LedgerEvent {
+	out := proto.Clone(ev).(*ledgerv1.LedgerEvent)
+	out.RecordedAt = timestamppb.New(at)
+	return out
 }
 
 // CreatedEvent mirrors trading's order.created: it carries side but no order_id or user_id key.

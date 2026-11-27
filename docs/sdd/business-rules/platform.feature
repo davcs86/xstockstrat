@@ -2103,6 +2103,7 @@ Feature: Platform-wide guarantees
     Then the registered keys are "fmp.cache_ttl_hours" and "finnhub.cache_ttl_hours"
     And the gate exits 0 and reports no prefixed-read finding for them
 
+  # Superseded by @feature-321 @AC-4 (user sign-off 2026-11-20, feature 321 design.md § Business Rules Touched); text intentionally not rewritten.
   @AC-14 @FR-4 @feature-304
   Scenario: The broker.paper defect entry is respelled and stays owned by its defect
     Given scripts/config-wiring.json holds a read-unseeded entry for namespace "trading" and key "trading.broker.paper" owned by defect 2026-11-06-trading-broker-paper-env-derived-default-unseedable
@@ -2811,3 +2812,53 @@ Feature: Platform-wide guarantees
     Then none of the deleted items exists (config configWatcher.ts and its test, the ledger, config, identity and notify migrate script and node-pg-migrate devDependency, notify jsonwebtoken and bcrypt, marketdata AlpacaAsset, ingest example_simple_email.py and tests/test_extractor.py)
     And ingest noop.py and agent signal_extraction.md still exist
     And every affected service still builds and passes its tests
+
+  # guards: docs/reports/2026-11-06-trading-broker-paper-env-derived-default-unseedable-defect.md
+  # Supersedes @feature-304 @AC-14 (the broker.paper baseline entry is removed, not respelled).
+  @AC-4 @regression @feature-321
+  Scenario: trading.broker.paper is seeded per environment and falls back to the application environment
+    Given the config catalog row for trading.broker.paper has an environment-derived default
+    When the config seed migrations run for staging and production
+    Then trading.broker.paper is stored true in staging and false in production, never one literal for both
+    And a row that already exists is left unchanged
+    And with no stored row trading resolves paper unless APPLICATION_ENV is production, whatever TRADING_MODE says
+    And staging resolves to paper and production resolves to live
+    And scripts/config-wiring.json holds no entry for trading.broker.paper and "node scripts/check-config-wiring.mjs --final" exits 0 with no read-unseeded or STALE line for it
+
+  # ─── broker-account identity is never filed under a placeholder owner (feature 312) ──
+  # Cross-service: trading's RegisterBrokerAccount rejection and portfolio's event consumption are
+  # one guarantee. Source defect: docs/reports/2026-10-19-portfolio-default-identity-fallback-defect.md
+
+  # guards: docs/reports/2026-10-19-portfolio-default-identity-fallback-defect.md
+  @AC-2 @regression @feature-312
+  Scenario: Broker-account identity is never filed under a placeholder owner
+    Given a RegisterBrokerAccount call with no x-user-id metadata
+    When trading handles the call
+    Then the call is rejected and no broker account is persisted
+    And when portfolio consumes an account.positions.synced, account.balance.synced or account.deregistered event with user_id ""
+    Then the event is acked, logged and skipped
+    And no portfolio row is written or purged under user_id "default"
+
+  # Promoted from feature 311 (fix-position-fold-correctness). Cross-service: trading emits the bracket-leg fill
+  # to the ledger and portfolio folds it into positions and GetPnL realized.
+  # guards: docs/reports/2026-10-21-trading-bracket-leg-fills-missing-from-realized-pnl-defect.md
+  @AC-4 @regression @feature-311
+  Scenario: A bracket take-profit leg fill reaches the ledger and realized P&L
+    Given trading.risk.bracket_orders_enabled is true
+    And an auto-sized market buy of 10 "AAPL" at 100 with a stop price filled and recorded its legs in trading.order_brackets
+    When the take-profit leg fills at the broker for 10 "AAPL" at 110
+    Then the ledger holds a fill event for that leg with symbol "AAPL", side sell, qty 10, price 110, and the order's account, trading mode and user
+    And GetPnL realized for the round trip is 100
+
+  # guards: docs/reports/2026-10-21-trading-bracket-leg-fills-missing-from-realized-pnl-defect.md
+  # amended 2026-11-20 (C-15, ID kept; C-16 CHANGE signed off by the operator, design.md D-38): the full-fill
+  # event carries the leg total (qty 10) at the cumulative average price, not the remaining 6, so it agrees
+  # with feature 251 @AC-17 (an order.filled qty is the order total). "qty 4" is the partial's cumulative filled_qty.
+  @AC-5 @regression @feature-311
+  Scenario: A bracket leg that fills in two parts reaches the ledger as a partial then a full fill
+    Given trading.risk.bracket_orders_enabled is true
+    And an auto-sized market buy of 10 "AAPL" at 100 with a stop price filled and recorded its legs in trading.order_brackets
+    When the take-profit leg reports ORDER_STATUS_PARTIALLY_FILLED for 4 "AAPL" at 110, then ORDER_STATUS_FILLED for the remaining 6 at 110
+    Then the ledger holds an order.partially_filled event with qty 4 and an order.filled event with qty 10 at average fill price 110 for that leg
+    And the "AAPL" position quantity is 0
+    And GetPnL realized for the round trip is 100

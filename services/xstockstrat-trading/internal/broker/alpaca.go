@@ -73,12 +73,7 @@ func sleepContext(ctx context.Context, d time.Duration) error {
 }
 
 func (c *Client) timeout() time.Duration {
-	if c.cfg.Timeout != nil {
-		if d := c.cfg.Timeout(); d > 0 {
-			return d
-		}
-	}
-	return defaultTimeoutMs * time.Millisecond
+	return callTimeout(c.cfg.Timeout)
 }
 
 // do sends req under a deadline of c.timeout(); the deadline is released when the caller closes resp.Body.
@@ -449,6 +444,9 @@ func (c *Client) GetOrder(ctx context.Context, brokerOrderID string) (*BrokerOrd
 		return nil, fmt.Errorf("read response: %w", err)
 	}
 
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, fmt.Errorf("alpaca get order error (status %d): %s: %w", resp.StatusCode, string(respBody), ErrOrderNotFound)
+	}
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("alpaca get order error (status %d): %s", resp.StatusCode, string(respBody))
 	}
@@ -479,10 +477,13 @@ func (c *Client) GetOrder(ctx context.Context, brokerOrderID string) (*BrokerOrd
 	return out, nil
 }
 
+// ListOrdersLimit is the Alpaca bulk-list ceiling; a list holding this many rows may be truncated.
+const ListOrdersLimit = 500
+
 // ListOrders fetches every order Alpaca knows for this account via GET /v2/orders.
 // status=all keeps just-filled/canceled orders visible; limit=500 is the bulk-list ceiling.
 func (c *Client) ListOrders(ctx context.Context) ([]BrokerOrder, error) {
-	endpoint := fmt.Sprintf("%s/v2/orders?status=all&limit=500", c.baseURL())
+	endpoint := fmt.Sprintf("%s/v2/orders?status=all&limit=%d", c.baseURL(), ListOrdersLimit)
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
 		return nil, fmt.Errorf("create request: %w", err)

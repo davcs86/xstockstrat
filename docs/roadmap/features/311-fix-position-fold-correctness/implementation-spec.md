@@ -3,20 +3,23 @@
 **Status**: `pending`
 **Created**: 2026-11-20
 **Feature**: `docs/roadmap/features/311-fix-position-fold-correctness/feature.md`
-**Total Steps**: 27
+**Total Steps**: 29
 **Feature Branch**: `feature/fix-position-fold-correctness`
 **Severity**: SEV-2
+**Re-spec**: 2026-11-26 — the operator ruling of 2026-11-21 (`context.md`, "operator rulings on cutover and CI scope") added Steps 21-22; the former Steps 21-27 are now Steps 23-29. Earlier `context.md` entries and `handoff-2026-11-20-sdd-batch-308-331.md` use the 27-step numbering.
 **Tree**: service evidence was read from `origin/main-dev@fb52065c`. `origin/feature/fix-position-fold-correctness@66455c98` is 168 commits behind `main-dev` and differs from its merge base (`c4fd48b0`) only inside this feature directory, so after `/sdd-execute` BRANCH SYNC merges `main-dev` the service code is exactly the tree cited here. `recon.md` and `design.md` cite `c4fd48b0` line numbers; where they differ, the numbers below win.
 
 ---
 
 ## Execution Summary
 
-The work runs in the design's build order (`design.md` § 5). Both migrations land first (Steps 1-2). Portfolio follows: the repository seam and floor (Steps 3-4), the keyed emit (Steps 5-6), the floor and `observed()` sentinels (Steps 7-8), the fill-path rewrite with the signed fold (Steps 9-10), the real-Postgres proof (Step 11) and the `GetPnL` composite key (Steps 12-13). Trading follows: broker not-found and the IBKR id match (Steps 14-15), the keyed ledger append (Steps 16-17), `trading.bracket_legs` persistence and `ActivateBracket` (Steps 18-20), the leg observer (Steps 21-22) and adoption with its throttle (Steps 23-25). The runbook and the service docs close the feature (Steps 26-27).
+The work runs in the design's build order (`design.md` § 5). Both migrations land first (Steps 1-2). Portfolio follows: the repository seam and floor (Steps 3-4), the keyed emit (Steps 5-6), the floor and `observed()` sentinels (Steps 7-8), the fill-path rewrite with the signed fold (Steps 9-10), the real-Postgres proof (Step 11) and the `GetPnL` composite key (Steps 12-13). Trading follows: broker not-found and the IBKR id match (Steps 14-15), the keyed ledger append (Steps 16-17), `trading.bracket_legs` persistence and `ActivateBracket` (Steps 18-20), their real-Postgres proof and the `trading-db-test` CI job (Steps 21-22, added by the operator ruling of 2026-11-21), the leg observer (Steps 23-24) and adoption with its throttle (Steps 25-27). The runbook and the service docs close the feature (Steps 28-29).
 
 Consumer surfaces (C-14): the fix reaches users through `xstockstrat-ui` `/trader` positions and P&L and the `xstockstrat-agent` `get_positions` tool, which read the folded rows. The design decided that no ui or agent code changes (`design.md` § 6), so no step touches either service. Their acceptance suites were scanned by scenario title and by grep for `realized`, `position.closed`, `get_positions` and `short`; no scenario encodes the buggy fold. The one rule that reads this feature's output is ui `strategy-performance-dashboard.feature:48` (average return from the close event's `cost_basis`), which Step 9 preserves by keeping `closedPositionPayload`.
 
-No proto, RPC, config key, env var or port is added, so there is no `proto`, `proto-gen` or `config` step.
+No proto, RPC, config key, env var or port is added, so there is no `proto` or `proto-gen` step. Step 22 is a `config`-category step for CI and lint configuration only; it adds no config key (the test-only `TRADING_DB_TEST_URL` is read by the Step 21 helper alone).
+
+Design-gate check for the 2026-11-21 scope addition (C-11): Steps 21-22 add tests and a CI job over SQL the design already chose (D-14, D-20, D-37, D-40, D-41). They change no design decision, no `@AC-*` guarantee (C-16) and no Floor rule: F-06 is not touched (the job uses a throwaway CI container, not the shared cluster), F-07 is not touched (`TRADING_DB_TEST_URL` is a test input, not config), and F-08 holds because Step 21 lists every file it stages. The cutover ruling ("as designed") changes nothing.
 
 ## Scenario Coverage (C-15)
 
@@ -25,8 +28,8 @@ No proto, RPC, config key, env var or port is added, so there is no `proto`, `pr
 | `@AC-1` restart does not re-apply folded fills | Step 10 (pgxmock duplicate and below-floor), Step 11 (dbtest second boot) |
 | `@AC-2` two processes apply one fill once | Step 11 (real-Postgres, two `PortfolioService` instances) |
 | `@AC-3` a sell closes the position and seals realized | Step 10 |
-| `@AC-4` take-profit leg fill reaches the ledger and realized | Step 22 (ledger event), Step 13 (`GetPnL` 100), Step 10 (fold) |
-| `@AC-5` leg fills in two parts (amended wording, D-38) | Step 22 (partial 4, then filled 10 at 110), Step 13 (`GetPnL` 100), Step 10 (position 0) |
+| `@AC-4` take-profit leg fill reaches the ledger and realized | Step 24 (ledger event), Step 13 (`GetPnL` 100), Step 10 (fold), Step 21 (real-Postgres leg row) |
+| `@AC-5` leg fills in two parts (amended wording, D-38) | Step 24 (partial 4, then filled 10 at 110), Step 13 (`GetPnL` 100), Step 10 (position 0), Step 21 (real-Postgres emit cursor 4 then 10) |
 
 ## Assumptions made by this spec
 
@@ -36,15 +39,19 @@ Each item is a choice the design left open or a fact found after the design was 
 - **A-2 Skipped payloads.** A fill payload with `qty == 0` or an empty `order_id`, `user_id` or `symbol` is skipped before any DB call and returns nil. Basis: `processOrderFill` already skips a payload it cannot use (`portfolio_service.go:374-375`), and the 294 `@AC-56` fixture delivers an `order.partially_filled` shape (`qty` 0) for `ord-56` ahead of its `order.filled` (`portfolio_telemetry_test.go:495-496`); if that event took the applied key, the real fill would count `acked` and `@AC-56`'s "4 ok" would break. The skip check lands in Step 9, together with the applied key it protects, not in Step 7: the existing `fillEvent` fixture carries no `order_id` (`portfolio_fill_errors_test.go:24-34`), so a skip in Step 7 would turn the three DB-error tests at `:67-109` red until Step 10 repairs the fixture.
 - **A-3 `GetOrder` fallback cap.** D-11 says "capped" but no number is in `debate.md` (**Not found**). The spec uses a Go constant `legGetOrderFallbackCap = 5` per account per tick, following the constant precedent `appendMaxAttempts` (`trading.go:3935`).
 - **A-4 IBKR leg status.** `alpacaStatusToProto` (`trading.go:3907`) matches only Alpaca's lowercase vocabulary, and IBKR passes `o.Status` through raw (`ibkr.go:443,479`). **Not found**: any IBKR status normaliser. Under D-19 an IBKR `Filled` would read as unrecognised and never emit, which fails the product spec's broker scope (C-2). The leg observer therefore lower-cases the broker status before mapping it. `Cancelled` (IBKR spelling) stays unrecognised and non-terminal, which is the safe side. If this is rejected, `@AC-4` and `@AC-5` hold for Alpaca only.
-- **A-5 Trading repo dbtests.** The round-10 tests 8-9 are named "repo dbtest", but trading has no `dbtest` file and CI has no trading DB job (**Not found**: `grep -rn 'go:build dbtest' services/xstockstrat-trading` and `grep -n 'TRADING_DB_TEST' .github/workflows/ci.yml` return nothing). Step 20 covers both queries with pgxmock SQL-shape tests in `trading_repo_test.go`, where the existing `KnownBrokerOrderIDs` and `NetFilledQtyBySymbol` tests live (`:101-219`). A real-Postgres proof would need a new CI job, which the design does not include.
+- **A-5 Trading repo dbtests (amended by the 2026-11-21 operator ruling).** The round-10 tests 8-9 are named "repo dbtest"; the first spec covered them with pgxmock only, because trading had no `dbtest` file and CI had no trading DB job (**Not found** then: `git ls-tree -r --name-only fb52065c services/xstockstrat-trading/internal/repository | grep -c dbtest` → 0; `grep -n 'TRADING_DB_TEST' .github/workflows/ci.yml` → nothing). The operator ruled "Add to 311's scope" (`context.md`, "operator rulings on cutover and CI scope"). Step 20 keeps its pgxmock SQL-shape tests in `trading_repo_test.go` as the fast unit layer. Step 21 adds the real-Postgres cases and Step 22 adds the CI job `trading-db-test`, so a wrong `UNION`, `DISTINCT ON`, sign or `ON CONFLICT` no longer passes unnoticed.
 - **A-6 Floor failure.** "A stamp or load error keeps the consumer from starting" is implemented as a retry every `streamRetryDelay` (`portfolio_service.go:248`) until it succeeds or the context ends; no fill is consumed before it succeeds.
 - **A-7 Broker call bound.** Leg `ListOrders` and `GetOrder` calls use `alpacaCallContext` (`trading.go:1476`), as the parent poll does at `:1866`. Feature 347 landed after recon; its `@AC-34` ("The fill poller does not stall on a throttled Alpaca account") is a PRESERVE the design did not see.
 - **A-8 `bracket_legs` columns.** `design.md` § 2 lists the columns in short form. The spec adds `order_id`, `user_id`, `trading_mode` (round-8 synthesis: "the join fills every parent-derived column `ActivateBracket` writes") and `not_found_ticks` (round-4 synthesis, D-26). `resizeBracket` blanks the `order_brackets` leg ids (`trading.go:3721`), so a leg row must carry its own parent data to emit.
 - **A-9 Orphans.** Step 9 leaves `PortfolioRepo.GetRealizedAccum`, `GetFeesAccum`, `ClosePosition` and `UpsertPosition` without a production caller. Step 9 deletes them and Step 10 re-points their tests.
-- **A-10 Analysis consumer.** `services/xstockstrat-analysis/app/engine/pnl_pattern_consumer.py:48-49` consumes `order.filled` and `order.partially_filled`. Leg events will reach it with an `order_id` that is a broker leg id. The design does not cover this (O-30 lists only the AC ids). No step changes analysis; Step 27 records it in the trading findings. Checked on `origin/main-dev@fb52065c`: `_handle_order_event` (`pnl_pattern_consumer.py:348-404`) reads `order_id` with `payload.get("order_id", "")` and only stores it; `analysis.order_snapshots.order_id` is `TEXT NOT NULL` with no foreign key and no unique constraint (`migrations/016_order_snapshots_pnl_patterns.up.sql:12,25-26`), and the insert conflicts only on `(event_id, event_ts)`. The window key is `(user_id, account_id, symbol, trading_mode)`, not the order. An unknown `order_id` is therefore stored, not rejected. Residual: a leg fill that arrives when no window is open opens one, as any fill does today (`:388-402`); whether a leg fill can arrive after its position's close event was not checked.
+- **A-10 Analysis consumer.** `services/xstockstrat-analysis/app/engine/pnl_pattern_consumer.py:48-49` consumes `order.filled` and `order.partially_filled`. Leg events will reach it with an `order_id` that is a broker leg id. The design does not cover this (O-30 lists only the AC ids). No step changes analysis; Step 29 records it in the trading findings. Checked on `origin/main-dev@fb52065c`: `_handle_order_event` (`pnl_pattern_consumer.py:348-404`) reads `order_id` with `payload.get("order_id", "")` and only stores it; `analysis.order_snapshots.order_id` is `TEXT NOT NULL` with no foreign key and no unique constraint (`migrations/016_order_snapshots_pnl_patterns.up.sql:12,25-26`), and the insert conflicts only on `(event_id, event_ts)`. The window key is `(user_id, account_id, symbol, trading_mode)`, not the order. An unknown `order_id` is therefore stored, not rejected. Residual: a leg fill that arrives when no window is open opens one, as any fill does today (`:388-402`); whether a leg fill can arrive after its position's close event was not checked.
 - **A-11 Tick record for acked fills.** An acked fill goes through `consumerSignal.handled`, so the throttled "loop tick ok" record keeps flowing during boot replay.
 - **A-12 Feature directory.** The task text names the directory with a doubled prefix; the real path is `docs/roadmap/features/311-fix-position-fold-correctness/`.
 - **A-13 Leg side type.** `BracketLegParent.Side` is the leg's side as a `tradingv1.OrderSide`, the same type as `BracketLegRecord.Side`, so the repository writes both through `sideStr`. `oppositeSide` (`trading.go:3572-3577`) returns the broker wire string and is not passed to the repository. **Not found**: an existing function that returns a flipped `OrderSide` (`git grep 'func .*) tradingv1.OrderSide' services/xstockstrat-trading/internal` returns only `parseSide`, which is unexported in `repository`). Step 19 flips `order.Side` with the same rule as `oppositeSide`.
+- **A-14 Tree for Steps 21-22.** Their evidence was read on `origin/main-dev@fb52065c`, the spec's tree, and re-checked against the tip `origin/main-dev@2b2dec92` (22 commits later). Every file Steps 21-22 cite is unchanged between the two: `.github/workflows/ci.yml`, `docs/patterns/ci-overview.md`, `scripts/db-migrate.sh`, `services/xstockstrat-trading/.golangci.yml`, `services/xstockstrat-trading/internal/repository/`, `internal/service/mtls_env_test.go`, and the portfolio and marketdata dbtest helpers (`git diff --stat fb52065c origin/main-dev -- <those paths>`). The only trading changes in that range are OpenTelemetry version bumps in `go.mod`, `go.sum` and `internal/telemetry/otel.go`.
+- **A-15 Which trading SQL is new (operator-confirmed 2026-11-26).** The ruling's "fold / duplicate-guard SQL" means the repository-level `trading.bracket_legs` SQL; the operator answered "Yes, repository-level bracket_legs SQL (Recommended)" (`context.md`, session of 2026-11-26). The fold, the duplicate pre-check and the applied-row insert are portfolio SQL and are already proven on a real database by Step 11. Trading's own new SQL in 311 is the `trading.bracket_legs` family: the `ActivateBracket` transaction with its `ON CONFLICT DO NOTHING` duplicate guard, `ListTrackedLegs`, `ListAdoptionCandidates`, `InsertAdoptedLeg`, `RecordLegObservation`, `AdvanceLegEmit`, and the two reconciliation UNIONs. Step 21 covers exactly that family.
+- **A-16 Repository-level cases only.** Step 21 and the job's `./internal/repository/...` pattern stop at the repository. A service-level trading dbtest would need the mTLS `TestMain` environment of `internal/service` (`mtls_env_test.go:22`), and every new SQL statement is in the repository package. Service behaviour stays covered by the fakes of Steps 20, 24 and 27.
+- **A-17 Lint tag.** Step 22 adds `build-tags: [dbtest]` to trading's `.golangci.yml`, as portfolio's has (`:28-29`), so CI lints the Step 21 files. Marketdata's config has no such tag; that gap is not touched.
 
 ## Step Dependencies
 
@@ -57,29 +64,32 @@ Each item is a choice the design left open or a fact found after the design was 
 - Steps 14+15 land together: the test references `broker.ErrOrderNotFound`.
 - Steps 16+17 land together: `appendLedgerEvent` gains a required argument; the two test call sites change with it.
 - Steps 18+19+20 land together: `BracketRepository` gains methods, so `fakeBracketRepo` stops compiling until Step 20 extends it; Step 19 is the only caller of `ActivateBracket`.
-- Steps 21+22 land together: `pollFills` gains a callee that dereferences `bracketRepo`, which breaks fixtures that leave it nil until Step 22 fixes them.
-- Steps 23+24+25 land together: Step 24 is the only caller of the helper and state Step 23 adds, and Step 25 tests both.
+- Step 21 requires Step 18 (the methods and `RetiredLegStatuses`) and Step 2 (the table) and stands alone: it compiles and skips without a database, so it is not an atomic unit with Step 22. Step 22 requires Step 21 (its `-list` verification names the cases) and Step 2. The `trading-db-test` job (Step 22) is where Step 21's cases first run; both are test-only and neither is on the `ci-gate` path of another feature's steps.
+- Step 22 edits the `ci-gate` `needs:` and echo lists of `.github/workflows/ci.yml` (after `marketdata-db-test`). Feature 318 (`implementation-ready`, its Step 9) appends `migration-order-gate` to the same two lists, and feature 324 (`implementation-ready`) checks `ci-gate` membership in its verification (both read from their implementation specs on `origin/main-dev@2b2dec92`). Textual overlap only, in adjacent lines; no migration, proto or config collision. Whichever merges second rebases; `/sdd-execute` re-reads those lines by job name, not by number.
+- Steps 23+24 land together: `pollFills` gains a callee that dereferences `bracketRepo`, which breaks fixtures that leave it nil until Step 24 fixes them.
+- Steps 25+26+27 land together: Step 26 is the only caller of the helper and state Step 25 adds, and Step 27 tests both.
 - Step 1 must be applied before a portfolio image holding Step 3 or later runs. Step 2 must be applied before a trading image holding Step 18 or later runs. `scripts/db-migrate.sh` runs before deploy (PRE_DEPLOY migrator).
 - Step 3 requires Step 1 (tables). Step 7 requires Step 3 (`EnsureFillFloor`). Step 9 requires Steps 3, 5 and 7.
 - Step 11 [test] requires Steps 1, 3, 7 and 9, and is the second test step for Steps 3 and 9.
-- Step 18 requires Step 2. Step 21 requires Steps 14, 16 and 18. Step 24 requires Steps 21 and 23.
+- Step 18 requires Step 2. Step 23 requires Steps 14, 16 and 18. Step 26 requires Steps 23 and 25.
 - Step 13 covers the `GetPnL` half of `@AC-4` and `@AC-5`; it depends only on Step 12.
-- Step 26 requires Steps 1-25: the runbook names the tables, log line and statuses they create.
+- Step 29 requires Steps 21 and 22: its `ci-overview.md` row names the job and the cases they add.
+- Step 28 requires Steps 1-27: the runbook names the tables, log line and statuses they create.
 - Migration numbers: portfolio `019` and trading `012` were free on `origin/main-dev@fb52065c` (max `018_watchlist_signal_expiry`, `011_offline_fees_snapshot_headers`). Feature 318 (`spec-ready`) adds no migration file; it is a CI ordering gate. `/sdd-execute` must re-run `ls services/xstockstrat-portfolio/migrations services/xstockstrat-trading/migrations` after BRANCH SYNC and renumber if either is taken. Other features' unmerged branches were not checked.
 - Line numbers: every `file:line` in this spec is from `origin/main-dev@fb52065c`. A tree older than feature 347 lacks `alpacaCallContext` and `broker.ErrRateLimited` and has `processOrderFill` a few lines earlier, so these numbers do not match it. `broker.ErrOrderNotFound` exists on neither tree; Step 14 creates it. Hard step for `/sdd-execute`: after BRANCH SYNC, and before each step's edit, locate every cited site by symbol name; when a line number and a symbol disagree, the symbol wins and the difference goes in the Deviation Log.
 - Consumer surfaces (C-14): `xstockstrat-ui` `/trader` and `xstockstrat-agent` `get_positions` get no step. They are read-only consumers of the folded rows (`design.md` § 6); this was verified by the acceptance-suite scan recorded in the Execution Summary. No follow-up feature is named because no change to either surface is planned.
 - `merge-order.md:430` records a textual overlap on `trading.go` between 311, 312 and 321. Whichever merges second rebases. The impl-spec overlap scan also found same-file overlaps from product-spec evidence only: `portfolio_service.go` with 312 (the `alpaca-default` fallback at `:434-437`, the same lines Step 9 keeps), 315, 317 and 326; `trading.go` with 315 and 321; `trading_repo.go` with 321. None is a migration, proto or config collision. Step 9 keeps the `alpaca-default` fallback's behaviour, so if 312 merges first, Step 9 builds `acctID` on 312's version of those lines.
 - Gating preconditions for `/sdd-execute`:
   - `context.md` is far over the 65536-byte limit, so `/sdd-distill fix-position-fold-correctness` must run before the first step.
-  - The adoption-only throttle (D-50) is an orchestrator assumption, not an operator ruling. `/sdd-execute` must not start Step 23, 24 or 25 until the operator has confirmed or overturned it; Steps 1-22 do not depend on it.
-- Integration: the cutover (Step 26's runbook) runs at the first deploy of a post-`019` portfolio image to each staging target, with "portfolio stopped, `T_stop` recorded, `main-dev` frozen" as a checklist item in the integration PR body. Production is check-only before the first promotion. The O-61 operator confirmations (`design.md` § Open Risks) are answered before that step.
+  - The adoption-only throttle (D-50) was an orchestrator assumption. The operator confirmed it on 2026-11-21 (`context.md`, "operator ruling on D-50"), so the Step 25 gate is cleared and Steps 25-27 may run.
+- Integration: the cutover (Step 28's runbook) runs at the first deploy of a post-`019` portfolio image to each staging target, with "portfolio stopped, `T_stop` recorded, `main-dev` frozen" as a checklist item in the integration PR body. Production is check-only before the first promotion. The O-61 operator confirmations (`design.md` § Open Risks) are answered before that step.
 - C-16 promotion of the EXTEND and CHANGE scenarios (`design.md` § Business Rules Touched) happens at integration through `/sdd-execute`'s promotion step, read from `origin/feature/fix-position-fold-correctness` (fails.md 2026-11-18, feature 359).
 
 ---
 
 ### Step 1 — migration: portfolio `019_fill_applied_events`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/migrations/019_fill_applied_events.up.sql` — create
@@ -117,7 +127,7 @@ grep -ci 'insert into\|create trigger' services/xstockstrat-portfolio/migrations
 
 ### Step 2 — migration: trading `012_bracket_legs`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/migrations/012_bracket_legs.up.sql` — create
@@ -161,7 +171,7 @@ grep -ci 'insert into' services/xstockstrat-trading/migrations/012_bracket_legs.
 
 ### Step 3 — service: portfolio fill-apply repository seam and floor
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/repository/fill_apply_repo.go` — create
@@ -172,7 +182,7 @@ grep -ci 'insert into' services/xstockstrat-trading/migrations/012_bracket_legs.
 - `internal/repository/portfolio_repo.go:23-27`: `queryRower` has `QueryRow`, `Query`, `Exec` and no `Begin`. `:30-35` `PortfolioRepo{pool; db queryRower}`. `:50` `NewPortfolioRepoWithDB(db queryRower)` leaves `pool` nil, and the service dbtests build the repo this way over a real pool (`internal/service/position_drain_dbtest_test.go:54`), so the transaction must start from `r.db`, not `r.pool`.
 - `internal/repository/pool.go:29-31`: `DB_PGBOUNCER` switches to `QueryExecModeExec`; only a transaction-scoped lock is safe.
 - `portfolio_repo.go:62-70`: the position row's write columns and the conflict target `(user_id, symbol, trading_mode, account_id)`.
-- **Not found**: `pg_advisory`, `FOR UPDATE` or `Begin` anywhere in `internal/repository/`.
+- Existing transactions in `internal/repository/` all start from `r.pool` or a `*pgxpool.Pool` argument, never from `r.db`: `watchlist_repo.go:39,194,301,325,350,388` and `signal_expiry_repo.go:62`, `delisted_removal_repo.go:76` (`r.pool.Begin`), `signal_expiry_backfill.go:131,229` (`pool.BeginTx`). Row locks exist only as `FOR UPDATE SKIP LOCKED` (`signal_expiry_repo.go:90,152`, `delisted_removal_repo.go:118`). `portfolio_repo.go` has no `Begin`. **Not found**: `pg_advisory` anywhere in `internal/repository/`.
 
 **Lands with**: `Step 4`
 
@@ -209,7 +219,7 @@ grep -n 'Begin' services/xstockstrat-portfolio/internal/repository/portfolio_rep
 
 ### Step 4 — test: fill-apply repository (pgxmock)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/repository/fill_apply_repo_test.go` — create
@@ -252,7 +262,7 @@ New logic is in an excluded package (`repository`) — no coverage threshold app
 
 ### Step 5 — service: portfolio `emitEventAs` returns an error and takes a key
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/service/portfolio_service.go` — modify
@@ -261,9 +271,10 @@ New logic is in an excluded package (`repository`) — no coverage threshold app
 **Reviewers**: xstockstrat-portfolio owner — position snapshot consistency
 
 **Codebase Evidence**:
-- `portfolio_service.go:1366-1368` `emitEvent` calls `s.emitEventAs(ctx, "", eventType, streamKey, payload)`.
-- `:1371` `func (s *PortfolioService) emitEventAs(ctx, ownerUserID, eventType, streamKey string, payload map[string]interface{})` has no return value; `:1385` sets `IdempotencyKey: uuid.NewString()`; `:1393-1407` retry loop; `:1408` WARN "ledger append failed".
-- Call sites, from `grep -rn 'emitEventAs(' services/xstockstrat-portfolio --include=*.go`: `portfolio_service.go:1367`, `signal_prune.go:60`, `signal_prune.go:70`. No test calls it directly.
+- `portfolio_service.go:1374-1376` `emitEvent` calls `s.emitEventAs(ctx, "", eventType, streamKey, payload)`.
+- `:1379` `func (s *PortfolioService) emitEventAs(ctx, ownerUserID, eventType, streamKey string, payload map[string]interface{})` has no return value; `:1393` sets `IdempotencyKey: uuid.NewString()`; `:1399-1415` retry loop; `:1416` WARN "ledger append failed".
+- `:1353-1372` `emitRiskAlert(ctx, userID, eventType, extra, msg)` calls `s.emitEventAs(ctx, userID, eventType, "portfolio:risk", payload)` at `:1360`, then `s.notify.EmitAlert`; its callers are `checkRiskLimits` (`:1338`, `:1347`) and `portfolio_quote_deadline_test.go:620`.
+- Call sites, from `grep -rn 'emitEventAs(' services/xstockstrat-portfolio --include=*.go`: `portfolio_service.go:1360` (`emitRiskAlert`), `portfolio_service.go:1375` (`emitEvent`), `signal_prune.go:60`, `signal_prune.go:70`. No test calls it directly.
 
 **Lands with**: `Step 6`
 
@@ -272,9 +283,9 @@ New logic is in an excluded package (`repository`) — no coverage threshold app
 **Covers**: —
 
 **Instructions**:
-1. Change the signature to `emitEventAs(ctx, ownerUserID, eventType, streamKey, idempotencyKey string, payload map[string]interface{}) error` (D-21). An empty `idempotencyKey` keeps today's `uuid.NewString()`. Return the last error; return `ctx.Err()` where the loop returns on `ctx.Done()`. Keep the WARN at `:1408`.
+1. Change the signature to `emitEventAs(ctx, ownerUserID, eventType, streamKey, idempotencyKey string, payload map[string]interface{}) error` (D-21). An empty `idempotencyKey` keeps today's `uuid.NewString()`. Return the last error; return `ctx.Err()` where the loop returns on `ctx.Done()`. Keep the WARN at `:1416`.
 2. `emitEvent` stays the fail-soft wrapper: it passes `""` for the key and discards the error.
-3. `signal_prune.go:60` and `:70`: pass `""` for the key and discard the error (`_ =`), so their behaviour is unchanged.
+3. `signal_prune.go:60` and `:70`, and `emitRiskAlert` at `portfolio_service.go:1360`: pass `""` for the key and discard the error (`_ =`), so their behaviour is unchanged (`emitRiskAlert` still calls `EmitAlert` after the append).
 4. Do not change any other emit site in this step.
 
 **Verification**:
@@ -288,7 +299,7 @@ cd services/xstockstrat-portfolio && GOWORK=off golangci-lint run --modules-down
 
 ### Step 6 — test: keyed emit and its error return
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/service/portfolio_emit_key_test.go` — create
@@ -323,7 +334,7 @@ New logic is in an excluded package (`service`) — no coverage threshold applie
 
 ### Step 7 — service: fill floor at boot and `observed()` sentinels
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/service/portfolio_service.go` — modify
@@ -331,13 +342,13 @@ New logic is in an excluded package (`service`) — no coverage threshold applie
 **Reviewers**: xstockstrat-portfolio owner — concurrent write safety, position snapshot consistency
 
 **Codebase Evidence**:
-- `portfolio_service.go:179-181` `ConsumeOrderFills` wraps the handler as `s.observed("order fill", "ok", s.processOrderFill)`; it does not use `boundedRetry`.
+- `portfolio_service.go:178-180` `ConsumeOrderFills` wraps the handler as `s.observed("order fill", "ok", s.processOrderFill)`; it does not use `boundedRetry`.
 - `:234-245` `observed` counts `"error"` and returns the error, or calls `sig.handled(ctx, okOutcome, …)`.
-- `:1574-1576`: `boundedRetry` logs `slog.ErrorContext(ctx, "event parked", "event_id", …, "sequence", …, "stream_key", …, "consumer", …, "attempts", …, "error", err)` and counts `"parked"`.
+- `:1550` `boundedRetry`; `:1582-1584`: it logs `slog.ErrorContext(ctx, "event parked", "event_id", …, "sequence", …, "stream_key", …, "consumer", …, "attempts", …, "error", err)` and counts `"parked"`.
 - `:975` `ErrFillUnattributable`; `:929` `ErrLedgerUnavailable`.
 - `:376-397` `processOrderFill` parses the payload before any DB call. `:248` `streamRetryDelay`; `:253` `sleepFor`.
 - `packages/proto/ledger/v1/ledger.proto:30`: `LedgerEvent.recorded_at` is the server write time.
-- Other consumers keep boot replay from 0 (`:1468-1470`, `:1480-1482`, `:1734`, `:1782`); this step does not touch them (290 `@AC-3`).
+- Other consumers keep boot replay from 0 (`:1477`, `:1489`, `:1743`, `:1791`); this step does not touch them (290 `@AC-3`).
 
 **Lands with**: `Step 8`
 
@@ -347,7 +358,7 @@ New logic is in an excluded package (`service`) — no coverage threshold applie
 
 **Instructions**:
 1. Add the unexported sentinel `errFillAcked` and a `fillFloor time.Time` field on `PortfolioService`. The zero value folds everything, so struct-literal test fixtures keep working.
-2. `ConsumeOrderFills`: before `consumeEventStream`, call `s.repo.EnsureFillFloor(ctx)` (Step 3). On error log ERROR and retry after `s.sleepFor(streamRetryDelay)` until it succeeds or `ctx` is done (A-6); never start the stream without a floor. On success set `s.fillFloor` and log INFO `order fill floor loaded` with `floor` and `stamped_now`. The cutover runbook (Step 26) records this line.
+2. `ConsumeOrderFills`: before `consumeEventStream`, call `s.repo.EnsureFillFloor(ctx)` (Step 3). On error log ERROR and retry after `s.sleepFor(streamRetryDelay)` until it succeeds or `ctx` is done (A-6); never start the stream without a floor. On success set `s.fillFloor` and log INFO `order fill floor loaded` with `floor` and `stamped_now`. The cutover runbook (Step 28) records this line.
 3. `processOrderFill`, directly after the payload parse and the stop-store update (`:393-397`):
    - Floor (D-35): when `event.GetRecordedAt().AsTime().Before(s.fillFloor)`, return `errFillAcked` with zero DB calls. A fill in the floor's own millisecond is not before it, so it folds.
 4. `observed()`: handle the fill consumer's sentinels in place (D-12):
@@ -368,7 +379,7 @@ cd services/xstockstrat-portfolio && GOWORK=off golangci-lint run --modules-down
 
 ### Step 8 — test: floor and sentinel handling
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/service/portfolio_fill_floor_test.go` — create
@@ -410,7 +421,7 @@ New logic is in an excluded package — no coverage threshold applies.
 
 ### Step 9 — service: exactly-once, signed fill path
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/service/portfolio_service.go` — modify
@@ -419,11 +430,11 @@ New logic is in an excluded package — no coverage threshold applies.
 **Reviewers**: xstockstrat-portfolio owner — P&L calculation accuracy, concurrent write safety
 
 **Codebase Evidence**:
-- `portfolio_service.go:399-405` takes `positionsMu`; `:409` `s.repo.GetPosition` (non-transactional); `:420-432` unsigned add with `if fill.Qty > 0 { // buying more`; `:434-437` `alpaca-default` fallback; `:445` `pnl.RealizedDelta`; `:448-470` close branch with `GetRealizedAccum` (`:455`), `GetFeesAccum` (`:460`), `ClosePosition` (`:466`) and the `portfolio.position.closed` emit; `:472` `UpsertPosition`; `:485-488` unlock, then `checkRiskLimits` and `broadcastSnapshot`.
+- `portfolio_service.go:399-405` takes `positionsMu`; `:409` `s.repo.GetPosition` (non-transactional); `:421-434` unsigned add with `if fill.Qty > 0 { // buying more` (`:423`); `:436-439` `alpaca-default` fallback (`:438`); `:445` `pnl.RealizedDelta`; `:448-471` close branch with `GetRealizedAccum` (`:455`), `GetFeesAccum` (`:460`), `ClosePosition` (`:466`) and the `portfolio.position.closed` emit (`:469-470`); `:472` `UpsertPosition`; `:485-488` unlock, then `checkRiskLimits` and `broadcastSnapshot`.
 - `:494-506` `closedPositionPayload` is the producer contract (`services/xstockstrat-portfolio/docs/position-closed-contract.md`); base keys must not change (029 `@AC-10`, 042, ui `strategy-performance-dashboard.feature:48`).
 - `:1068-1077` `signedQty(side, qty)`; `:1080-1110` `orderSide(ctx, orderID)` returns `ErrFillUnattributable` or a wrapped `ErrLedgerUnavailable`.
 - `packages/proto/pnl/pnl.go:54` `FoldFrom(baseline map[string]Lot, fills []Fill) FoldResult`; `:80-92` handles a flip through zero; `:43` `QtyEpsilon`.
-- Lock sites that stay: `:1602-1603` (`processAccountDeregistered`), `:1649-1650` (`processPositionSync`).
+- Lock sites that stay: `:1610-1611` (`processAccountDeregistered`), `:1657-1658` (`processPositionSync`).
 - Remaining callers, from `grep -rn '\.UpsertPosition(\|\.ClosePosition(\|\.GetRealizedAccum(\|\.GetFeesAccum(' services/xstockstrat-portfolio --include=*.go`: the four fill-path lines above, `portfolio_repo_test.go:113,137` (`GetFeesAccum`) and `position_drain_dbtest_test.go:67` (`UpsertPosition`, a seed).
 
 **Lands with**: `Step 10`
@@ -476,7 +487,7 @@ cd services/xstockstrat-portfolio && GOWORK=off golangci-lint run --modules-down
 
 ### Step 10 — test: fill-path regression suite (pgxmock)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/service/portfolio_fill_fold_test.go` — create
@@ -486,6 +497,7 @@ cd services/xstockstrat-portfolio && GOWORK=off golangci-lint run --modules-down
 - `services/xstockstrat-portfolio/internal/service/portfolio_telemetry_test.go` — modify
 - `services/xstockstrat-portfolio/internal/service/portfolio_offline_test.go` — modify
 - `services/xstockstrat-portfolio/internal/service/position_drain_dbtest_test.go` — modify
+- `services/xstockstrat-portfolio/internal/service/portfolio_fill_floor_test.go` — modify
 - `services/xstockstrat-portfolio/internal/repository/portfolio_repo_test.go` — modify
 
 **Reviewers**: xstockstrat-portfolio owner — P&L calculation accuracy, concurrent write safety
@@ -496,6 +508,7 @@ cd services/xstockstrat-portfolio && GOWORK=off golangci-lint run --modules-down
 - `portfolio_helpers_test.go:22-36` `computeNewPosition` is a test-local copy of the buggy add (`recon.md:83`); its tests are at `:42-99`.
 - `portfolio_telemetry_test.go:509-524` `runOrderFillBatch` drives the fill handler over `syncRecorderDB` (`portfolio_offline_test.go:220-236`), which has no `Begin`; `:491-499` the 4-event batch.
 - `portfolio_repo_test.go:97-137` tests `GetFeesAccum`. `position_drain_dbtest_test.go:67` seeds with `repo.UpsertPosition`.
+- Re-spec 2026-11-27 (operator ruling B), from `grep -n 'TestFillFloor_SameMillisecondFolds\|ExpectQuery' portfolio_fill_floor_test.go`: `:42` `TestFillFloor_SameMillisecondFolds`; `:45` `mock.ExpectQuery("FROM portfolio.positions").WithArgs(anyArgs(4)...).WillReturnError(errDBBlip)` expects the old `GetPosition` read as the first DB call. After Step 9 the first DB call past the floor check is `s.repo.FillApplied` (`repository/fill_apply_repo.go:81`), whose SQL (`:84-85`) is `SELECT event_id, outcome, pending_closed::text FROM portfolio.consumer_applied_events WHERE consumer=$1 AND user_id=$2 AND account_id=$3 AND order_id=$4` (`appliedKeyWhere`, `:33`; four args from `FillKey.args()`, `:31`), so the ordered pgxmock rejects `:45` and the package run cannot pass.
 
 **Lands with**: `Step 9`
 
@@ -523,6 +536,7 @@ cd services/xstockstrat-portfolio && GOWORK=off golangci-lint run --modules-down
 5. `portfolio_telemetry_test.go`: make `runOrderFillBatch` use a DB that supports `Begin` (pgxmock, or `syncRecorderDB` given a `Begin`). `TestOrderFillConsumer_AC56_OneTickRecordPerBatch` must still count 4 `ok` and one tick record.
 6. `portfolio_repo_test.go`: delete the `GetFeesAccum` tests. `position_drain_dbtest_test.go:67`: seed with a direct `INSERT`, as `seedPosition` does in `internal/repository/dbtest_helpers_test.go:67-75`.
 7. Fails-ledger rule (2026-11-16, feature 347): before finishing, run the whole package and list any other test that built a fill service with a nil dependency or a `recover()`; none was found by grep in this package, but the run is the proof.
+8. `portfolio_fill_floor_test.go` (created by Step 8): in `TestFillFloor_SameMillisecondFolds` (`:42-54`) change only the `:45` expectation to ``mock.ExpectQuery(`FROM portfolio\.consumer_applied_events`).WithArgs(anyArgs(4)...).WillReturnError(errDBBlip)``. The test's intent is unchanged: a fill stamped exactly at the floor reaches the DB path (now the `FillApplied` pre-check) and is not acked. Change nothing else in the file.
 
 **Verification**:
 ```bash
@@ -538,7 +552,7 @@ New logic is in excluded packages — no coverage threshold applies to it.
 
 ### Step 11 — test: real-Postgres proof for exactly-once (dbtest)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/repository/apply_fill_dbtest_test.go` — create
@@ -585,7 +599,7 @@ Never start a database for this step. Without `PORTFOLIO_DB_TEST_URL`, the compi
 
 ### Step 12 — service: `GetPnL` dedup keyed on account and order
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/service/portfolio_service.go` — modify
@@ -598,7 +612,7 @@ Never start a database for this step. Without `PORTFOLIO_DB_TEST_URL`, the compi
 - `:1013-1020`: the loop that skips a partial when `filledOrderIDs[id]`.
 - `:1027` `s.orderSide(ctx, kept[i].OrderID)` resolves side by the bare order id (ledger stream key).
 - `:1032-1045`: the mixed `account_id` group refusal (251 `@AC-14`).
-- Payload-history check (D-28, required): the only two production emitters take `account_id` from the same `order.AccountId` (`services/xstockstrat-trading/internal/service/trading.go:1935,1956`), and leg events take it from the leg row (Step 21). An order's partial and full fills therefore carry one `account_id` in code. Rows already in a ledger database cannot be checked from the repository; that residual stays open (`design.md` § Open Risks).
+- Payload-history check (D-28, required): the only two production emitters take `account_id` from the same `order.AccountId` (`services/xstockstrat-trading/internal/service/trading.go:1935,1956`), and leg events take it from the leg row (Step 23). An order's partial and full fills therefore carry one `account_id` in code. Rows already in a ledger database cannot be checked from the repository; that residual stays open (`design.md` § Open Risks).
 
 **Lands with**: `Step 13`
 
@@ -622,7 +636,7 @@ cd services/xstockstrat-portfolio && GOWORK=off golangci-lint run --modules-down
 
 ### Step 13 — test: `GetPnL` with bracket-leg fills and two accounts
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/service/portfolio_pnl_legs_test.go` — create
@@ -658,7 +672,7 @@ cd services/xstockstrat-portfolio && GOWORK=off COVERPKGS=$(go list ./... | grep
 
 ### Step 14 — service: broker `ErrOrderNotFound` and IBKR `GetOrder` id match
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/broker/broker.go` — modify
@@ -670,7 +684,7 @@ cd services/xstockstrat-portfolio && GOWORK=off COVERPKGS=$(go list ./... | grep
 **Codebase Evidence**:
 - `internal/broker/broker.go:8-21`: the sentinel block (`ErrInvalidCredentials`, `ErrOutcomeUncertain`, `ErrOrderNotCancelable`, `ErrRateLimited`). **Not found**: `ErrOrderNotFound`.
 - `internal/broker/alpaca.go:431` `func (c *Client) GetOrder`; `:452-454` any non-200 returns `fmt.Errorf("alpaca get order error (status %d): %s", …)`.
-- `alpaca.go:485`: `"%s/v2/orders?status=all&limit=500"` — the list ceiling is an inline literal.
+- `alpaca.go:485`: `"%s/v2/orders?status=all&limit=500"` — the list ceiling is an inline literal. The comment above it (`:483`) also names `limit=500` ("status=all keeps just-filled/canceled orders visible; limit=500 is the bulk-list ceiling."), so a bare `limit=500` grep matches it.
 - `internal/broker/ibkr.go:414-444` `GetOrder` requests `/iserver/account/orders?orderId=…`, fails on an empty `orders` array (`:439-441`) and returns `result.Orders[0]` without comparing ids (`:442-443`).
 - `ibkr.go:448-483` `ListOrders` returns an empty slice with a nil error for a 200 with no orders.
 
@@ -684,7 +698,7 @@ cd services/xstockstrat-portfolio && GOWORK=off COVERPKGS=$(go list ./... | grep
 Broker coverage: this step handles both brokers, differently by design (D-26).
 1. `broker.go`: add `var ErrOrderNotFound = errors.New("broker order not found")` with a one-line comment that only a definitive single-order not-found may wrap it.
 2. `alpaca.go` `GetOrder`: an HTTP 404 returns an error wrapping `ErrOrderNotFound` (`%w`). Every other non-200 is unchanged. `ErrRateLimited` handling inside `c.do` is untouched (feature 347).
-3. `alpaca.go`: replace the `500` literal with an exported constant `ListOrdersLimit = 500` used to build the URL; Step 24 reads the same constant for the complete-list gate (C-18).
+3. `alpaca.go`: replace the `500` literal with an exported constant `ListOrdersLimit = 500` used to build the URL; Step 26 reads the same constant for the complete-list gate (C-18).
 4. `ibkr.go` `GetOrder`: return the entry whose `OrderID` equals `brokerOrderID`. If none matches, return an ordinary error that does not wrap `ErrOrderNotFound` (R-11, D-18). An empty list stays an ordinary error.
 5. Do not change `ListOrders` on either broker. Order types, trading mode and fill-state handling are unaffected by this step.
 
@@ -692,7 +706,7 @@ Broker coverage: this step handles both brokers, differently by design (D-26).
 ```bash
 cd services/xstockstrat-trading && GOWORK=off go build ./...
 grep -n 'Orders\[0\]' services/xstockstrat-trading/internal/broker/ibkr.go   # none
-grep -n 'limit=500' services/xstockstrat-trading/internal/broker/alpaca.go   # none
+grep -n 'status=all&limit=500' services/xstockstrat-trading/internal/broker/alpaca.go   # none: the URL uses ListOrdersLimit (the :483 comment may keep its wording)
 cd services/xstockstrat-trading && GOWORK=off golangci-lint run --modules-download-mode=mod
 ```
 
@@ -700,7 +714,7 @@ cd services/xstockstrat-trading && GOWORK=off golangci-lint run --modules-downlo
 
 ### Step 15 — test: broker not-found and id match
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/broker/alpaca_test.go` — modify
@@ -736,7 +750,7 @@ cd services/xstockstrat-trading && GOWORK=off COVERPKGS=$(go list ./... | grep -
 
 ### Step 16 — service: `appendLedgerEvent` takes the idempotency key
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/service/trading.go` — modify
@@ -744,9 +758,9 @@ cd services/xstockstrat-trading && GOWORK=off COVERPKGS=$(go list ./... | grep -
 **Reviewers**: xstockstrat-trading owner — order execution correctness
 
 **Codebase Evidence**:
-- `trading.go:3945` `func (s *TradingService) appendLedgerEvent(ctx context.Context, eventType, streamKey, userID string, payload map[string]interface{}) error`; `:3957` `IdempotencyKey: uuid.NewString()`.
-- Call sites, from `grep -rn 'appendLedgerEvent(' services/xstockstrat-trading --include=*.go`: `trading.go:1123`, `trading.go:3989` (inside `emitLedgerEvent`), `trading_offline_test.go:2215`, `trading_offline_test.go:2228`.
-- `:3988-3992` `emitLedgerEvent` is the fail-soft wrapper.
+- `trading.go:3953` `func (s *TradingService) appendLedgerEvent(ctx context.Context, eventType, streamKey, userID string, payload map[string]interface{}) error`; `:3965` `IdempotencyKey: uuid.NewString()`.
+- Call sites, from `grep -rn 'appendLedgerEvent(' services/xstockstrat-trading --include=*.go`: `trading.go:1123`, `trading.go:3997` (inside `emitLedgerEvent`), `trading_offline_test.go:2215`, `trading_offline_test.go:2228`.
+- `:3996-4000` `emitLedgerEvent` is the fail-soft wrapper.
 
 **Lands with**: `Step 17`
 
@@ -756,7 +770,7 @@ cd services/xstockstrat-trading && GOWORK=off COVERPKGS=$(go list ./... | grep -
 
 **Instructions**:
 1. Add an `idempotencyKey string` parameter after `userID`. An empty value keeps `uuid.NewString()` (R-5: one function, the key is a parameter).
-2. `trading.go:1123` and `:3989` pass `""`. Do not change `emitLedgerEvent`'s signature.
+2. `trading.go:1123` and `:3997` pass `""`. Do not change `emitLedgerEvent`'s signature.
 3. Keep the retry loop, the timeout and the `RecordLedgerEmit` calls as they are (294 `@AC-4`).
 
 **Verification**:
@@ -770,7 +784,7 @@ cd services/xstockstrat-trading && GOWORK=off golangci-lint run --modules-downlo
 
 ### Step 17 — test: keyed ledger append
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/service/trading_offline_test.go` — modify
@@ -803,7 +817,7 @@ New logic is in an excluded package — no coverage threshold applies.
 
 ### Step 18 — service: `trading.bracket_legs` repository and reconciliation UNIONs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/repository/bracket_repo.go` — modify
@@ -812,8 +826,8 @@ New logic is in an excluded package — no coverage threshold applies.
 **Reviewers**: xstockstrat-trading owner — fill detection, order execution correctness
 
 **Codebase Evidence**:
-- `internal/repository/bracket_repo.go:30-38` `BracketRepository` has `CreateBracket`, `GetBracketByOrderID`, `UpdateBracketStatus`, `ReArmProtection`, `ListExpiredProtection`. `:40-42` `pgBracketRepo{pool *pgxpool.Pool}`; `:45` `NewBracketRepo(pool *pgxpool.Pool)`. **Not found**: a mock seam or a test file for this repo.
-- `:88-97` `UpdateBracketStatus` writes `stop_leg_order_id = NULLIF($3,'')` and `take_profit_leg_order_id = NULLIF($4,'')`.
+- `internal/repository/bracket_repo.go:30-38` `BracketRepository` has `CreateBracket`, `GetBracketByOrderID`, `UpdateBracketStatus`, `ReArmProtection`, `ListExpiredProtection`. `:41-43` `pgBracketRepo{pool *pgxpool.Pool}`; `:46` `NewBracketRepo(pool *pgxpool.Pool)`. **Not found**: a mock seam or a test file for this repo.
+- `:91-100` `UpdateBracketStatus` (the `$3`/`$4` leg-id parameters are at `:94-95`) writes `stop_leg_order_id = NULLIF($3,'')` and `take_profit_leg_order_id = NULLIF($4,'')`.
 - `internal/repository/trading_repo.go:130-163` `KnownBrokerOrderIDs` unions `trading.orders.broker_order_id` with both `order_brackets` leg columns.
 - `:171-200` `NetFilledQtyBySymbol` sums `CASE WHEN side = 'sell' THEN -filled_qty ELSE filled_qty END` over a `DISTINCT ON (order_id)` subquery.
 - `:436-441` `sideStr(tradingv1.OrderSide) string` returns `"sell"` or `"buy"`; `:500-503` `parseSide`.
@@ -827,7 +841,7 @@ New logic is in an excluded package — no coverage threshold applies.
 
 **Instructions**:
 1. `bracket_repo.go`: change `pgBracketRepo.pool` to a small interface with `Begin`, `Query`, `QueryRow` and `Exec`, satisfied by `*pgxpool.Pool` and pgxmock. `NewBracketRepo(pool *pgxpool.Pool)` keeps its signature.
-2. Statuses for `bracket_legs.status`, as exported constants: tracked `OPEN`; retired `FILLED`, `CANCELED`, `EXPIRED`, `REJECTED`, `UNKNOWN`, `BASELINE_RETIRED`, `NOT_OPEN_AT_ADOPTION` (R-35 keeps `UNKNOWN` and the tombstone apart). Export the retired set once, as `RetiredLegStatuses []string`, and bind it into every predicate as `status <> ALL($n)`; no SQL text repeats the list (C-10, C-18).
+2. Statuses for `bracket_legs.status`, as exported constants of package `repository`: tracked `LegStatusOpen = "OPEN"`; retired `LegStatusFilled = "FILLED"`, `LegStatusCanceled = "CANCELED"`, `LegStatusExpired = "EXPIRED"`, `LegStatusRejected = "REJECTED"`, `LegStatusUnknown = "UNKNOWN"`, `LegStatusBaselineRetired = "BASELINE_RETIRED"`, `LegStatusNotOpenAtAdoption = "NOT_OPEN_AT_ADOPTION"` (R-35 keeps `UNKNOWN` and the tombstone apart). Later steps and tests refer to these identifiers, not to the strings. Export the retired set once, as `RetiredLegStatuses []string`, and bind it into every predicate as `status <> ALL($n)`; no SQL text repeats the list (C-10, C-18).
 3. `BracketLegRecord{AccountID, LegOrderID, OrderID, UserID, TradingMode, Symbol string; Side tradingv1.OrderSide; FilledQty, ObservedFilledQty float64; Status string; NotFoundTicks int; Adopted bool}`. Write `side` through `sideStr` and read it through `parseSide` (D-37).
 4. Add to `BracketRepository` and implement on `pgBracketRepo`:
    - `ActivateBracket(ctx, id string, stopLegID, takeProfitLegID string, parent BracketLegParent) error` — one transaction: the `UpdateBracketStatus` UPDATE with status ACTIVE and the two leg ids, then one `INSERT INTO trading.bracket_legs … ON CONFLICT (account_id, leg_order_id) DO NOTHING` per non-empty leg id with `filled_qty = 0`, `observed_filled_qty = 0`, `status = 'OPEN'`, `adopted = false` (D-14, D-19, R-13). `BracketLegParent{AccountID, OrderID, UserID, TradingMode, Symbol string; Side tradingv1.OrderSide}` carries the parent's account, order id, user, trading mode and symbol; `Side` is the leg's side, already flipped by the caller, and is written through `sideStr` like `BracketLegRecord.Side` (A-13).
@@ -852,7 +866,7 @@ cd services/xstockstrat-trading && GOWORK=off golangci-lint run --modules-downlo
 
 ### Step 19 — service: `ActivateBracket` at the three ACTIVE writes
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/service/trading.go` — modify
@@ -860,11 +874,11 @@ cd services/xstockstrat-trading && GOWORK=off golangci-lint run --modules-downlo
 **Reviewers**: xstockstrat-trading owner — order execution correctness, fill detection
 
 **Codebase Evidence**:
-- `trading.go:3680` (Alpaca, `createBracket`): `s.bracketRepo.UpdateBracketStatus(ctx, rec.ID, bracketStatusActive, brokerOrder.StopLegOrderID, brokerOrder.TakeProfitLegOrderID, "")`; an error is a WARN only (`:3681`).
-- `:3697` (IBKR, `createBracket`): the same call with `resp.StopLegOrderID`, `resp.TakeProfitLegOrderID`.
-- `:3739` (IBKR, `resizeBracket`): the same call after `ReArmProtection` (`:3724`) and the resubmit (`:3728-3731`).
-- `:3610-3625` `emitBracketFailureAlert(ctx, order, reason)`; `:3572-3577` `oppositeSide(tradingv1.OrderSide) string` returns `"buy"` or `"sell"`.
-- `:3559-3568` the `bracketStatus*` constants.
+- `trading.go:3688` (Alpaca, `createBracket`): `s.bracketRepo.UpdateBracketStatus(ctx, rec.ID, bracketStatusActive, brokerOrder.StopLegOrderID, brokerOrder.TakeProfitLegOrderID, "")`; an error is a WARN only (`:3689`).
+- `:3705` (IBKR, `createBracket`): the same call with `resp.StopLegOrderID`, `resp.TakeProfitLegOrderID`.
+- `:3747` (IBKR, `resizeBracket`): the same call after `ReArmProtection` (`:3732`) and the resubmit (`:3736-3739`).
+- `:3618-3632` `emitBracketFailureAlert(ctx, order, reason)`; `:3580-3585` `oppositeSide(tradingv1.OrderSide) string` returns `"buy"` or `"sell"`.
+- `:3568-3576` the `bracketStatus*` constants.
 
 **Lands with**: `Step 18, Step 20`
 
@@ -873,11 +887,11 @@ cd services/xstockstrat-trading && GOWORK=off golangci-lint run --modules-downlo
 **Covers**: —
 
 **Instructions**:
-Broker coverage: both brokers are handled here — the Alpaca atomic path at `:3680` and the IBKR paths at `:3697` and `:3739`. Order type and trading-mode handling are unaffected by this step.
-1. Replace each of the three ACTIVE `UpdateBracketStatus` calls with `s.bracketRepo.ActivateBracket(...)`, passing the leg ids and a parent built from `order` (account, order id, user, `order.TradingMode.String()`, symbol) with `Side` set to the leg side as a `tradingv1.OrderSide` (A-13): `ORDER_SIDE_BUY` when `order.Side` is `ORDER_SIDE_SELL`, otherwise `ORDER_SIDE_SELL`, the same rule as `oppositeSide`. Do not pass `oppositeSide`'s string to the repository, and do not change `oppositeSide` or its two broker call sites (`:3687`, `:3729`).
+Broker coverage: both brokers are handled here — the Alpaca atomic path at `:3688` and the IBKR paths at `:3705` and `:3747`. Order type and trading-mode handling are unaffected by this step.
+1. Replace each of the three ACTIVE `UpdateBracketStatus` calls with `s.bracketRepo.ActivateBracket(...)`, passing the leg ids and a parent built from `order` (account, order id, user, `order.TradingMode.String()`, symbol) with `Side` set to the leg side as a `tradingv1.OrderSide` (A-13): `ORDER_SIDE_BUY` when `order.Side` is `ORDER_SIDE_SELL`, otherwise `ORDER_SIDE_SELL`, the same rule as `oppositeSide`. Do not pass `oppositeSide`'s string to the repository, and do not change `oppositeSide` or its two broker call sites (`:3695`, `:3737`).
 2. On an `ActivateBracket` error at any of the three sites: keep the WARN and also `go s.emitBracketFailureAlert(context.WithoutCancel(ctx), order, …)` (D-14). The leg id is then untracked; that residual is accepted (`design.md` § Open Risks).
 3. `resizeBracket`: do not return early when `ActivateBracket` fails. `ReArmProtection` and the resubmit already ran; the `order.bracket_updated` emit that follows stays (R-6).
-4. Leave every non-ACTIVE `UpdateBracketStatus` call (`:1435`, `:3109`, `:3691`, `:3708`, `:3721`, `:3733`) unchanged.
+4. Leave every non-ACTIVE `UpdateBracketStatus` call (`:1435`, `:3117`, `:3699`, `:3716`, `:3729`, `:3741`) unchanged.
 
 **Verification**:
 ```bash
@@ -891,7 +905,7 @@ cd services/xstockstrat-trading && GOWORK=off golangci-lint run --modules-downlo
 
 ### Step 20 — test: bracket-leg persistence, activation and reconciliation queries
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/repository/bracket_repo_test.go` — create
@@ -913,7 +927,7 @@ cd services/xstockstrat-trading && GOWORK=off golangci-lint run --modules-downlo
 **Covers**: —
 
 **Instructions**:
-1. `fakeBracketRepo`: implement the six new methods in memory. `ActivateBracket` updates the bracket and adds leg rows with `filled_qty` 0, skipping empty ids. The retired filter reads `repository.RetiredLegStatuses`; it does not restate the list (O-66). Add error hooks for `ActivateBracket`, `ListAdoptionCandidates` and `InsertAdoptedLeg` (used by Steps 22 and 25).
+1. `fakeBracketRepo`: implement the six new methods in memory. `ActivateBracket` updates the bracket and adds leg rows with `filled_qty` 0, skipping empty ids. The retired filter reads `repository.RetiredLegStatuses`; it does not restate the list (O-66). Add error hooks for `ActivateBracket`, `ListAdoptionCandidates` and `InsertAdoptedLeg` (used by Steps 24 and 27).
 2. `bracket_repo_test.go` (pgxmock, in package): `ActivateBracket` runs Begin, the UPDATE, one INSERT per non-empty leg id with `filled_qty` 0, Commit; an empty take-profit id inserts one row; a failed INSERT rolls back. `ListTrackedLegs` and `ListAdoptionCandidates` bind the retired set and the status codes as arguments.
 3. `trading_repo_test.go`:
    - `KnownBrokerOrderIDs` SQL contains the `bracket_legs` branch; a leg id that is no longer in `order_brackets` (blanked by a resize) is still returned when its `bracket_legs` row exists (round-10 test 9, pgxmock form, A-5).
@@ -936,9 +950,116 @@ New logic is in excluded packages — no coverage threshold applies to it.
 
 ---
 
-### Step 21 — service: bracket-leg fill observer
+### Step 21 — test: real-Postgres proof for trading bracket-leg SQL (dbtest)
 
-**Status**: `pending`
+**Status**: `done`
+**Service**: `xstockstrat-trading`
+**Files**:
+- `services/xstockstrat-trading/internal/repository/dbtest_helpers_test.go` — create
+- `services/xstockstrat-trading/internal/repository/bracket_legs_dbtest_test.go` — create
+- `services/xstockstrat-trading/internal/repository/trading_repo_legs_dbtest_test.go` — create
+- `services/xstockstrat-trading/internal/repository/trading_repo.go` — modify (the comment at `:17-18` only)
+
+**Reviewers**: xstockstrat-trading owner — fill detection, order execution correctness
+
+**Codebase Evidence**:
+- **Not found**: any real-Postgres test in trading. `git ls-tree -r --name-only fb52065c services/xstockstrat-trading/internal/repository | grep -c dbtest` → 0; `git grep -n 'DB_TEST_URL' origin/main-dev -- 'services/*.go'` names only `PORTFOLIO_DB_TEST_URL`, `MARKETDATA_DB_TEST_URL` and the ledger's `LEDGER_DB_TEST_URL`. This is the operator-ruled scope addition recorded in `context.md` ("operator rulings on cutover and CI scope"); it replaces the "no CI job" half of A-5.
+- Helper precedent, portfolio: `services/xstockstrat-portfolio/internal/repository/dbtest_helpers_test.go:1` is `//go:build dbtest`; `:22` `testPool(t, opts ...func(*pgxpool.Config)) *pgxpool.Pool` skips when the URL is unset (`:24-30`) and is fatal under `CI=true`; `:35` sets `RuntimeParams["lock_timeout"] = "500ms"`; `:44` `t.Cleanup(pool.Close)`; `:47,53` cleanup `DELETE … WHERE user_id LIKE $1` by a test prefix. Marketdata twin: `services/xstockstrat-marketdata/internal/repository/fundamentals_replace_dbtest_test.go:22` `dbtestRepo`.
+- `internal/repository/trading_repo.go:17-19`: the comment "(this service has no live-DB test harness)" on `dbQuerier`; `:41` `NewTradingRepoWithDB(db dbQuerier) *TradingRepo` (a `*pgxpool.Pool` satisfies `dbQuerier`); `:53` `UpsertOrder(ctx, *tradingv1.Order)` inserts into `trading.orders` with `ON CONFLICT (order_id, created_at)` and writes `account_id`, `user_id`, `broker_order_id`, `side`, `filled_qty`; `:130` `KnownBrokerOrderIDs`; `:171` `NetFilledQtyBySymbol` (the `DISTINCT ON (order_id) … ORDER BY order_id, created_at DESC` subquery).
+- `internal/repository/bracket_repo.go:46` `NewBracketRepo(pool *pgxpool.Pool) BracketRepository` (Step 18 keeps this signature); `:50` `CreateBracket`, `:65` `GetBracketByOrderID`, `:91-100` `UpdateBracketStatus` (writes `NULLIF($3,'')` for the leg ids at `:94-95`); `CreateBracket` writes the leg ids as given, so an empty id is stored as `''`, not NULL, while `GetBracketByOrderID` reads both back through `COALESCE(…, '')`. The Step 18 methods under test are `ActivateBracket`, `ListTrackedLegs`, `ListAdoptionCandidates`, `InsertAdoptedLeg`, `RecordLegObservation`, `AdvanceLegEmit` and the exported `RetiredLegStatuses`.
+- `internal/repository/pool.go:31-32`: under `DB_PGBOUNCER` the production pool sets `DefaultQueryExecMode = pgx.QueryExecModeExec`; trading is one of the six PgBouncer-pooled services (root `CLAUDE.md` § Connection Pool Budget), so the leg SQL must also run in exec mode (the Step 11 portfolio precedent, D-33).
+- `internal/service/mtls_env_test.go:22` `TestMain` exists in `internal/service` only; `internal/repository` has none. This step therefore stays in `internal/repository` (A-16).
+- `scripts/db-migrate.sh:164` `migrate_service "xstockstrat-trading" "trading"`: the CI job applies every trading migration, `012_bracket_legs` (Step 2) included, before the tests run.
+- `migrations/001_orders_hypertable.up.sql:11,15,20`: `side` is `'buy'|'sell'`, `filled_qty NUMERIC(18,8)`, `trading_mode TEXT`; `005_broker_accounts_halted.up.sql:12-26` `order_brackets` has no unique constraint and no foreign key.
+
+**TDD**: `red-green required` — the cases need `TRADING_DB_TEST_URL`. Where it is set, show them failing with the Step 18 `bracket_legs` branch temporarily removed from `KnownBrokerOrderIDs` and from `NetFilledQtyBySymbol` (a mutation, because Step 18 already holds the production code), then passing with it restored. Where it is not set, the cases skip locally: record "red N/A locally — skipped without `TRADING_DB_TEST_URL`; the `trading-db-test` job (Step 22) is the proof" in the PR body and `context.md`. A skipped suite is not coverage (`tdd-gate.md`, fails.md 2026-07-29), which is why the helper is fatal under `CI=true`.
+
+**Covers**: `AC-4, AC-5` — the SQL layer only: the leg row an `ActivateBracket` writes (what the observer, Step 23, emits from) and the emit cursor that moves 4 then 10 and retires the leg. The ledger event is Step 24; `GetPnL` is Step 13.
+
+**Instructions**:
+Trading-domain notes: no order is placed, so no `TRADING_MODE` gate applies. Both brokers are covered through `broker_type` on the seeded `order_brackets` rows (ALPACA=1 and IBKR=2); order type handling is unaffected. Fill state: the cursor cases walk `PARTIALLY_FILLED` (4) and `FILLED` (10).
+1. `dbtest_helpers_test.go` (`//go:build dbtest`, `package repository`): `testPool(t, opts ...func(*pgxpool.Config))`, a twin of the portfolio helper — reads `TRADING_DB_TEST_URL`; `t.Skip` when unset, `t.Fatal` under `CI=true` (message names the `trading-db-test` job); `lock_timeout` `500ms`; `t.Cleanup(pool.Close)` registered first. One exported-nowhere prefix constant `dbtestUserPrefix = "it-311-"`. Then three row cleanups, each with `dbtestUserPrefix+"%"` and `t.Errorf` on error. `t.Cleanup` runs last-registered first, so register them in this order to have them run leaf rows first and the pool close last: `DELETE FROM trading.orders WHERE user_id LIKE $1`, then `DELETE FROM trading.order_brackets WHERE account_id LIKE $1`, then `DELETE FROM trading.bracket_legs WHERE user_id LIKE $1`. Add the two seed helpers both test files need: `seedParentOrder` (calls `NewTradingRepoWithDB(pool).UpsertOrder` with a fresh UUID, the test's account and user, a `brokerOrderID` argument written to `BrokerOrderId` (the `KnownBrokerOrderIDs` case needs it), a symbol, a side, `OrderType` MARKET, `Status` FILLED, `FilledQty`, and an explicit `CreatedAt`) and `seedBracket` (calls `NewBracketRepo(pool).CreateBracket` for that order). A helper `execModes()` returns `[]struct{name string; opt func(*pgxpool.Config)}` for default and `c.ConnConfig.DefaultQueryExecMode = pgx.QueryExecModeExec` (the `DB_PGBOUNCER` mode).
+2. `bracket_legs_dbtest_test.go`: every case runs once per `execModes()` entry as a subtest, with account and user ids derived from `dbtestUserPrefix`, `t.Name()` and `time.Now().UnixNano()` so cases never share rows. Status values come from the `LegStatus*` constants Step 18 declares and from `RetiredLegStatuses`; do not write the literal `NOT_OPEN_AT_ADOPTION` here (Step 20's `grep` counts it).
+   - `ActivateBracket` with a stop and a take-profit id: the `order_brackets` row reads back status ACTIVE (3) with both leg ids (`GetBracketByOrderID`), and `bracket_legs` holds two rows with `filled_qty` 0, `observed_filled_qty` 0, `status` OPEN, `adopted` false, the parent's account, order id, user, trading mode and symbol, and the leg side the caller passed.
+   - Duplicate guard: `ActivateBracket` twice with the same ids leaves two rows; between the calls `AdvanceLegEmit` moves one leg's cursor to 4, and the second `ActivateBracket` leaves that `filled_qty` at 4 (`ON CONFLICT DO NOTHING` does not reset it).
+   - An empty take-profit id writes one `bracket_legs` row and leaves `order_brackets.take_profit_leg_order_id` NULL. `GetBracketByOrderID` reads NULL back as `''`, so assert this with a raw `SELECT take_profit_leg_order_id IS NULL FROM trading.order_brackets WHERE id = $1` on the pool.
+   - Atomicity: `ActivateBracket` with a valid stop and take-profit id and a `BracketLegParent` whose `Symbol` contains a NUL byte. The UPDATE of `order_brackets` does not use that field, so it succeeds first and only the following `INSERT INTO trading.bracket_legs` can fail. Assert the error is a `*pgconn.PgError` (through `errors.As`, so it came from the server; SQLSTATE `22021`), that the bracket row still has its pre-call status and its pre-call leg ids (the UPDATE was rolled back), and that no `bracket_legs` row exists for either leg. A NUL in a stop or take-profit id is not a valid injection: those parameters are also bound in the UPDATE (`bracket_repo.go:94-95`), which would fail before the INSERT and never exercise the rollback. If the driver rejects the value client-side and no `PgError` is returned, use another failure only the INSERT sees (for example a `parent.OrderID` that is not a UUID) and keep the same three assertions; do not weaken them to "an error occurred".
+   - `ListTrackedLegs`: seed one OPEN leg and one leg per member of `RetiredLegStatuses`; only the OPEN leg is returned, and an adopted OPEN leg sorts after a non-adopted one, and of two non-adopted legs written by separate `ActivateBracket` calls the earlier-written one comes first (`adopted ASC, updated_at ASC`).
+   - `ListAdoptionCandidates(ctx, []int32{3, 4})`: seed (a) an ACTIVE bracket whose parent order has two `trading.orders` rows with different `created_at` and different `side` (the latest row's side decides: the candidate's side is its opposite), (b) a CANCELING bracket, (c) a CANCELED (5) bracket, (d) an ACTIVE bracket seeded by `CreateBracket` with only a stop id, which stores `''` in the take-profit column (one candidate, no empty-id candidate), (e) an ACTIVE bracket whose stop id already has a `bracket_legs` row (no candidate for that id, one for the other), (f) an ACTIVE bracket with no parent order (no candidate). Assert the exact set of `(leg id, side, symbol)`; the status argument is bound as a parameter, so `[]int32{3}` drops (b).
+   - `InsertAdoptedLeg`: the first call returns `inserted` true with `adopted` true and the status and quantities from the record; the second returns false and changes nothing; a leg inserted with a retired status is absent from `ListTrackedLegs` and from `ListAdoptionCandidates`.
+   - `RecordLegObservation` writes `observed_filled_qty` and `not_found_ticks` and leaves `filled_qty`; `AdvanceLegEmit` to 4 with the tracked status, then to 10 with `FILLED`, reads back 10 and `FILLED`, and the leg leaves `ListTrackedLegs` (`@AC-5` at the SQL layer).
+3. `trading_repo_legs_dbtest_test.go`: `repo := NewTradingRepoWithDB(pool)`, each case once per `execModes()` entry.
+   - `KnownBrokerOrderIDs(account, ids)` returns exactly: the `broker_order_id` of a seeded order; a stop and a take-profit id held only by `order_brackets`; a leg id held only by `bracket_legs` after `UpdateBracketStatus(…, "", "", "")` blanked the bracket's copy (a resize); a retired `bracket_legs` row's id (a tombstone stays known); and not an id nobody holds, not the same ids queried under another account, and no empty-string or NULL member for a bracket whose leg columns are `''` (seeded by `CreateBracket` with an empty id) or NULL (made by `UpdateBracketStatus` with empty ids).
+   - `NetFilledQtyBySymbol(account, symbols)`: for one symbol seed a buy order of 10, a sell order of 3 stored as two rows with different `created_at` (the later one has the final `filled_qty`, so the `DISTINCT ON` subquery counts the order once), and a sell leg with `filled_qty` 0 but `observed_filled_qty` 4 (the observed column is summed, not the cursor): expect `10 - 3 - 4 = 3`. A retired leg with `observed_filled_qty` 0 leaves it at 3; a leg of another account and a leg of a symbol outside `symbols` change nothing; a symbol held only by a leg appears in the result with the signed leg quantity.
+4. `trading_repo.go:17-18`: delete the parenthetical `(this service has no live-DB test harness)`, which this step makes false, and add no replacement comment. The comment becomes `// dbQuerier is the query subset extracted so the LATERAL-join reads can be exercised with pgxmock.` and `// Both *pgxpool.Pool and pgxmock satisfy it.` No other edit to this file.
+   Test function names (the `-run 'BracketLegsDB|TradingRepoLegsDB'` filter in Steps 21 and 22 matches these; each runs its `execModes()` entries through `t.Run`): in `bracket_legs_dbtest_test.go` `TestBracketLegsDB_ActivateRows`, `TestBracketLegsDB_ActivateDuplicateGuard`, `TestBracketLegsDB_ActivateEmptyTakeProfit`, `TestBracketLegsDB_ActivateRollsBack`, `TestBracketLegsDB_ListTrackedLegs`, `TestBracketLegsDB_ListAdoptionCandidates`, `TestBracketLegsDB_InsertAdoptedLeg`, `TestBracketLegsDB_ObservationAndEmitCursor`; in `trading_repo_legs_dbtest_test.go` `TestTradingRepoLegsDB_KnownBrokerOrderIDs` and `TestTradingRepoLegsDB_NetFilledQtyBySymbol`.
+5. C-13: the prefix constant and `execModes` are used by two test files in one package, so they live in `dbtest_helpers_test.go` once. The order and bracket literals are one-consumer, inline in the seed helpers. No second inline copy of any of them.
+
+**Verification**:
+```bash
+cd services/xstockstrat-trading && GOWORK=off go vet -tags dbtest ./internal/repository/...
+cd services/xstockstrat-trading && GOWORK=off go test -tags dbtest -list 'BracketLegsDB|TradingRepoLegsDB' ./internal/repository/...   # names the new cases
+grep -rln 'TRADING_DB_TEST_URL' services/xstockstrat-trading/internal --include=*_test.go | wc -l   # 1: only the helper file reads it
+grep -rn 'NOT_OPEN_AT_ADOPTION' services/xstockstrat-trading/internal --include=*_test.go | wc -l   # 0 in the new files
+# with a migrated database available:
+cd services/xstockstrat-trading && TRADING_DB_TEST_URL=<url> GOWORK=off go test -tags dbtest -race -count=1 -v ./internal/repository/... -run 'BracketLegsDB|TradingRepoLegsDB' > "${TMPDIR:-/tmp}/trading-dbtest.out"; echo "exit $?"   # exit 0
+grep -c -- '--- SKIP' "${TMPDIR:-/tmp}/trading-dbtest.out"   # 0; unanchored, so an indented subtest skip counts
+cd services/xstockstrat-trading && GOWORK=off golangci-lint run --modules-download-mode=mod --build-tags dbtest
+cd services/xstockstrat-trading && GOWORK=off COVERPKGS=$(go list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//') && go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}" && go tool cover -func=coverage.out | grep "^total:"   # >= 40%; the untagged run never compiles the dbtest files
+```
+Never start a database for this step. Without `TRADING_DB_TEST_URL` the compile check and the case listing pass and the `trading-db-test` job (Step 22) runs the cases. New logic is in an excluded package (`repository`) — no coverage threshold applies to it.
+
+---
+
+### Step 22 — config: CI job `trading-db-test` and the lint build tag
+
+**Status**: `done`
+**Service**: `xstockstrat-trading` (CI and lint configuration only)
+**Files**:
+- `.github/workflows/ci.yml` — modify
+- `services/xstockstrat-trading/.golangci.yml` — modify
+
+**Reviewers**: xstockstrat-trading owner — fill detection, order execution correctness
+
+**Codebase Evidence**:
+- Job to clone: `portfolio-db-test` at `.github/workflows/ci.yml:1016-1065` on `fb52065c` (comment `:1016`, key `:1017`, `name:` `:1018`). Its `if:` ORs five filters (`xstockstrat-portfolio`, `migrations`, `proto`, `ci`, `go-shared`) from `needs.changes.outputs.matched`; it has the `timescale/timescaledb:latest-pg16` service with `pg_isready` health options, `actions/checkout@v7`, `actions/setup-go@v7` (go `"1.27"`, `cache-dependency-path: services/xstockstrat-portfolio/go.sum` at `:1047`), the "Build migrator image" and "Apply migrations" steps (`docker build -f scripts/Dockerfile.migrate`, `docker run --rm --network host … xstockstrat-migrate-ci`), and a `go test -tags dbtest` step with `GOWORK: "off"`, `CI: "true"` and `PORTFOLIO_DB_TEST_URL` (`:1064`).
+- `marketdata-db-test` is the second clone of it, `:1067-1116`; `markdown-lint` starts at `:1118`, so the new job goes between them.
+- The `xstockstrat-trading` path filter exists (`ci.yml:53`, `['services/xstockstrat-trading/**']`); `migrations` (`:88-97`) already covers `services/*/migrations/**`. `services/xstockstrat-trading/go.sum` exists.
+- `ci-gate` (`:1377`): `needs:` lists `- portfolio-db-test` (`:1396`) and `- marketdata-db-test` (`:1397`); the evaluate step echoes both (`:1429-1430`); the gate fails only on `failure` or `cancelled` (`:1444-1447`), so a skipped job passes.
+- `services/xstockstrat-portfolio/.golangci.yml:28-29`: `run: build-tags: [dbtest]`, which makes the `go-lint` job lint dbtest files. `services/xstockstrat-trading/.golangci.yml` ends with `run: timeout: 5m` and has no `build-tags` (marketdata's has none either; out of scope).
+- `.github/workflows/ci.yml` and `docs/patterns/ci-overview.md` are unchanged between `fb52065c` and `origin/main-dev@2b2dec92` (`git diff --stat fb52065c origin/main-dev -- .github docs/patterns/ci-overview.md` shows no entry for either).
+- The test-only env var `TRADING_DB_TEST_URL` is read by the Step 21 helper alone. It is not a service env var, so `docker-compose.yml`, `.do/app.dev.yaml` and `.do/app.yaml` get no entry, as for `PORTFOLIO_DB_TEST_URL` and `MARKETDATA_DB_TEST_URL` (confirmed absent: `git grep -n 'DB_TEST_URL' origin/main-dev -- docker-compose.yml .do` returns nothing). No config key, port or proto is touched.
+
+**TDD**: `N/A (CI workflow and lint configuration; no executable logic)` — the first green run of the job on the integration PR is the proof, and Step 21's `-list` check proves the job's package pattern reaches the cases.
+
+**Covers**: —
+
+**Instructions**:
+1. After `marketdata-db-test` (`:1116`) and before `markdown-lint` (`:1118`), add a job `trading-db-test`, cloned from `portfolio-db-test`, under the same comment line (`# Real-Postgres repository tests (//go:build dbtest); excluded from the go-lint coverage run.`):
+   - `name: Trading DB test (TimescaleDB)`; `needs: changes`; `if:` the same five-term OR with `xstockstrat-trading` in place of `xstockstrat-portfolio`.
+   - The `timescaledb` service block, `actions/checkout@v7`, "Build migrator image" and "Apply migrations" steps copied unchanged (the migrator applies every service's migrations, so trading `012` from Step 2 is present).
+   - `actions/setup-go@v7` with `go-version: "1.27"` and `cache-dependency-path: services/xstockstrat-trading/go.sum`.
+   - Step `go test -tags dbtest`, `working-directory: services/xstockstrat-trading`, `env:` `GOWORK: "off"`, `CI: "true"`, `TRADING_DB_TEST_URL: postgres://xstockstrat:ci-only@localhost:5432/xstockstrat?sslmode=disable`, `run: go test -tags dbtest -race -count=1 ./internal/repository/...`. Only `./internal/repository/...`: Step 21's cases live there, and `internal/service` needs the mTLS `TestMain` environment (A-16).
+2. `ci-gate`: add `      - trading-db-test` after `- marketdata-db-test` (`:1397`), and `          echo "trading-db-test: ${{ needs.trading-db-test.result }}"` after the marketdata echo (`:1430`).
+3. `services/xstockstrat-trading/.golangci.yml`: under `run:` add `build-tags:` with `- dbtest`, the portfolio form (`:28-29`), so CI lints the Step 21 files.
+4. The job cannot run locally. In the integration PR description, quote the job's result and state that it ran the Step 21 cases with none skipped (the helper is fatal under `CI=true` when the URL is unset, so a skip cannot pass silently).
+
+**Verification**:
+```bash
+grep -c 'trading-db-test' .github/workflows/ci.yml   # 3 lines: the job key, the needs entry, the echo
+grep -n 'TRADING_DB_TEST_URL' .github/workflows/ci.yml   # 1 line, in the new job
+grep -n 'go test -tags dbtest' .github/workflows/ci.yml   # 6 lines: the step name and the run line of portfolio, marketdata and trading
+grep -n -A1 'build-tags' services/xstockstrat-trading/.golangci.yml   # the dbtest entry
+cd services/xstockstrat-trading && GOWORK=off go test -tags dbtest -list 'BracketLegsDB|TradingRepoLegsDB' ./internal/repository/...   # the job's package pattern reaches Step 21's cases
+cd services/xstockstrat-trading && GOWORK=off golangci-lint run --modules-download-mode=mod
+```
+No Go coverage threshold applies to this step: it edits no Go source, and the untagged coverage run never compiles the dbtest files.
+
+---
+
+### Step 23 — service: bracket-leg fill observer
+
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/service/trading.go` — modify
@@ -949,14 +1070,14 @@ New logic is in excluded packages — no coverage threshold applies to it.
 - `trading.go:1793-1814` `StartFillPoller` — must gain no hunk (294 `@AC-6`).
 - `:1816-1878` `pollFills`: `:1819-1828` builds `brokerMap` without OFFLINE accounts; `:1877` `s.logTick(ctx, telemetry.LoopFillPoller, start, len(candidates), polled, failed)` is its last statement.
 - `:1866-1868`: `pollCtx, cancelPoll := s.alpacaCallContext(ctx, entry)` around `GetOrder`; `:1476-1481` `alpacaCallContext`.
-- `:1898` `applyBrokerOrderStatus` and `:3630` `maybeSubmitBracket` — the observer must call neither (D-3).
+- `:1898` `applyBrokerOrderStatus` and `:3638` `maybeSubmitBracket` — the observer must call neither (D-3).
 - `:1930-1942` the parent `order.filled` payload keys: `order_id, symbol, qty, fill_price, user_id, trading_mode, account_id, fees`, and `side` when set; `:1952-1963` the `order.partially_filled` keys with `filled_qty`.
-- `:3907-3928` `alpacaStatusToProto`; `ibkr.go:443,479` pass the IBKR status through raw (A-4).
-- `:3945` `appendLedgerEvent` (keyed after Step 16); `:3932-3935` `ledgerEmitTimeout`, `appendMaxAttempts`.
+- `:3915-3936` `alpacaStatusToProto`; `ibkr.go:443,479` pass the IBKR status through raw (A-4).
+- `:3953` `appendLedgerEvent` (keyed after Step 16); `:3940` `ledgerEmitTimeout`, `:3943` `appendMaxAttempts`.
 - `:201` `s.clock()`.
 - Fixtures that call `pollFills`, from `grep -rn 'pollFills(' services/xstockstrat-trading/internal --include=*_test.go`: `trading_telemetry_test.go:612-613,687,689,743,748`, `trading_order_race_test.go:30`, `trading_rate_limit_test.go:372`.
 
-**Lands with**: `Step 22`
+**Lands with**: `Step 24`
 
 **TDD**: `red-green required`
 
@@ -997,9 +1118,9 @@ cd services/xstockstrat-trading && GOWORK=off golangci-lint run --modules-downlo
 
 ---
 
-### Step 22 — test: leg observer and its ledger events
+### Step 24 — test: leg observer and its ledger events
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/service/trading_bracket_leg_poll_test.go` — create
@@ -1017,7 +1138,7 @@ cd services/xstockstrat-trading && GOWORK=off golangci-lint run --modules-downlo
 - `trading_fill_side_test.go:15` and `trading_fees_test.go` assert the parent fill payload shape (251 `@AC-10`).
 - `trading_telemetry_test.go:594-620` uses the injected clock.
 
-**Lands with**: `Step 21`
+**Lands with**: `Step 23`
 
 **TDD**: `red-green required`
 
@@ -1053,9 +1174,9 @@ New logic is in an excluded package — no coverage threshold applies to it.
 
 ---
 
-### Step 23 — service: shared poll-throttle helper and adoption state
+### Step 25 — service: shared poll-throttle helper and adoption state
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/service/trading.go` — modify
@@ -1064,11 +1185,11 @@ New logic is in an excluded package — no coverage threshold applies to it.
 
 **Codebase Evidence**:
 - `trading.go:180-183`: `haltedLastPolled map[string]time.Time` and `haltedMu sync.Mutex`; `:284` initialises the map in the constructor.
-- `:2949-2960` `shouldPollHaltedAccount(accountID string, intervalMs float64) bool`: `now := time.Now()`; under `haltedMu`, returns false when `intervalMs > 0` and the last poll is within the interval; otherwise stamps and returns true.
-- `:2984` `haltAccount` pre-stamps `haltedLastPolled`; `:3314` `ResumeAccountSvc` deletes the entry (TRADING-N2).
-- `trading_reconciliation_test.go:491-513` `TestShouldPollHaltedAccount_ThrottlesAndRecovers` builds the service as a literal with only `halted` and `haltedLastPolled`.
+- `:2953-2964` `shouldPollHaltedAccount(accountID string, intervalMs float64) bool`: `now := time.Now()`; under `haltedMu`, returns false when `intervalMs > 0` and the last poll is within the interval; otherwise stamps and returns true.
+- `:2977` `haltAccount` pre-stamps `haltedLastPolled` (`:2988`); `:3295` `ResumeAccountSvc` deletes the entry (`:3322`, TRADING-N2).
+- `trading_reconciliation_test.go:514-537` `TestShouldPollHaltedAccount_ThrottlesAndRecovers` builds the service as a literal with only `halted` and `haltedLastPolled`.
 
-**Lands with**: `Step 24, Step 25`
+**Lands with**: `Step 26, Step 27`
 
 **TDD**: `red-green required`
 
@@ -1089,9 +1210,9 @@ cd services/xstockstrat-trading && GOWORK=off golangci-lint run --modules-downlo
 
 ---
 
-### Step 24 — service: adoption of pre-existing open legs
+### Step 26 — service: adoption of pre-existing open legs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/service/trading.go` — modify
@@ -1099,16 +1220,16 @@ cd services/xstockstrat-trading && GOWORK=off golangci-lint run --modules-downlo
 **Reviewers**: xstockstrat-trading owner — fill detection, broker API safety
 
 **Codebase Evidence**:
-- `trading.go:2010-2035` `StartReconciliationPoller`: `s.cfgW.GetFloat("reconciliation.interval_ms", defaultIntervalMs)` with `defaultIntervalMs = 60000.0` (`:2012`, `:2023`); a value `<= 0` keeps the previous interval (`:2024`).
-- `:2674-2676` `haltedPollInterval()` reads `reconciliation.halted_poll_interval_ms`, default 300000.
-- `:2163-2168` copies `s.credStatus` under `credStatusMu`; `:2174` `credentialsKnownInvalid(credStatus[accountID])` skips before the list; `:2190-2193` `broker.ErrInvalidCredentials` is a WARN and a skip with no failure count; `:3227` `credentialsKnownInvalid`.
-- `:2940-2944` `isAccountHalted`.
-- `:3565-3566` `bracketStatusActive`, `bracketStatusCanceling`.
+- `trading.go:2011-2033` `StartReconciliationPoller`: `s.cfgW.GetFloat("reconciliation.interval_ms", defaultIntervalMs)` with `defaultIntervalMs = 60000.0` (`:2012`, `:2023`); a value `<= 0` keeps the previous interval (`:2024`).
+- `:2678-2679` `haltedPollInterval()` reads `reconciliation.halted_poll_interval_ms`, default 300000.
+- `:2166-2171` copies `s.credStatus` under `credStatusMu`; `:2178` `credentialsKnownInvalid(credStatus[accountID])` skips before the list; `:2194-2197` `broker.ErrInvalidCredentials` is a WARN and a skip with no failure count; `:3235` `credentialsKnownInvalid`.
+- `:2945-2949` `isAccountHalted`.
+- `:3572-3573` `bracketStatusActive`, `bracketStatusCanceling`.
 - `internal/config/watchcore.go:406-419` `GetFloat` widens an int value; `internal/config/config.go:119` `MustSnapshotWatcher(ns, values)` is the test seam for a set key.
 - `ibkr.go:448-483`: an empty slice with a nil error on a 200 with no orders. `broker.ListOrdersLimit` (Step 14) is the Alpaca ceiling.
 - Config contract (C-05; no key is added, R-39): namespace `trading`, keys `reconciliation.interval_ms` (float, code default 60000) and `reconciliation.halted_poll_interval_ms` (float, code default 300000), both already seeded and documented at `services/xstockstrat-trading/CLAUDE.md:95,98`, read live on each tick.
 
-**Lands with**: `Step 23, Step 25`
+**Lands with**: `Step 25, Step 27`
 
 **TDD**: `red-green required`
 
@@ -1118,16 +1239,16 @@ cd services/xstockstrat-trading && GOWORK=off golangci-lint run --modules-downlo
 All changes are inside `pollBracketLegFills`; no hunk in `StartFillPoller` or `reconcileTick` (D-50).
 1. At the start of each tick, call `ListAdoptionCandidates(ctx, []int32{bracketStatusActive, bracketStatusCanceling})`. On error: log once, adopt nothing this tick, and still list and observe tracked accounts (D-46).
 2. Account sets: tracked = accounts with at least one row from `ListTrackedLegs`; adoption-only = accounts with candidates and no tracked row.
-3. Tracked account: its one `ListOrders` of the tick (Step 21) is shared with adoption; no extra call.
+3. Tracked account: its one `ListOrders` of the tick (Step 23) is shared with adoption; no extra call.
 4. Adoption-only account — list only when allowed, checked in this order:
    1. `credentialsKnownInvalid(credStatus[accountID])`: skip, no list, no log (O-68).
    2. Interval: `haltedPollInterval()` when `isAccountHalted(accountID)`, where `<= 0` means always list. Otherwise `s.cfgW.GetFloat("reconciliation.interval_ms", 60000)`, and a value `<= 0` is read as 60000 (O-68).
    3. New-candidate bypass (O-67): if the account's current candidate id set contains an id that is not in `adoptionLastCandidates[accountID]`, list now.
-   4. Otherwise the Step 23 helper over `adoptionLastListed` with `now = s.clock()`.
+   4. Otherwise the Step 25 helper over `adoptionLastListed` with `now = s.clock()`.
    - When the list is allowed, stamp `adoptionLastListed` and store the current candidate set before the call, so a failed list is throttled too.
    - `broker.ErrInvalidCredentials` from the list: WARN and skip, no failure count. Any other error: WARN. Nothing is inserted (R-10).
 5. Classify each candidate against the account's successful list only. Adoption makes no `GetOrder` call (D-40).
-   - Listed, open (the Step 21 status helper; `held` and unrecognised count as open), `FilledQty == 0`: `InsertAdoptedLeg` with status `OPEN`, both quantities 0.
+   - Listed, open (the Step 23 status helper; `held` and unrecognised count as open), `FilledQty == 0`: `InsertAdoptedLeg` with status `OPEN`, both quantities 0.
    - Listed, open, `FilledQty > 0`: `InsertAdoptedLeg` with status `BASELINE_RETIRED`, `filled_qty = 0`, `observed_filled_qty = FilledQty`, no emit (R-7, R-12).
    - Listed, terminal: tombstone — status `NOT_OPEN_AT_ADOPTION`, both quantities 0, no emit (D-48, R-36).
    - Absent from the list: tombstone only when the list is non-empty and, for a non-IBKR account, shorter than `broker.ListOrdersLimit` (D-49). Otherwise insert nothing; the candidate is evaluated again on the account's next adoption list.
@@ -1146,9 +1267,9 @@ cd services/xstockstrat-trading && GOWORK=off golangci-lint run --modules-downlo
 
 ---
 
-### Step 25 — test: adoption classifier, complete-list gate and throttle
+### Step 27 — test: adoption classifier, complete-list gate and throttle
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/service/trading_bracket_adoption_test.go` — create
@@ -1160,9 +1281,9 @@ cd services/xstockstrat-trading && GOWORK=off golangci-lint run --modules-downlo
 - `trading_reconciliation_test.go:491-513` `TestShouldPollHaltedAccount_ThrottlesAndRecovers` (the design cites it at its older lines `486-503`); it must pass unchanged.
 - `internal/config/config.go:119` `MustSnapshotWatcher("trading", map[string]*configv1.ConfigValue{…})` takes namespace-relative keys and panics on a prefixed one.
 - `trading_telemetry_test.go:594-620`: the injected clock (`s.clock()`), advanced without sleeping.
-- `fakeBroker` list hook and counters (Step 22); `fakeBracketRepo` candidate query, tombstone insert and error hooks (Step 20).
+- `fakeBroker` list hook and counters (Step 24); `fakeBracketRepo` candidate query, tombstone insert and error hooks (Step 20).
 
-**Lands with**: `Step 23, Step 24`
+**Lands with**: `Step 25, Step 26`
 
 **TDD**: `red-green required`
 
@@ -1177,11 +1298,11 @@ Round-8 and round-9 cases:
 - A bracket with status CANCELED or FAILED is never a candidate.
 - A second adoption run is a no-op.
 - A `held` leg at fill 0 is adopted as tracked.
-- An adopted leg's later fill emits the full payload of Step 21.
+- An adopted leg's later fill emits the full payload of Step 23.
 - An account with no candidates and no tracked rows gets no `ListOrders`.
 - Candidate query error: tracked accounts are still listed and observed, nothing is adopted, one log.
 
-Round-10 cases (1-7; 8-9 are in Step 20):
+Round-10 cases (1-7; 8-9 are in Step 20 as pgxmock and in Step 21 against a real database):
 1. Candidate listed `filled` or `canceled`: one tombstone row, both quantities 0, `adopted = true`, no append, no `GetOrder`; on the next tick the account gets no `ListOrders` and is no longer a candidate.
 2. Candidate absent from a 499-row Alpaca list: tombstone.
 3. Alpaca list of exactly 500 rows without the candidate: no insert.
@@ -1215,9 +1336,9 @@ New logic is in an excluded package — no coverage threshold applies to it.
 
 ---
 
-### Step 26 — docs: cutover runbook
+### Step 28 — docs: cutover runbook
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/runbooks/`
 **Files**:
 - `docs/runbooks/position-fold-cutover.md` — create
@@ -1229,7 +1350,7 @@ New logic is in an excluded package — no coverage threshold applies to it.
 **Codebase Evidence**:
 - **Not found**: a runbook for this cutover (`ls docs/runbooks/` has no matching file). `docs/runbooks/delisting-rollout.md` is the nearest precedent for a one-off rollout runbook.
 - `docs/runbooks/CLAUDE.md:5-11`: the index table (`| File | Purpose | Key trigger |`).
-- `docs/roadmap/features/merge-order.md:430`: the existing entry that names 311's overlap on `trading.go`.
+- `docs/roadmap/features/merge-order.md:431`: the existing entry that names 311's overlap on `trading.go`.
 - `.do/app.dev.yaml:101` is the `xstockstrat-portfolio` service block; other components reference `${xstockstrat-portfolio.PRIVATE_DOMAIN}`; `.do/app.dev.yaml:439` gives ledger `${xstockstrat.DATABASE_URL}` and portfolio uses the PgBouncer pool on the same `xstockstrat` cluster (`:701-707`), so on DO staging ledger and portfolio share one Postgres server clock. The homelab compose DSNs are not in this repository and were not checked.
 - Operator rulings: `context.md` sessions "operator rulings after round 6" and "production scope" (stop-then-start on staging, no write fence, production check-only).
 
@@ -1261,9 +1382,9 @@ grep -n "consumer_floors\|stamped_now\|bracket_legs\|consumer_applied_events" do
 
 ---
 
-### Step 27 — docs: service documentation and findings
+### Step 29 — docs: service documentation, findings and the CI table
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`, `xstockstrat-trading` (docs only)
 **Files**:
 - `services/xstockstrat-portfolio/CLAUDE.md` — modify
@@ -1272,16 +1393,18 @@ grep -n "consumer_floors\|stamped_now\|bracket_legs\|consumer_applied_events" do
 - `services/xstockstrat-trading/CLAUDE.md` — modify
 - `services/xstockstrat-trading/docs/reconciliation.md` — modify
 - `services/xstockstrat-trading/docs/context-constitution-findings.md` — modify
+- `docs/patterns/ci-overview.md` — modify
 
 **Reviewers**: none
 
 **Codebase Evidence**:
-- `services/xstockstrat-portfolio/CLAUDE.md:91-96`: "Ledger Events Consumed" with the `order.filled` and `order.partially_filled` rows; `:126` points to `docs/position-closed-contract.md`.
+- `services/xstockstrat-portfolio/CLAUDE.md:91-96`: "Ledger Events Consumed" with the `order.filled` and `order.partially_filled` rows; `:132` points to `docs/position-closed-contract.md`.
 - `services/xstockstrat-portfolio/docs/position-closed-contract.md`: the "Named v1 scope limitation" paragraph (a short covered by a live buy takes the "buying more" branch). The design says the portfolio `CLAUDE.md` paragraph is rewritten (D-10); on `main-dev` that paragraph now lives in this file.
 - `services/xstockstrat-portfolio/docs/context-constitution.md:16`: PORTFOLIO-3 (all consumers resume from an in-memory `lastSeq`).
 - `services/xstockstrat-trading/CLAUDE.md:95,98`: the `reconciliation.interval_ms` and `halted_poll_interval_ms` rows (the design cites the drift at its older line `:119`); `:111` the `trading.order_brackets` table note; `:125` the `order.filled` event row.
-- `services/xstockstrat-trading/docs/reconciliation.md:70-75`: the residual "Alpaca bracket-leg fills, which never reach `trading.orders`".
+- `services/xstockstrat-trading/docs/reconciliation.md:76-79`: the residual "Alpaca bracket-leg fills, which never reach `trading.orders`".
 - `services/xstockstrat-trading/docs/context-constitution-findings.md`: the defects table (last rows link `docs/reports/2026-10-19-…`).
+- `docs/patterns/ci-overview.md:26-28`: the `ledger-db-test`, `portfolio-db-test` and `marketdata-db-test` rows of the CI job table (`| Job | What it checks | Coverage threshold |`); the portfolio and marketdata rows each name the build tag, the command and what the cases cover, and end "gated into `ci-gate`". There is no `trading-db-test` row (**Not found**: `grep -n 'trading-db-test' docs/patterns/ci-overview.md` → nothing).
 
 **TDD**: `N/A (docs)`
 
@@ -1295,7 +1418,8 @@ Keep each edit to what changed; facts readable from code stay out.
 4. Trading `CLAUDE.md`: add `trading.bracket_legs` beside the `order_brackets` note; state that `order.filled` and `order.partially_filled` are also emitted for bracket legs with the leg id as `order_id`; note that adoption reuses `reconciliation.interval_ms` (a value `<= 0` reads as 60000 for adoption) and the halted interval.
 5. `reconciliation.md`: replace the bracket-leg residual with what is now true — tracked legs count through `bracket_legs.observed_filled_qty`; legs outside tracking (the D-42 forward-only gap, `BASELINE_RETIRED` remainders, tombstones) still do not.
 6. Trading findings: add rows for (a) the parent `pollFills` IBKR status mapping (`alpacaStatusToProto` does not match IBKR's capitalised statuses; the leg observer lower-cases, the parent path does not), (b) neither broker adapter populates `BrokerOrder.Fees`, (c) the `reconciliation.interval_ms` row implies "every tick" for `<= 0` while the code keeps the previous interval, (d) analysis's `pnl_pattern_consumer` receives leg fill events whose `order_id` is a broker leg id (A-10).
-7. Do not edit the root `CLAUDE.md`: no service, port, config key or dependency edge changed.
+7. `docs/patterns/ci-overview.md`: add a `trading-db-test` row after the `marketdata-db-test` row, in the same form: applies all migrations to TimescaleDB, runs trading Go real-Postgres tests (build tag `dbtest`) `go test -tags dbtest -race ./internal/repository/...` (bracket-leg activation and its duplicate guard, the adoption candidate query, the `KnownBrokerOrderIDs` and `NetFilledQtyBySymbol` unions, the emit cursor); gated into `ci-gate`; threshold `—`.
+8. Do not edit the root `CLAUDE.md`: no service, port, config key or dependency edge changed.
 
 **Verification**:
 ```bash
@@ -1303,6 +1427,7 @@ grep -n 'consumer_applied_events' services/xstockstrat-portfolio/CLAUDE.md servi
 grep -n 'bracket_legs' services/xstockstrat-trading/CLAUDE.md services/xstockstrat-trading/docs/reconciliation.md
 grep -c 'buying more' services/xstockstrat-portfolio/docs/position-closed-contract.md   # 0
 grep -n 'alpacaStatusToProto\|BrokerOrder.Fees\|pnl_pattern_consumer' services/xstockstrat-trading/docs/context-constitution-findings.md
+grep -n 'trading-db-test' docs/patterns/ci-overview.md   # the new row
 git diff --stat origin/main-dev -- CLAUDE.md   # empty
 ```
 
@@ -1311,3 +1436,150 @@ git diff --stat origin/main-dev -- CLAUDE.md   # empty
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+### Step 1 — Verification block exits 1 when it passes (2026-11-27)
+- **Spec said**: the block's last command, `grep -ci 'insert into\|create trigger' …019_fill_applied_events.up.sql`, should print `# 0`.
+- **Actual**: it prints `0`, and `grep -c` exits 1 when its count is 0. The block therefore exits 1 exactly when this check passes. Every expected value matched: both files are listed, the `019_` count is 2 and the count is 0.
+- **Disposition**: judged on the printed values, not on the exit status. The block ran verbatim, and the step body was not changed (F-09). This is an offline migration check: no database was started, and the live apply and rollback are deferred to CI and deploy.
+
+### Step 2 — Verification block exits 1 when it passes (2026-11-27)
+- **Spec said**: the block's last command, `grep -ci 'insert into' …012_bracket_legs.up.sql`, should print `# 0`.
+- **Actual**: it prints `0`, and `grep -c` exits 1 when its count is 0, so the block exits 1 exactly when this check passes (the same pattern as Step 1). Every expected value matched: both files are listed, the `012_` count is 2 and the count is 0.
+- **Disposition**: judged on the printed values, not on the exit status. The block ran verbatim, and the step body was not changed (F-09). This is an offline migration check: no database was started, and the live apply and rollback are deferred to CI and deploy.
+
+### Steps 3+4 — Verification blocks stop after their first line (2026-11-27)
+- **Spec said**: Step 3 and Step 4 each give a multi-line block whose lines each start `cd services/xstockstrat-portfolio && …` or name a repo-root-relative path.
+- **Actual**: inside the one subshell the first line's `cd` persists, so every later line fails with `cd: services/xstockstrat-portfolio: No such file or directory` (and Step 3's `grep` cannot find its path). Run verbatim, Step 3's block ran only `go build` and `go vet -tags dbtest`; Step 4's block ran only the filtered `go test -race`. Both exited non-zero for this reason alone.
+- **Disposition**: each block was run verbatim once, then every line that had not run was run unchanged, alone, from the repo root, with its own log. All passed: `golangci-lint` v2.14.0 printed `0 issues.`, the `Begin` grep printed no line (`portfolio_repo.go` unchanged) and the coverage line printed `total: 79.1%`. The step bodies were not changed (F-09). Step 9's block has the same pattern, so it needs the same per-line run; other steps' blocks were not checked.
+
+### Steps 5+6 — Verification blocks stop after their first line (2026-11-27)
+- **Spec said**: Step 5 and Step 6 each give a three-line block whose lines each start `cd services/xstockstrat-portfolio && …` or name a repo-root-relative path.
+- **Actual**: the same pattern as Steps 3+4. Inside the one subshell the first line's `cd` persists, so every later line fails with `cd: services/xstockstrat-portfolio: No such file or directory` (Step 5's `grep` prints `No such file or directory`). Run verbatim, Step 5's block ran only `go build` and `go vet -tags dbtest`, and Step 6's block ran only the filtered `go test -race`. Both exited 1 for this reason alone.
+- **Disposition**: each block was run verbatim once, then every line that had not run was run unchanged, alone, from the repo root, with its own log. All passed: the `Prune` run printed `ok`, the grep listed every `emitEventAs(` call with six arguments, and `golangci-lint` v2.14.0 printed `0 issues.`. The step bodies were not changed (F-09).
+
+### Steps 7+8 — Verification blocks stop after their first line (2026-11-27)
+- **Spec said**: Step 7 and Step 8 each give a three-line block whose lines each start `cd services/xstockstrat-portfolio && …` or name a repo-root-relative path.
+- **Actual**: the same pattern as Steps 3-6. Inside the one subshell the first line's `cd` persists, so every later line fails with `cd: services/xstockstrat-portfolio: No such file or directory` (Step 8's `grep` prints `No such file or directory`). Run verbatim, Step 7's block ran only `go build` and `go vet -tags dbtest`, and Step 8's block ran only the filtered `go test -race`. Both exited 1 for this reason alone. Step 8's last line ends in a `#` comment, so the wrapper's closing `)` was put on its own line to keep it out of the comment.
+- **Disposition**: each block was run verbatim once, then every line that had not run was run unchanged, alone, from the repo root, with its own log. All passed: the whole-package `-race` run printed `ok`, `golangci-lint` v2.14.0 (the line both blocks share) printed `0 issues.`, and the `RecordedAt` grep printed nothing (`exit=1`, no match: no inline builder outside `testdata`). The step bodies were not changed (F-09).
+
+### Step 10 — re-spec: add `portfolio_fill_floor_test.go` (2026-11-27, operator ruling B)
+- Step 10 now lists `portfolio_fill_floor_test.go` and Instruction 8 re-points the `TestFillFloor_SameMillisecondFolds` expectation (`:45`) from the `GetPosition` read to the `FillApplied` pre-check; Steps 9 and 10 stay `pending` and no other step changed.
+
+### Steps 9+10 — Verification blocks stop after their first line (2026-11-27)
+- **Spec said**: Step 9 gives a five-line block and Step 10 a five-line block. Each line starts `cd services/xstockstrat-portfolio && …` or names a repo-root-relative path.
+- **Actual**: this is the same pattern as Steps 3-8. Inside the one subshell the first line's `cd` persists, so every later line fails with `cd: services/xstockstrat-portfolio: No such file or directory`, and the greps print `No such file or directory`. Run verbatim, Step 9's block ran only `go build` and `go vet -tags dbtest`, and Step 10's block ran only `go test ./internal/... -race`. Both exited 1 for this reason alone.
+- **Disposition**: each block was run verbatim once. Then every line that had not run was run unchanged, alone, from the repo root, with its own log. All passed:
+  - `golangci-lint` v2.14.0 printed `0 issues.`
+  - The three "none" greps printed nothing (`exit=1`, no match).
+  - The `instance_count` grep printed the three unchanged `instance_count: 1` lines.
+  - The coverage line printed `total: (statements) 79.1%`.
+  
+  The step bodies were not changed (F-09).
+
+### Step 10 — how Instructions 2, 5 and 8 were met (2026-11-27)
+- **Spec said** (Instruction 2): re-point the three DB-error cases at the pre-check error, the `FOR UPDATE` read error and the write error. **Actual**: there are four tests, because the write case is split into the upsert error and the close (`DELETE`) error. This keeps both failed writes from the old suite, and each one still proves that no position event is emitted. `positionRow` lost its last caller and was deleted, because lint flagged it `unused`.
+- **Spec said** (Instruction 5): make `runOrderFillBatch` use a DB that supports `Begin`. **Actual**: `syncRecorderDB` in `portfolio_offline_test.go` gained `Begin`. It returns a recording `pgx.Tx`, and `noRow` moved into the same file. `portfolio_telemetry_test.go` needed no edit and is unchanged. `TestOrderFillConsumer_AC56_OneTickRecordPerBatch` still counts 4 `ok` with one tick record.
+- **Spec said** (Instruction 8): change only `:45` of `portfolio_fill_floor_test.go`. **Actual**: only that line changed. Its `fillEvent` now carries `order_id`, `side` and an event id (Instruction 2), so the case reaches the pre-check.
+- **Disposition**: these stay within the listed **Files** and the instructions' intent. No step body changed.
+
+### Step 11 — Verification block stops after its first line; the DB line cannot run here (2026-11-27)
+- **Spec said**: a three-line block whose lines each start `cd services/xstockstrat-portfolio && …`; the second line sets `PORTFOLIO_DB_TEST_URL=<url>` "with a migrated database available".
+- **Actual**: the same pattern as Steps 3-10. Inside the one subshell the first line's `cd` persists, so lines 2 and 3 fail with `cd: services/xstockstrat-portfolio: No such file or directory`; run verbatim (`.sdd-logs/v-1.log`), only `go vet -tags dbtest ./...` ran, and it printed nothing. The block exited 1 for this reason alone. No database is available and none may be started, and `<url>` is a placeholder that bash would read as a redirect from a file named `url`.
+- **Disposition**: the lint line ran unchanged, alone, from the repo root (`v-2.log`, `0 issues.`, with v2.14.0 first on `PATH`). The test line ran without the placeholder and with the URL unset (`v-3.log`, `-v` added): the 6 new cases compile, run and `--- SKIP`. The `portfolio-db-test` CI job, which sets `PORTFOLIO_DB_TEST_URL` and is fatal under `CI=true` when it is missing, is where they first execute. The step body was not changed (F-09).
+
+### Step 11 — `event_id` column type (2026-11-27)
+- **Spec said** (the Steps 9+10 `context.md` note): the applied row's `event_id` is a UUID column, so dbtest fixtures need UUID event ids.
+- **Actual**: `019_fill_applied_events.up.sql` declares `event_id TEXT NOT NULL`. The `testdata` `ev-<seq>` ids are therefore valid, and the fixtures use them.
+- **Disposition**: no change needed; recorded so the earlier note is not followed.
+
+### Steps 12+13 — Verification blocks stop after their first line; line drift (2026-11-27)
+- **Spec said**: Step 12 and Step 13 each give a three-line block whose lines each start `cd services/xstockstrat-portfolio && …`. Step 12's evidence cites `portfolio_service.go:993-1045`.
+- **Actual**: the same pattern as Steps 3-11. Inside the one subshell the first line's `cd` persists, so lines 2 and 3 fail with `cd: services/xstockstrat-portfolio: No such file or directory`. Run verbatim, Step 12's block (`.sdd-logs/v-2.log`) ran only `go build` and `go vet -tags dbtest`, and Step 13's block (`v-3.log`) ran only the filtered `go test -race`. Both exited 1 for this reason alone. Steps 7 and 9 moved `realizedPnL` to `:1076`; the dedup maps are at `:1085-1112`, the side lookup at `:1119` and the mixed-account refusal at `:1125-1137`. The code located by symbol matched the evidence.
+- **Disposition**: each block was run verbatim once. Then every line that had not run was run unchanged, alone, from the repo root, with its own log. All passed: the `GetPnL` filter run printed `ok` (`v-4.log`), `golangci-lint` v2.14.0 printed `0 issues.` (`v-5.log`), and the coverage line printed `total: (statements) 79.1%` (`v-6.log`). The step bodies were not changed (F-09).
+
+### Steps 14+15 — Verification blocks stop after their first line (2026-11-27)
+- **Spec said**: Step 14 gives a four-line block and Step 15 a three-line block. Each line starts `cd services/xstockstrat-trading && …` or names a repo-root-relative path.
+- **Actual**: the same pattern as Steps 3-13. Inside the one subshell the first line's `cd` persists, so later lines fail with `cd: services/xstockstrat-trading: No such file or directory` and the greps print `No such file or directory`. Run verbatim, Step 14's block (`.sdd-logs/v-3.log`) ran only `go build ./...`, and Step 15's block (`v-7.log`) ran only the broker `go test -race`. Both exited 1 for this reason alone.
+- **Disposition**: each block was run verbatim once. Then every line that had not run was run unchanged, alone, from the repo root, with its own log. All passed: the `Orders[0]` grep (`v-4.log`) and the `status=all&limit=500` grep (`v-5.log`) printed nothing (`exit=1`, no match); `golangci-lint` v2.14.0, the line both blocks share, printed `0 issues.` (`v-6.log`); the coverage line printed `total: (statements) 84.9%` with every package `ok` (`v-8.log`). The step bodies were not changed (F-09).
+
+### Steps 16+17 — Verification blocks stop after their first line; line drift (2026-11-27)
+- **Spec said**: Step 16 gives a three-line block and Step 17 a two-line block. Each line starts `cd services/xstockstrat-trading && …` or names a repo-root-relative path. Step 16's evidence cites `trading.go:3953`, `:3965` and `:3997`.
+- **Actual**: the same pattern as Steps 3-15. Inside the one subshell the first line's `cd` persists, so later lines fail with `cd: services/xstockstrat-trading: No such file or directory` and the grep prints `No such file or directory`. Run verbatim, Step 16's block (`.sdd-logs/v-2.log`) ran only `go build ./...`, and Step 17's block (`v-3.log`) ran only the filtered `go test -race`. Both exited 1 for this reason alone. After the edit, `appendLedgerEvent` is still at `:3953` and the `emitLedgerEvent` call moved to `:4000` (three lines added: the empty-key fallback). The code located by symbol matched the evidence.
+- **Disposition**: each block was run verbatim once. Then every line that had not run was run unchanged, alone, from the repo root, with its own log. All passed: the grep (`v-4.log`) lists all 8 calls with the key argument; `golangci-lint` v2.14.0, the line both blocks share, printed `0 issues.` (`v-5.log`). The step bodies were not changed (F-09).
+
+### Steps 18+19+20 — Verification blocks stop after their first line (2026-11-27)
+- **Spec said**: Steps 18 and 19 each give a four-line block, and Step 20 a four-line block. Each line starts `cd services/xstockstrat-trading && …` or names a repo-root-relative path.
+- **Actual**: this is the same pattern as Steps 3-17. Inside the one subshell the first line's `cd` persists, so later lines fail with `cd: services/xstockstrat-trading: No such file or directory`, and the greps print `No such file or directory`. Run verbatim, three blocks ran only their first line and exited 1 for this reason alone:
+  - Step 18's block (`.sdd-logs/v-2.log`) ran only `go build ./internal/repository/...`.
+  - Step 19's block (`v-3.log`) ran only `go build ./...`.
+  - Step 20's block (`v-4.log`) ran only `go test ./internal/... -race`.
+- **Disposition**: each block was run verbatim once. Then every line that had not run was run unchanged, alone, from the repo root, with its own log. All passed:
+  - The `bracket_legs` count printed `2` (`v-5.log`).
+  - The status grep printed one declaration line each for `BASELINE_RETIRED` and `NOT_OPEN_AT_ADOPTION` (`v-6.log`).
+  - `golangci-lint` v2.14.0, the line all three blocks share, printed `0 issues.` (`v-7.log`).
+  - The ACTIVE `UpdateBracketStatus` grep printed nothing (`exit=1`, no match; `v-8.log`), and `ActivateBracket(` counted `3` (`v-9.log`).
+  - The `"NOT_OPEN_AT_ADOPTION"` grep printed one line, the repository constant (`v-10.log`).
+  - The coverage line printed `total: (statements) 84.9%` (`v-11.log`).
+
+  The step bodies were not changed (F-09).
+
+### Step 18 — how `ListAdoptionCandidates` and `ActivateBracket` were built (2026-11-27)
+- **Spec said** (Instruction 4): join each candidate to the parent's latest `trading.orders` row with `DISTINCT ON (order_id) … ORDER BY order_id, created_at DESC`. Step 19 writes `order.TradingMode.String()` into `BracketLegParent.TradingMode`.
+- **Actual**:
+  - The `DISTINCT ON` subquery is limited to `order_id IN (SELECT order_id FROM trading.order_brackets WHERE status = ANY($1))`, so it does not scan every order.
+  - `trading.orders.trading_mode` holds the `modeStr` encoding (`live`/`paper`). Leg rows written by `ActivateBracket` hold the enum name (`TRADING_MODE_LIVE`), which is the encoding every ledger payload uses (`bracketUpdatedPayload`, the parent `order.filled`). `ListAdoptionCandidates` therefore returns `parseMode(trading_mode).String()`, so an adopted row carries the same encoding as an activated one and Step 23 can copy it into the event unchanged.
+  - Candidates are ordered by `(account_id, leg_order_id)`.
+  - The repository needs the ACTIVE code without a status argument, so it declares `bracketStatusActive int32 = 3` with a migration-005 comment. `ListExpiredProtection` already encodes statuses as literals.
+  - `UpdateBracketStatus` and `ActivateBracket` share one UPDATE text, and `ActivateBracket` and `InsertAdoptedLeg` share one INSERT text.
+- **Disposition**: these stay within the listed **Files** and the instructions' intent. No step body changed. Step 21's real-Postgres cases are where the SQL first runs against a database.
+
+### Step 20 — the pgxmock form of the mixed orders-plus-legs sum (2026-11-27)
+- **Spec said** (Instruction 3): a mixed orders-plus-legs row set for one symbol sums with the right signs, and a tombstone row with 0 leaves the sum equal to the orders row alone.
+- **Actual**: pgxmock does not execute SQL, so `SUM` and the sign `CASE` run only on a server. `TestNetFilledQtyBySymbol_AddsBracketLegsObservedQty` asserts the SQL shape: the one sign `CASE` wraps both branches, and the leg branch reads `observed_filled_qty` with no status filter, so a tombstone adds its 0. It also asserts that the server's total is returned unchanged.
+- **Disposition**: the summed values are proven by Step 21 (`TestTradingRepoLegsDB_NetFilledQtyBySymbol`, `10 - 3 - 4 = 3`), as A-5 assigns. No step body changed.
+
+### Step 21 — Verification block stops after its first line; the DB lines cannot run here (2026-11-27)
+- **Spec said**: an eight-command block whose lines each start `cd services/xstockstrat-trading && …` or name a repo-root-relative path; the test line sets `TRADING_DB_TEST_URL=<url>` "with a migrated database available", and the next line expects `0` `--- SKIP` lines.
+- **Actual**: the same pattern as Steps 3-20. Inside the one subshell the first line's `cd` persists, so every later line fails with `cd: services/xstockstrat-trading: No such file or directory` (the greps print `No such file or directory`). Run verbatim (`.sdd-logs/v-1.log`, `exit=1`), only `go vet -tags dbtest ./internal/repository/...` ran, and it printed nothing. No database is available and none may be started; `<url>` is a placeholder that bash reads as a redirect from a file named `url`.
+- **Disposition**: every line that had not run was run alone from the repo root, each with its own log. The `-list` line (`v-2.log`) names all 10 cases. The `TRADING_DB_TEST_URL` grep (`v-3.log`) prints `1`, and the `NOT_OPEN_AT_ADOPTION` grep (`v-4.log`) prints `0`. The test line ran without the placeholder and with the URL unset (`v-5.log`, `exit 0`): every case compiles and runs, and all 20 subtests print `--- SKIP`, so the skip count is `20`, not `0`. That `0` holds only in the `trading-db-test` job (Step 22), which sets the URL; the helper is fatal under `CI=true` without it. Lint (`v-6.log`, v2.14.0 first on `PATH`) printed `0 issues.`. The coverage line (`v-7.log`) printed `total: (statements) 84.9%`. The step body was not changed (F-09).
+
+### Step 21 — how Instructions 1-3 were met (2026-11-27)
+- **`seedParentOrder` order id.** An empty `orderID` argument gets the fresh UUID that Instruction 1 names. A non-empty one writes a second `trading.orders` row for the same order, which the two-row cases (candidate (a), the `DISTINCT ON` sell order) need.
+- **Shared helpers.** `dbtestID` (the per-test id built from the prefix, `t.Name()` and `UnixNano`), the two `broker_type` constants and `legParent` are used by both test files, so they sit in `dbtest_helpers_test.go` with the prefix and `execModes` (C-13).
+- **The empty-string `KnownBrokerOrderIDs` member.** The case seeds one bracket whose leg columns are `''` and one whose columns are NULL. It queries real ids only and asserts the result has no `""` key. If `""` were in the input it would match a `''` column. No caller is known to pass `""`, and this step does not test that input.
+- **The atomicity case** asserts SQLSTATE `22021` for a NUL byte in `Symbol`. This was not run against a server. If the CI server returns another code or rejects the value client-side, the case fails loudly. The fix is then the step's named fallback (a non-UUID `parent.OrderID`) with the same three assertions.
+- **Disposition**: these stay within the listed **Files** and the instructions' intent. No step body changed.
+
+### Step 22 — Verification block stops before its last line; the job cannot run here (2026-11-27)
+- **Spec said**: a six-line block. Lines 1-4 are repo-root greps, and lines 5 and 6 each start `cd services/xstockstrat-trading && …`.
+- **Actual**: the same pattern as Steps 3-21. Inside the one subshell the `cd` on line 5 persists, so line 6 fails with `cd: services/xstockstrat-trading: No such file or directory`. Run verbatim (`.sdd-logs/v-2.log`, `exit=1`), lines 1-5 ran and printed what the spec expects: `3`, one `TRADING_DB_TEST_URL` line (`:1166`, in the new job), six `go test -tags dbtest` lines (`:1059,1065,1110,1116,1161,1167`), `28: build-tags:` / `29- - dbtest`, and all 10 Step 21 case names from `-list` with `ok …/internal/repository`. The `trading-db-test` job needs GitHub Actions and a database, so it cannot run here (Instruction 4).
+- **Disposition**: line 6 ran unchanged, alone, from the repo root (`v-3.log`, `0 issues.`, `exit=0`, with v2.14.0 first on `PATH`). The integration PR quotes the job's first run (Instruction 4). The step body was not changed (F-09).
+
+### Steps 23+24 — Verification blocks stop after their first line (2026-11-27)
+- **Spec said**: Step 23 gives a five-line block and Step 24 a three-line block. Each line starts `cd services/xstockstrat-trading && …` or names a repo-root-relative path.
+- **Actual**: the same pattern as Steps 3-22. Inside the one subshell the first line's `cd` persists, so later lines fail with `cd: services/xstockstrat-trading: No such file or directory`. Run verbatim, Step 24's block (`.sdd-logs/v-2.log`) ran only the `internal/service` `go test -race`, and Step 23's block (`v-5.log`) ran `go build` and then lines 2-4 from inside the service directory, where the repo-root paths do not resolve: its `git diff` line printed a vacuous `0` and both greps printed `No such file or directory`. Both blocks exited 1 for this reason alone.
+- **Disposition**: each block was run verbatim once. Then every line that had not run, or had run from the wrong directory, was run unchanged, alone, from the repo root, with its own log. All passed: `golangci-lint` v2.14.0, the line both blocks share, printed `0 issues.` (`v-3.log`); the coverage line printed `total: (statements) 84.9%` with every package `ok` (`v-4.log`); the `StartFillPoller` count printed `0` against a 193-line diff (`v-6.log`); the `pollBracketLegFills` grep printed the call at `:1878` after `logTick` and the definition at `:1890` (`v-7.log`); the `applyBrokerOrderStatus|maybeSubmitBracket` count printed `0` (`v-8.log`). The step bodies were not changed (F-09).
+
+### Steps 23+24 — how the Instructions were met (2026-11-27)
+- **Not-found count on a listed leg.** Instruction 5 resets `not_found_ticks` to 0 on a fallback `GetOrder` success. A leg present in a successful list is also an observed order, so its observation writes 0 too; otherwise an earlier not-found streak would survive a sighting and retire a live leg.
+- **Retiring `UNKNOWN`** writes the status with the existing cursor through `AdvanceLegEmit`; a not-found below the threshold writes only the count, keeping the last `observed_filled_qty`.
+- **A terminal status with no new fill** (or a fill already at the cursor) retires the leg with no emit, so it is not held back by an earlier emit failure in the tick; only emits are skipped after a failure.
+- **A failed `RecordLegObservation` or `AdvanceLegEmit`** is a WARN and processing continues: the emit is keyed, so a repeat after an unadvanced row is deduplicated by the ledger.
+- **Fixtures.** `trading_order_race_test.go` (`notCancelableSvc`) and `trading_rate_limit_test.go` (`newRateLimitHarness`) already set a `fakeBracketRepo`, so neither needed an edit and both are unchanged. The whole-package run found no other nil-`bracketRepo` `pollFills` fixture; the three in `trading_telemetry_test.go` were fixed.
+- **Reuse.** The new test file reuses `legRow` (`trading_bracket_legs_test.go`), `captureLogs`, `logsWithMsg` and `fakeLegKey`/`putLeg`; its ledger fake is inline (one consumer, C-13).
+- **Disposition**: these stay within the listed **Files** and the instructions' intent. No step body changed.
+
+### Steps 25+26+27 — Verification blocks stop after their first line (2026-11-27)
+- **Spec said**: Step 25 gives a three-line block, Step 26 a four-line block and Step 27 a four-line block. Each line starts `cd services/xstockstrat-trading && …` or names a repo-root-relative path, and Step 27's last line ends in a `# >= 40%` comment.
+- **Actual**: the same pattern as Steps 3-24. Inside the one subshell the first line's `cd` persists, so every later `cd` line fails with `cd: services/xstockstrat-trading: No such file or directory`. Run verbatim (the closing parenthesis on its own line, so the trailing comment cannot swallow it): Step 27's block (`.sdd-logs/v-2.log`) ran only the whole-package `go test -race`; Step 25's block (`v-3.log`) ran only `go build`; Step 26's block (`v-4.log`) ran `go build`, then its `git diff` line from inside the service directory (a vacuous `0`), its migrations grep (`No such file or directory`, `0`) and failed on the lint `cd`. Each block exited 1 for this reason alone.
+- **Disposition**: each block was run verbatim once. Then every line that had not run, or had run from the wrong directory, was run unchanged, alone, from the repo root, with its own log. All passed: the `ShouldPollHaltedAccount|ReconcileTick_HaltedAccount` run `ok` (`v-5.log`); lint v2.14.0, the line all three blocks share, `0 issues.` (`v-6.log`); the `ShouldPollHaltedAccount` run `ok` (`v-7.log`); the coverage line `total: (statements) 84.9%` with every package `ok` (`v-8.log`); the `reconcileTick|StartFillPoller` count `0` against a 444-line diff (`v-9.log`, `v-11.log`); the migrations `adoption`/`config` count `0` (`v-10.log`). The step bodies were not changed (F-09).
+
+### Steps 25+26+27 — how the Instructions were met (2026-11-27)
+- **Helper shape.** `pollAllowedLocked(last *map[string]time.Time, accountID, intervalMs, now)` runs with `haltedMu` held by its caller and takes the map by pointer, so it creates a nil map before writing; `shouldPollHaltedAccount` locks and calls it with `&s.haltedLastPolled` and `time.Now()`. The two adoption maps are not initialised in `NewTradingService`: they are created on first write, so they are empty at boot and struct-literal fixtures need no change.
+- **New-candidate bypass and stamp.** `adoptionListAllowed` computes the interval (halted, or `interval_ms` with `<= 0` read as 60000), then under `haltedMu` sets the interval to 0 when the current candidate set holds an id not in `adoptionLastCandidates`, calls the helper over `adoptionLastListed`, and on an allowed list stores the set. A bypassed list is stamped too, so the cooldown restarts from it.
+- **Shared list.** `pollAccountLegs`' `ListOrders` and its WARNs moved unchanged into `listLegOrders`, so a tracked account's one list feeds both observation and adoption, and an adoption-only account's list logs the same two WARNs. `ordersByID` and `groupLegsByAccount` are shared by observation and adoption (C-10).
+- **60000.** `StartReconciliationPoller`'s local `defaultIntervalMs` now takes its value from a package constant `reconcileDefaultIntervalMs`, which adoption also reads; its behaviour is unchanged. This is one line inside `StartReconciliationPoller`, which is neither `reconcileTick` nor `StartFillPoller` (D-50).
+- **Insert WARN.** "One WARN for the tick" is one WARN per `pollBracketLegFills` call across all accounts; the remaining candidates are still attempted, and each failed one is retried on its next evaluation.
+- **Tombstone log.** The INFO line is written only when `InsertAdoptedLeg` reports a new row, so a conflict does not log twice.
+- **Round-11 case 18** is `TestHaltedAndAdoptionThrottles_Independent` in `trading_reconciliation_test.go`, both orders on one halted account; `TestShouldPollHaltedAccount_ThrottlesAndRecovers` is unchanged.
+- **Disposition**: these stay within the listed **Files** and the instructions' intent. No step body changed.

@@ -289,9 +289,6 @@ func TestReplaceableStateGate(t *testing.T) {
 // narrows the result set and composes with status/trading_mode.
 func TestListOrdersInMemoryFilters(t *testing.T) {
 	matches := func(o *tradingv1.Order, req *tradingv1.ListOrdersRequest) bool {
-		if req.UserId != "" && o.UserId != req.UserId {
-			return false
-		}
 		if req.Status != tradingv1.OrderStatus_ORDER_STATUS_UNSPECIFIED && o.Status != req.Status {
 			return false
 		}

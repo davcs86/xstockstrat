@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -159,6 +160,34 @@ func TestKnownBrokerOrderIDs_IncludesBracketLegs(t *testing.T) {
 	}
 }
 
+// TestKnownBrokerOrderIDs_IncludesTrackedLegAfterResize: a leg id a resize blanked from
+// trading.order_brackets is still known through its trading.bracket_legs row (tombstones included).
+func TestKnownBrokerOrderIDs_IncludesTrackedLegAfterResize(t *testing.T) {
+	mock, err := pgxmock.NewPool()
+	if err != nil {
+		t.Fatalf("pgxmock.NewPool: %v", err)
+	}
+	defer mock.Close()
+
+	repo := &TradingRepo{db: mock}
+	rows := pgxmock.NewRows([]string{"broker_order_id"}).AddRow("leg-old")
+
+	mock.ExpectQuery(`(?s)take_profit_leg_order_id = ANY\(\$2\)\s+UNION\s+SELECT leg_order_id\s+FROM trading\.bracket_legs\s+WHERE account_id = \$1\s+AND leg_order_id = ANY\(\$2\)\s*$`).
+		WithArgs("acct-1", []string{"leg-old", "foreign"}).
+		WillReturnRows(rows)
+
+	known, err := repo.KnownBrokerOrderIDs(context.Background(), "acct-1", []string{"leg-old", "foreign"})
+	if err != nil {
+		t.Fatalf("KnownBrokerOrderIDs: %v", err)
+	}
+	if !known["leg-old"] || known["foreign"] {
+		t.Errorf("known = %v, want only leg-old", known)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Errorf("unmet expectations: %v", err)
+	}
+}
+
 // TestKnownBrokerOrderIDs_EmptyInputShortCircuits proves no query is issued for an empty ID set —
 // the common case (no unmatched broker orders this tick) must not touch the DB.
 func TestKnownBrokerOrderIDs_EmptyInputShortCircuits(t *testing.T) {
@@ -208,6 +237,45 @@ func TestNetFilledQtyBySymbol_SumsSignedAndDedups(t *testing.T) {
 	}
 	if net["MSFT"] != -5.0 {
 		t.Errorf("MSFT net = %v, want -5 (net short)", net["MSFT"])
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Errorf("unmet expectations: %v", err)
+	}
+}
+
+// TestNetFilledQtyBySymbol_AddsBracketLegsObservedQty: tracked legs are UNION ALLed under the same
+// sign CASE as orders, summed from observed_filled_qty (not the emit cursor), with no status filter
+// so a zero-quantity tombstone leaves the orders total unchanged.
+func TestNetFilledQtyBySymbol_AddsBracketLegsObservedQty(t *testing.T) {
+	var gotSQL string
+	captureSQL := pgxmock.QueryMatcherFunc(func(expectedSQL, actualSQL string) error {
+		gotSQL = actualSQL
+		return pgxmock.QueryMatcherRegexp.Match(expectedSQL, actualSQL)
+	})
+	mock, err := pgxmock.NewPool(pgxmock.QueryMatcherOption(captureSQL))
+	if err != nil {
+		t.Fatalf("pgxmock.NewPool: %v", err)
+	}
+	defer mock.Close()
+
+	repo := &TradingRepo{db: mock}
+	// Buy 10 on an order, a sell leg observed at 4 and a tombstone at 0: the server returns 6.
+	rows := pgxmock.NewRows([]string{"symbol", "net"}).AddRow("AAPL", 6.0)
+
+	mock.ExpectQuery(`(?s)SELECT symbol, SUM\(CASE WHEN side = 'sell' THEN -filled_qty ELSE filled_qty END\)\s+FROM \(.*DISTINCT ON \(order_id\).*FROM trading\.orders.*ORDER BY order_id, created_at DESC.*UNION ALL\s+SELECT symbol, side, observed_filled_qty\s+FROM trading\.bracket_legs\s+WHERE account_id = \$1\s+AND symbol = ANY\(\$2\)\s+\) fills\s+GROUP BY symbol`).
+		WithArgs("acct-1", []string{"AAPL"}).
+		WillReturnRows(rows)
+
+	net, err := repo.NetFilledQtyBySymbol(context.Background(), "acct-1", []string{"AAPL"})
+	if err != nil {
+		t.Fatalf("NetFilledQtyBySymbol: %v", err)
+	}
+	if net["AAPL"] != 6.0 {
+		t.Errorf("AAPL net = %v, want 6", net["AAPL"])
+	}
+	_, legBranch, found := strings.Cut(gotSQL, "UNION ALL")
+	if !found || strings.Contains(legBranch, "status") {
+		t.Errorf("leg branch must exist and carry no status filter, got %q", legBranch)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Errorf("unmet expectations: %v", err)
@@ -305,6 +373,50 @@ func TestUpsertOrder_PersistsFeesPresence(t *testing.T) {
 
 			err = repo.UpsertOrder(context.Background(), &tradingv1.Order{OrderId: "ord-f", Fees: tc.fees})
 			if err != nil {
+				t.Fatalf("UpsertOrder: %v", err)
+			}
+			if err := mock.ExpectationsWereMet(); err != nil {
+				t.Errorf("unmet expectations: %v", err)
+			}
+		})
+	}
+}
+
+// TestUpsertOrder_RequiresApprovalFromStatus_F321_AC3 pins the requires_approval bind ($17) to the
+// insert-time status and the DO UPDATE SET list that keeps it out of the conflict update.
+func TestUpsertOrder_RequiresApprovalFromStatus_F321_AC3(t *testing.T) {
+	const fullUpdateSet = `(?s)ON CONFLICT \(order_id, created_at\) DO UPDATE SET\s+` +
+		`broker_order_id\s+= EXCLUDED\.broker_order_id,\s+status\s+= EXCLUDED\.status,\s+` +
+		`filled_qty\s+= EXCLUDED\.filled_qty,\s+filled_avg_price\s+= EXCLUDED\.filled_avg_price,\s+` +
+		`updated_at\s+= EXCLUDED\.updated_at,\s+account_id\s+= EXCLUDED\.account_id,\s+` +
+		`broker_type\s+= EXCLUDED\.broker_type,\s+filled_at\s+= EXCLUDED\.filled_at,\s+` +
+		`fees\s+= EXCLUDED\.fees\s*$`
+	cases := []struct {
+		status tradingv1.OrderStatus
+		want   bool
+		sql    string
+	}{
+		{tradingv1.OrderStatus_ORDER_STATUS_PENDING_APPROVAL, true, fullUpdateSet},
+		{tradingv1.OrderStatus_ORDER_STATUS_NEW, false, `INSERT INTO trading\.orders`},
+		{tradingv1.OrderStatus_ORDER_STATUS_FILLED, false, `INSERT INTO trading\.orders`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.status.String(), func(t *testing.T) {
+			mock, err := pgxmock.NewPool()
+			if err != nil {
+				t.Fatalf("pgxmock.NewPool: %v", err)
+			}
+			defer mock.Close()
+
+			args := make([]any, 23)
+			for i := range args {
+				args[i] = pgxmock.AnyArg()
+			}
+			args[16] = tc.want // $17 requires_approval
+			repo := &TradingRepo{db: mock}
+			mock.ExpectExec(tc.sql).WithArgs(args...).WillReturnResult(pgxmock.NewResult("INSERT", 1))
+
+			if err := repo.UpsertOrder(context.Background(), &tradingv1.Order{OrderId: "ord-a", Status: tc.status}); err != nil {
 				t.Fatalf("UpsertOrder: %v", err)
 			}
 			if err := mock.ExpectationsWereMet(); err != nil {

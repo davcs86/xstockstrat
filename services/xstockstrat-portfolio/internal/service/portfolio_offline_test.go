@@ -216,10 +216,30 @@ func containsWord(s, word string) bool {
 	return false
 }
 
+type noRow struct{}
+
+func (noRow) Scan(...any) error { return pgx.ErrNoRows }
+
 // syncRecorderDB records every write processPositionSync makes; reads find no rows.
 type syncRecorderDB struct {
 	execs []recordedExec
 }
+
+// Begin hands ApplyFill a transaction that records into execs; every write affects one row.
+func (d *syncRecorderDB) Begin(context.Context) (pgx.Tx, error) { return &recorderTx{db: d}, nil }
+
+type recorderTx struct {
+	pgx.Tx
+	db *syncRecorderDB
+}
+
+func (tx *recorderTx) Exec(_ context.Context, sql string, args ...any) (pgconn.CommandTag, error) {
+	tx.db.execs = append(tx.db.execs, recordedExec{sql: sql, args: args})
+	return pgconn.NewCommandTag("INSERT 0 1"), nil
+}
+func (*recorderTx) QueryRow(context.Context, string, ...any) pgx.Row { return noRow{} }
+func (*recorderTx) Commit(context.Context) error                     { return nil }
+func (*recorderTx) Rollback(context.Context) error                   { return nil }
 
 type recordedExec struct {
 	sql  string

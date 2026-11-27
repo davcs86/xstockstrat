@@ -29,7 +29,7 @@ gRPC-only on `50059`; the trader UI bridges `StreamAlerts` to browser SSE.
 - `StreamAlerts` holds long-lived gRPC server streams per subscriber
 - Fan-out is synchronous in `EmitAlert` — alerts are delivered to matching subscribers before the RPC returns
 - Alerts are also persisted to `notify.alerts` for history and replay
-- Per-user read state (`notify.alert_reads`, feature 203) and the owner fallback: NOTIFY-7.
+- Per-user read state (`notify.alert_reads`, feature 203): `ListAlerts` is header-only (a missing `x-user-id` is rejected with code 3); only `MarkAlertRead` keeps the body `userId` fallback (NOTIFY-7).
 - Alert matching: by `user_id`, `categories[]`, `severities[]`
 
 ## Authorization — EmitAlert is an internal-service-caller contract (feature 092)

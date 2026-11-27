@@ -217,6 +217,11 @@ export interface ConfirmOrderRequest {
     fees?: number | undefined;
 }
 export interface ListOrdersRequest {
+    /**
+     * DEPRECATED: ignored; the owner is resolved from the x-user-id header.
+     *
+     * @deprecated
+     */
     userId: string;
     strategyId: string;
     status: OrderStatus;
@@ -238,6 +243,11 @@ export interface ListOrdersResponse {
     page?: PageResponse | undefined;
 }
 export interface StreamOrderUpdatesRequest {
+    /**
+     * DEPRECATED: ignored; the owner is resolved from the x-user-id header.
+     *
+     * @deprecated
+     */
     userId: string;
     statusFilter: OrderStatus[];
 }
@@ -288,9 +298,9 @@ export interface RegisterBrokerAccountRequest {
     displayName: string;
     brokerType: BrokerType;
     /**
-     * Deprecated: paper/live is owned by the deployment environment
-     * (trading.broker.paper config key / TRADING_MODE env). The server derives
-     * is_paper from the environment and ignores this field.
+     * Deprecated: paper/live is owned by the deployment environment: the trading.broker.paper
+     * config key, seeded per environment, with APPLICATION_ENV as the fallback when the row is
+     * absent. The server derives is_paper from it and ignores this field.
      *
      * @deprecated
      */

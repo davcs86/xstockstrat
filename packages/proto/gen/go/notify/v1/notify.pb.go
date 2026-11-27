@@ -553,12 +553,13 @@ func (x *AcknowledgeAlertResponse) GetSuccess() bool {
 }
 
 type ListAlertsRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	UserId        string                 `protobuf:"bytes,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
-	Categories    []string               `protobuf:"bytes,2,rep,name=categories,proto3" json:"categories,omitempty"`
-	Limit         int32                  `protobuf:"varint,3,opt,name=limit,proto3" json:"limit,omitempty"`
-	PageToken     string                 `protobuf:"bytes,4,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
-	UnreadOnly    bool                   `protobuf:"varint,5,opt,name=unread_only,json=unreadOnly,proto3" json:"unread_only,omitempty"` // feature 203 — when true, return only alerts the calling user has not read
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Deprecated: Marked as deprecated in notify/v1/notify.proto.
+	UserId        string   `protobuf:"bytes,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"` // DEPRECATED: ignored; the owner is resolved from the x-user-id header.
+	Categories    []string `protobuf:"bytes,2,rep,name=categories,proto3" json:"categories,omitempty"`
+	Limit         int32    `protobuf:"varint,3,opt,name=limit,proto3" json:"limit,omitempty"`
+	PageToken     string   `protobuf:"bytes,4,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
+	UnreadOnly    bool     `protobuf:"varint,5,opt,name=unread_only,json=unreadOnly,proto3" json:"unread_only,omitempty"` // feature 203 — when true, return only alerts the calling user has not read
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -593,6 +594,7 @@ func (*ListAlertsRequest) Descriptor() ([]byte, []int) {
 	return file_notify_v1_notify_proto_rawDescGZIP(), []int{6}
 }
 
+// Deprecated: Marked as deprecated in notify/v1/notify.proto.
 func (x *ListAlertsRequest) GetUserId() string {
 	if x != nil {
 		return x.UserId
@@ -1178,9 +1180,9 @@ const file_notify_v1_notify_proto_rawDesc = "" +
 	"\balert_id\x18\x01 \x01(\tR\aalertId\x12\x17\n" +
 	"\auser_id\x18\x02 \x01(\tR\x06userId\"4\n" +
 	"\x18AcknowledgeAlertResponse\x12\x18\n" +
-	"\asuccess\x18\x01 \x01(\bR\asuccess\"\xa2\x01\n" +
-	"\x11ListAlertsRequest\x12\x17\n" +
-	"\auser_id\x18\x01 \x01(\tR\x06userId\x12\x1e\n" +
+	"\asuccess\x18\x01 \x01(\bR\asuccess\"\xa6\x01\n" +
+	"\x11ListAlertsRequest\x12\x1b\n" +
+	"\auser_id\x18\x01 \x01(\tB\x02\x18\x01R\x06userId\x12\x1e\n" +
 	"\n" +
 	"categories\x18\x02 \x03(\tR\n" +
 	"categories\x12\x14\n" +
