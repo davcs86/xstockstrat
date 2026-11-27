@@ -5,7 +5,7 @@
 **GitHub Issue**: none (Issues disabled) — reports: docs/reports/2026-10-19-agent-bearer-secret-orphan-on-failed-register-defect.md
 **Severity**: SEV-3
 **Created**: 2026-11-10
-**Last Updated**: 2026-11-20
+**Last Updated**: 2026-11-27
 
 ---
 
@@ -17,6 +17,7 @@
 | 2026-11-10 | `draft` → `spec-ready` | /sdd-review | Product spec approved (4 warnings) |
 | 2026-11-20 | `spec-ready` → `design-approved` | /sdd-design | Design debated (3 rounds, full) and approved; recon.md + debate.md + design.md written |
 | 2026-11-20 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 9 steps |
+| 2026-11-27 | `implementation-ready` → `in-progress` | /sdd-execute | → in-progress (sdd-batch-execute setup) |
 
 ---
 
