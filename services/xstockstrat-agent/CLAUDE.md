@@ -20,8 +20,9 @@ In HTTP mode it also runs a second listener: the internal tool-catalog gRPC serv
 The agent is a platform edge: `CallerPropagationMiddleware` forwards the `x-user-id` /
 `x-access-scope` / `x-trace-id` trio on every backend gRPC from verified claims (constitution
 **AGENT-4**). Identity travels only in `x-user-id`; set a body `user_id` only when it is a target/scope
-selector (e.g. `ListOrders` filter, config per-user scope, `emit_alert` target, `IssueAuthCode`
-subject), never to name the caller. Backend role checks *verify* admin from the forwarded
+selector (e.g. config per-user scope, `emit_alert` target, `IssueAuthCode`
+subject), never to name the caller. Trading ignores the body `user_id` on `ListOrders`; the owner
+is `x-user-id`. Backend role checks *verify* admin from the forwarded
 `x-access-scope`. The strategy tools (`manage_strategy`/`set_strategy_live`) are the exception since feature
 133 — they are **ownership**-gated on the forwarded `x-user-id`, not admin-gated. See §
 Management-tool authorization.

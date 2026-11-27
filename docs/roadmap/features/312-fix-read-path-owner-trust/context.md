@@ -684,3 +684,10 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Config-key wiring gate: does not apply, because no config key is declared.
 - Files modified: `services/xstockstrat-ui/src/lib/traderBff.ts`
 - Deviations: none
+
+### Step 15 — docs: xstockstrat-agent body user_id wording [done]
+- Took "`ListOrders` filter" out of the target/scope-selector examples in the agent `CLAUDE.md:22-25` paragraph and added "Trading ignores the body `user_id` on `ListOrders`; the owner is `x-user-id`." The other examples (config per-user scope, `emit_alert` target, `IssueAuthCode` subject) stay. No agent code, tool contract or test changed (Instruction 2). `list_account_orders` still sends body `user_id` equal to the `x-user-id` caller (`client.py:2600`), so results are unchanged.
+- TDD: N/A (docs). Verification: exit=0 (`.sdd-logs/v-1.log`). The `! grep "ListOrders. filter"` found no match, and `grep -n "ListOrders"` printed `24:subject), never to name the caller. Trading ignores the body `user_id` on `ListOrders`; the owner`.
+- Config-key wiring gate: does not apply, because no config key is declared.
+- Files modified: `services/xstockstrat-agent/CLAUDE.md`
+- Deviations: none

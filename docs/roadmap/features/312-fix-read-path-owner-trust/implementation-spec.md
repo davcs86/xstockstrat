@@ -974,7 +974,7 @@ cd services/xstockstrat-ui \
 
 ### Step 15 — docs: xstockstrat-agent body user_id wording
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/CLAUDE.md` — modify
