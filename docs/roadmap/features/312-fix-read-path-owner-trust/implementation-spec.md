@@ -594,7 +594,7 @@ threshold applies to it; the unit tests above are the evidence.
 
 ### Step 8 — service: portfolio skips owner-less ledger events
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/service/portfolio_service.go` — modify

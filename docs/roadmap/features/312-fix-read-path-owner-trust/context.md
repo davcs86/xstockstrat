@@ -620,3 +620,10 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Config-key wiring gate: does not apply, because no config key is declared.
 - Files modified: `services/xstockstrat-trading/internal/service/trading_broker_owner_gate_test.go`
 - Deviations: none
+
+### Step 8 — service: portfolio skips owner-less ledger events [done]
+- Added `ownerlessEventMsg` (`"ledger event has no owner, skipping event"`). `processPositionSync`, `processAccountDeregistered` and `processBalanceSync` now WARN with `"account_id"` and `"event_type", event.EventType` and return before the lock or any write when `user_id` is `""`, then pass the payload's `UserID` directly. `processOrderFill` WARNs with `"order_id"` and `"event_type"` and returns nil on an empty `account_id` right after the payload parse. The four `"default"`/`"alpaca-default"` fallbacks and the legacy fallback comment are deleted, and `acctID := fill.AccountId` stays. `boundedRetry`, `classifyConsumerErr` and the telemetry labels are unchanged, so a skip counts as `acked` (`ok` for fills). Legacy pre-`user_id` events, including the deregister `DeleteOfflineRealized` purge, are dropped on replay (D-5).
+- TDD: red-green. This step's **Files** have no paired test; Step 9 asserts the skip (AC-2). RED was this step's Verification on the pre-fix tree: exit=1 (`.sdd-logs/v-1.log`). The build and `ok  	github.com/xstockstrat/portfolio/internal/service	11.692s` passed, but the `! grep` matched `438:		acctID = "alpaca-default"`, `1608:		userID = "default"`, `1661:` (the comment), `1664:` and `1812:		userID = "default"`. GREEN was the same Verification: exit=0 (`.sdd-logs/v-2.log`) with `ok  	github.com/xstockstrat/portfolio/internal/service	11.629s`, no grep match, and golangci-lint v2.14.0 `0 issues.` (`~/go/bin` first on PATH for the run).
+- Config-key wiring gate: does not apply, because no config key is declared.
+- Files modified: `services/xstockstrat-portfolio/internal/service/portfolio_service.go`
+- Deviations: none
