@@ -300,7 +300,7 @@ pnpm run lint
 
 ### Step 4 — service: Node leaves — remove dead dependencies and the `migrate` script, regenerate the root lock
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ledger`, `xstockstrat-config`, `xstockstrat-identity`, `xstockstrat-notify`
 **Files**:
 - `services/xstockstrat-ledger/package.json` — modify
@@ -643,3 +643,12 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Actual**: `:35` was the section's only row, so the emptied table was replaced with `_None open._` under the kept heading rather than leaving a header-only table.
 - **Disposition**: formatting consequence of the instructed move; same file.
 
+### Step 4 — ledger `CLAUDE.md` banner wording (2026-11-27)
+- **Spec said**: Instruction 6 — replace the banner's dead-`migrate` clause with "today: the live-tail large-payload stub and the `exportEvents` backpressure row, both under `## Latent bugs`".
+- **Actual**: the large-payload stub row is marked `✓ RESOLVED (feature 248)` in the ledger findings file, so it is not an open defect class. The banner now names the two other open `## Latent bugs` rows: `exportEvents` backpressure/cancel and the unguarded `toSeq`.
+- **Disposition**: spec premise stale; banner kept truthful; same file as the step's **Files**; no scope added.
+
+### Step 4 — ledger and notify findings "Dead / orphaned code" sections (2026-11-27)
+- **Spec said**: Instruction 6 — remove the row from `## Dead / orphaned code` and add a `**RESOLVED (feature 323)**` bullet under `## Resolved`.
+- **Actual**: each row was its section's only row, so the emptied table was replaced with `_None open._` under the kept heading (the Step 3 precedent). The notify bullet also names the dead `migrate` script and `node-pg-migrate` devDependency, since the same manifest edit removed them.
+- **Disposition**: formatting consequence of the instructed move; same files.
