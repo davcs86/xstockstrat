@@ -23,7 +23,7 @@ Feature: pipeline-job-graph
   @AC-3 @FR-2
   Scenario: A job whose worker died is taken over after the lease expires
     Given worker A holds a job and stops sending heartbeats
-    When 60 seconds pass and worker B polls
+    When 60 seconds pass, a maintenance pass reaps the expired lease and worker B polls
     Then worker B holds the lease
     And the job's attempt count is 2
 
@@ -33,7 +33,8 @@ Feature: pipeline-job-graph
     And worker B reports the job as succeeded
     When worker A reports the job as succeeded
     Then the report is rejected
-    And the job's recorded result is worker B's
+    And the job's finish time is the one worker B's report recorded
+    And exactly 1 succeeded attempt is counted for the job
 
   @AC-5 @FR-3
   Scenario: A transient failure is retried after a delay
@@ -85,10 +86,10 @@ Feature: pipeline-job-graph
   @AC-12 @FR-7
   Scenario: Finished jobs are pruned and dead jobs are kept
     Given analysis.pipeline.retention_days is 7
-    And 1 succeeded job finished 8 days ago and 1 dead job finished 8 days ago
+    And 1 succeeded, 1 failed, 1 dead and 1 blocked job each finished 8 days ago
     When the retention prune runs
     Then the succeeded job no longer exists
-    And the dead job still exists
+    And the failed, dead and blocked jobs still exist
 
   @AC-13 @FR-8
   Scenario: Queue depth and age are measurable
@@ -107,7 +108,7 @@ Feature: pipeline-job-graph
   @AC-15 @FR-7 @FR-1
   Scenario: The daily prune runs once across instances
     Given 2 analysis instances are running on 2026-11-27 (UTC)
-    When both instances run a claim poll
+    When both instances run their first maintenance pass of the day
     Then exactly 1 job of kind "pipeline.retention_prune" exists for epoch "2026-11-27"
     And it finishes in state "succeeded"
 
@@ -116,3 +117,20 @@ Feature: pipeline-job-graph
     Given analysis.pipeline.worker_enabled is false
     When 10 seconds pass on 2026-11-27 (UTC)
     Then no job of kind "pipeline.retention_prune" exists for epoch "2026-11-27"
+
+  @AC-17 @FR-9
+  Scenario: Disabling the worker lets a running job finish
+    Given a job is running on worker A
+    And a second ready job exists
+    When analysis.pipeline.worker_enabled becomes false
+    And the running job's handler then returns success
+    Then that job is in state "succeeded"
+    And the second job is still ready with attempt count 0
+
+  @AC-18 @FR-7
+  Scenario: Failed, dead and blocked jobs are pruned after 30 days
+    Given analysis.pipeline.retention_days is 7
+    And 1 dead job finished 31 days ago and 1 dead job finished 29 days ago
+    When the retention prune runs
+    Then the dead job that finished 31 days ago no longer exists
+    And the dead job that finished 29 days ago still exists

@@ -47,13 +47,15 @@ above `watchlist`; the full lane set is a design output. The prune job runs in t
 FR-6. **Universe-run id.** Each job carries the id of the universe run that created it, and a
 run's jobs can be listed with their states through the job repository. No RPC exposes this.
 
-FR-7. **Retention, run as the first job kind.** Succeeded jobs older than
-`analysis.pipeline.retention_days` are deleted; dead and blocked jobs are kept for inspection. The
-prune is itself a job on the graph, kind `pipeline.retention_prune`, one per calendar day (UTC).
-Every instance ensures the day's job exists at each claim poll through the idempotent enqueue
-(FR-1), so the day's
-prune runs once however many instances are up. This is the core's only production job kind in this
-feature (operator decision, 2026-11-27).
+FR-7. **Retention, run as the first job kind.** Succeeded jobs that finished more than
+`analysis.pipeline.retention_days` days ago are deleted, after which the key can be enqueued again,
+so job kinds use epochs that never recur. Jobs that ended `failed`, `dead` or `blocked` are kept
+for `max(30, retention_days)` days, then deleted. A job that an unfinished job waits on is never
+deleted. The prune is a job on the graph, kind `pipeline.retention_prune`, one per UTC day. Every
+instance with the worker enabled ensures the day's job through the idempotent enqueue (FR-1) on its
+first maintenance pass of each UTC day and after each restart, so it runs once however many
+instances are up. It is the core's only production job kind in this feature (operator decisions,
+2026-11-27).
 
 FR-8. **Telemetry.** The runtime exports ready depth and oldest-ready age per lane, plus counts of
 attempts by outcome.
@@ -61,6 +63,9 @@ attempts by outcome.
 FR-9. **Kill switch, no behavior change.** With `analysis.pipeline.worker_enabled` false, no job
 is claimed and no prune job is enqueued. The worker is on by default so that the prune (FR-7)
 exercises the core in production. This feature moves no existing loop and changes no RPC response.
+A job already running when the worker is disabled keeps its lease and records its result.
+Disabling stops new claims, the daily ensure and the maintenance pass at the next tick. While every
+instance is disabled, no expired lease is reaped.
 
 ## Out of Scope
 
@@ -106,7 +111,7 @@ re-check the number at `/sdd-spec` and `/sdd-execute`).
 
 - `analysis.pipeline.worker_enabled` — bool, code default `true`. Kill switch for claiming and for the daily prune enqueue (FR-9).
 - `analysis.pipeline.worker_concurrency` — int, code default `4`. Jobs one instance runs at once.
-- `analysis.pipeline.poll_interval_ms` — int, code default `1000`. Delay between claim polls.
+- `analysis.pipeline.poll_interval_ms` — int, code default `1000`. Delay between claim polls while claims are finding jobs and slots are free; when idle, polling backs off to `max(poll_interval_ms, 5000)` ms.
 - `analysis.pipeline.lease_seconds` — int, code default `60`. Lease length without a heartbeat (FR-2).
 - `analysis.pipeline.max_attempts` — int, code default `5`. Attempts before dead-letter (FR-3).
 - `analysis.pipeline.retention_days` — int, code default `7`. Age at which succeeded jobs are pruned (FR-7).
@@ -139,8 +144,10 @@ show.
 
 - **Lease reversal.** Features 156 and 158 rejected leases because a lease taken before a crash
   wedged the schedule for the full hold (`docs/roadmap/ledger/insights.md`, 2026-08-26). Operator
-  decision D-11 reverses that ruling. The design must show that heartbeat expiry bounds the wedge
-  to `analysis.pipeline.lease_seconds`.
+  decision D-11 reverses that ruling. The design must show that heartbeat expiry bounds the wedge.
+  A job whose worker died becomes claimable again within `lease_seconds` + 10 s, plus up to 4 s of
+  event-loop lag, while the database answers normally, and within a bound stated in the design if every database operation runs to
+  its timeout. Both require an instance with the worker enabled, that job kind and a free slot.
 - **Poison handling.** The ledger records events lost when a consumer skipped a failure and
   advanced (`fails.md`, fix-offline-book-consistency) and a transient allow-list misused as the
   park classifier (fix-python-loop-supervision). No failure path may end in silent success (FR-3).

@@ -60,3 +60,184 @@
 - Recommended design depth: full (DB migration, 2 affected services).
 - Design-phase watch items from the reviewer: F-06 pool contention for `worker_concurrency` 4;
   C-18 on lanes and dependency edges with no production consumer yet.
+
+## Session 2026-11-27 — sdd-design (in progress)
+
+- Phase 0 Recon: wrote recon.md (services: analysis, config). Tree:
+  ccr-fe135a59-nyslbm@eda1880 ≡ origin/main-dev.
+- **OPERATOR DECISION: "keep going with writing the plans until you need me again"** — taken as a
+  standing choice of *Run another round* at any gate where *Approve* is not yet selectable (full
+  mode, round 1). The approval gate itself is never skipped.
+- **OPERATOR OVERRIDE: "I override the round cap. Getting a sound high quality design is more
+  important."** — the 5-round hard cap of `/sdd-design` does not apply to this feature. Rounds
+  continue while they make progress; the no-progress detector still applies.
+
+## Session 2026-11-27 — sdd-design gate after round 4
+
+- Rounds 1–4 run (full; cap lifted). Register: 45 decisions, 18 rejected alternatives, 53
+  objections, 3 open at the gate. No Floor breach, no C-16 regression. design.md is a draft.
+- **OPERATOR DECISION (O-12): "30-day window"** — succeeded jobs pruned after `retention_days`;
+  `failed`/`dead`/`blocked` jobs kept `max(30, retention_days)` days, not tunable; no requeue in
+  this feature (program feature 4 owns it); manual recovery SQL in a runbook page. This changes
+  FR-7, which said dead and blocked jobs are kept.
+- **OPERATOR DECISION (O-47): "Busy delay, idle backoff"** — `pipeline.poll_interval_ms` is the
+  delay between claims while work flows; idle polling backs off to `max(poll_interval_ms, 5 s)`.
+- **OPERATOR (O-34): "Show me the exact text first"** — spec and scenario amendments NOT applied.
+  The before/after text was shown in session; awaiting the answer.
+- **OPERATOR (design gate): "Run another round"** — round 5 started. Not approved.
+
+## Session 2026-11-27 — sdd-design round 5
+
+- Round 5 run at the operator's request. Proposer self-review and adversary audit of design.md.
+  No Floor breach, no C-16 regression. Nine new objections (O-54..O-62), four blocking.
+- Three reopen petitions are pending the operator: P-1 (D-43 slot release), P-2 (D-42 worst-case
+  figure, replaced by invariants), P-3 (D-34/D-44 heartbeat period, fixed 7.5 s). Both sides
+  recommend accepting all three.
+- O-34 (spec wording) is still with the operator; the before/after text was shown in session,
+  with a proposed `@AC-18` for the 30-day deletion.
+- design.md not yet amended for round 5; corrections wait for the operator's rulings.
+
+## Session 2026-11-27 — sdd-design gate after round 5
+
+- **OPERATOR REOPEN P-1 (D-43): "hold the slot"** — a job keeps its worker slot until its report
+  or park is written, rejected or abandoned (D-46).
+- **OPERATOR REOPEN P-2 (D-42, D-34 worst case): "state invariants"** — no closed-form worst-case
+  takeover figure; bounding invariants plus the normal figure `lease_seconds` + 10 s (D-47).
+- **OPERATOR REOPEN P-3 (D-34, D-44): "fixed 7.5 s period"** — heartbeat period independent of
+  `lease_seconds` (D-48).
+- **OPERATOR DECISION (O-34): "Accept all, add AC-18"** — product-spec.md amended (FR-7, FR-9,
+  lease constraint, `poll_interval_ms` description); acceptance.feature amended (`@AC-3`,
+  `@AC-4`, `@AC-12`, `@AC-15`) and `@AC-17`, `@AC-18` appended. These change an approved spec
+  with explicit operator sign-off.
+- Reopens require another round: round 6 started over the amended design.md. Not approved.
+
+## Session 2026-11-27 — sdd-design round 6
+
+- Round 6 run over the amended design (required by the round-5 reopens). No Floor breach, no
+  C-16 regression, no register violation. Every lease-timing figure was recomputed by both sides
+  and confirmed. Eight new objections (O-63..O-70); O-63 is a functional gap (a claim after the
+  kill switch), found independently by both sides.
+- Two reopen petitions pending the operator: P-4 (D-49 lock strength) and P-5 (D-47 invariants 1
+  and 3). One spec wording follow-up pending the operator (the 4 s lag in the lease constraint).
+- design.md not yet amended for round 6.
+
+## Session 2026-11-27 — sdd-design gate after round 6
+
+- **OPERATOR REOPEN P-5 (D-47 invariants 1 and 3): "correct both"** — D-51.
+- **OPERATOR REOPEN P-4 (D-49 lock strength): "weaker lock"** — reap and settle use
+  `FOR NO KEY UPDATE SKIP LOCKED` (D-52).
+- **OPERATOR DECISION: "Update the spec"** — the lease constraint in product-spec.md now reads
+  "`lease_seconds` + 10 s, plus up to 4 s of event-loop lag".
+- Kill-switch re-check and the other round-6 corrections applied to design.md (D-53).
+- Reopens require another round: round 7 started. Not approved.
+
+## Session 2026-11-27 — sdd-design round 7
+
+- Round 7 run over the design as amended for round 6. One substance item, found independently by
+  both sides: a finished handler's result could be discarded by the self-fence while it waited
+  for the lane (O-71 → D-54). Everything else was wording, applied to design.md. No Floor breach,
+  no C-16 regression, no register violation; FR-1..FR-9 and `@AC-1`..`@AC-18` all PASS.
+- One non-blocking reopen petition pending the operator: P-6 (claim lock strength). If declined
+  it stays an Open Risk.
+
+## Session 2026-11-27 — sdd-design gate after round 7
+
+- **OPERATOR REOPEN P-6 (D-4 / D-52 claim lock): "weaker lock in the claim"** — the claim selects
+  with `FOR NO KEY UPDATE SKIP LOCKED` (D-55).
+- **OPERATOR (design gate): "Run another round"** — round 8 started. Not approved.
+
+## Session 2026-11-27 — sdd-design round 8
+
+- Round 8 run with a full row-lock audit and a (phase, event) audit of an attempt's life.
+  The adversary judged the debate converged. The proposer found one substance item that predates
+  this round's changes: the prune's guard could miss an edge committed after its snapshot
+  (O-74 → D-56). Two small undecided points (park's parent lock mode; give-up clock start) and
+  wording were fixed (D-57). No Floor breach, no C-16 regression, no register violation, no
+  petition. `@AC-2` confirmed under the weaker claim lock; no deadlock cycle.
+
+## Session 2026-11-27 — sdd-design gate after round 8
+
+- **OPERATOR (design gate): "Run round 9"** — the round-8 prune fix (D-56) has not been through an
+  adversarial pass. Round 9 started. Not approved.
+
+## Session 2026-11-27 — sdd-design round 9
+
+- Round 9 run, focused on the two-statement prune (D-56) and on any other statement with the
+  same "predicate on an older snapshot than the lock" shape. Both sides confirmed D-56 is
+  race-free and that O-74 was real; settle, reap and claim are safe. No mechanism changed.
+- One narrow substance item: the manual recovery SQL for a `blocked` parent needed an order and a
+  transaction (O-78 → D-58). The rest was wording and one unbuildable test description.
+- Both sides judge the debate converged. No Floor breach, no C-16 regression, no petition.
+
+## Session 2026-11-27 — sdd-design gate after round 9
+
+- **OPERATOR (design gate): "Run round 10"** — the round-9 text edits have not been re-read by
+  either reviewer. Round 10 started. Not approved.
+
+## Session 2026-11-27 — sdd-design round 10
+
+- Round 10 run as a clean final read. No mechanism changed. One substance item, found
+  independently by both sides: the `blocked`-parent recovery SQL's edge delete was unguarded
+  (O-81 → D-59); the SQL is now written out in design.md. Two settled decisions (D-13, D-39) that
+  were missing from the document were added. The adversary's sweep of every numeric and
+  "never / at most" claim found three that depended on unstated conditions; all corrected.
+- No Floor breach, no register violation, no petition. FR-1..FR-9 and `@AC-1`..`@AC-18` PASS.
+
+## Session 2026-11-27 — sdd-design gate after round 10
+
+- **OPERATOR (design gate): "Run a full round 11"** — round 11 started. Not approved.
+
+## Session 2026-11-27 — sdd-design round 11
+
+- Round 11 run as a full pass. The proposer's verdict: SOUND, wording only (first round with no
+  substance from a reviewer). The adversary found no worker-mechanism defect; one low-severity
+  lock-mode point in the printed recovery SQL (O-84, petition P-7 pending the operator) and
+  runbook wording (O-83, applied). Both printed SQL blocks are valid, satisfy every table check
+  and are safe run twice or concurrently. A recovered failed or dead job's "every declared child
+  succeeded" assumption was confirmed true in every case.
+- No Floor breach, no C-16 regression, no register violation. FR-1..FR-9, `@AC-1`..`@AC-18` PASS.
+  Both sides rate a further full round as low value.
+
+## Session 2026-11-27 — sdd-design gate after round 11
+
+- **OPERATOR REOPEN P-7 (D-59 recovery lock): "weaker lock"** — the recovery locks its row
+  `FOR NO KEY UPDATE` (D-60).
+- **OPERATOR (design gate): "Run round 12"** — round 12 started. Not approved.
+
+## Session 2026-11-27 — sdd-design round 12
+
+- Round 12 run. **No substance from either side** (proposer: SOUND, wording only; adversary:
+  SOUND, READY FOR OPERATOR APPROVAL). The adversary read the design as a spec author, a test
+  writer and an operator, spot-checked 19 code citations (all resolve) and found a test seam for
+  every `@AC-*`. Wording and completeness edits applied (O-85). By the protocol's detector this is
+  a no-progress round: the debate has converged.
+
+## Session 2026-11-27 — sdd-design (approved)
+
+- **OPERATOR DECISION (design gate): "Approve design"** after round 12.
+- Phase 0 Recon: wrote recon.md (services: analysis, config; key reuse patterns:
+  `supervision.spawn`, `read_budget.py`'s server-side statement timeout and terminate rule).
+- Phase 1 Grilling: 12 rounds (full; cap lifted). Chosen approach: two job tables in analysis, a
+  fenced lease on the database clock, a separate fixed-size control pool, `bounded_txn` for every
+  database operation, three supervised loops, park-and-settle dependencies, a daily prune job.
+  Rejected: 18 alternatives (advisory locks, LISTEN/NOTIFY, a single shared lock or connection,
+  raising `DB_POOL_MAX`, deferred cancellation, a result column, and others; see debate.md).
+- Operator reopens accepted during the debate: P-1..P-7 (slot held until the report is written;
+  bounding invariants instead of a worst-case figure; fixed 7.5 s heartbeat; `FOR NO KEY UPDATE`
+  for reap, settle, claim and the recovery lock; corrected invariants).
+- Constitution rules touched: C-05, C-07, C-08, C-10, C-13, C-14, C-15, C-16, C-18, F-01, F-06,
+  F-07, P-03. Floor breaches: none in any round.
+- Status: spec-ready → design-approved.
+
+## Open Threads
+
+Carried from design.md § Open Risks; each needs an owner at `/sdd-spec` or later:
+
+- asyncpg behaviours pinned by build step 3's tests before step 4 (terminate wakes an in-flight
+  await; `reset=`; `min_size=0`), with fallbacks written in design.md.
+- PgBouncer queueing is untestable in CI; measured in program feature 3's shadow run.
+- No requeue until program feature 4; manual recovery SQL ships in
+  `services/xstockstrat-analysis/docs/pipeline-jobs.md` (build step 8).
+- Hazards H1 and H2 for an in-transaction report, and executor-thread handlers: program feature 3.
+- `docs/roadmap/program-job-graph-analysis-pipeline.md` line 81 (advisory-lock note) is corrected
+  in build step 8.
