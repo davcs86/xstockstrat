@@ -60,3 +60,14 @@
 - Recommended design depth: full (DB migration, 2 affected services).
 - Design-phase watch items from the reviewer: F-06 pool contention for `worker_concurrency` 4;
   C-18 on lanes and dependency edges with no production consumer yet.
+
+## Session 2026-11-27 — sdd-design (in progress)
+
+- Phase 0 Recon: wrote recon.md (services: analysis, config). Tree:
+  ccr-fe135a59-nyslbm@eda1880 ≡ origin/main-dev.
+- **OPERATOR DECISION: "keep going with writing the plans until you need me again"** — taken as a
+  standing choice of *Run another round* at any gate where *Approve* is not yet selectable (full
+  mode, round 1). The approval gate itself is never skipped.
+- **OPERATOR OVERRIDE: "I override the round cap. Getting a sound high quality design is more
+  important."** — the 5-round hard cap of `/sdd-design` does not apply to this feature. Rounds
+  continue while they make progress; the no-progress detector still applies.
