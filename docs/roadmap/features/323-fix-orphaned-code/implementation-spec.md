@@ -433,7 +433,7 @@ GOWORK=off golangci-lint run --modules-download-mode=mod
 
 ### Step 6 — service: ingest — delete the orphan example extractor and trim the non-MCP input dataclasses
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/app/extractors/example_simple_email.py` — delete
