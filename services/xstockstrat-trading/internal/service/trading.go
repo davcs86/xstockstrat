@@ -3584,6 +3584,25 @@ func oppositeSide(s tradingv1.OrderSide) string {
 	return "sell"
 }
 
+// closingSide is oppositeSide as an OrderSide: the side of a bracket leg protecting an entry.
+func closingSide(s tradingv1.OrderSide) tradingv1.OrderSide {
+	if s == tradingv1.OrderSide_ORDER_SIDE_SELL {
+		return tradingv1.OrderSide_ORDER_SIDE_BUY
+	}
+	return tradingv1.OrderSide_ORDER_SIDE_SELL
+}
+
+func bracketLegParent(order *tradingv1.Order) repository.BracketLegParent {
+	return repository.BracketLegParent{
+		AccountID: order.AccountId, OrderID: order.OrderId, UserID: order.UserId,
+		TradingMode: order.TradingMode.String(), Symbol: order.Symbol, Side: closingSide(order.Side),
+	}
+}
+
+func bracketActivationFailure(err error) string {
+	return fmt.Sprintf("bracket activation not recorded, legs untracked: %v", err)
+}
+
 // computeTakeProfitPriceFromRR is the pure take-profit formula. Direction-aware: BUY (long)
 // profits above entry, SELL (short) below. rr<=0 disables the leg (returns 0).
 func computeTakeProfitPriceFromRR(side tradingv1.OrderSide, stopPrice, entryPriceProxy, rr float64) float64 {
@@ -3685,8 +3704,9 @@ func (s *TradingService) createBracket(ctx context.Context, order *tradingv1.Ord
 	case commonv1.BrokerType_BROKER_TYPE_ALPACA:
 		// Bracket already attached atomically at entry SubmitOrder (PlaceOrder's own
 		// broker-submission statement) — just record the leg IDs the broker returned.
-		if err := s.bracketRepo.UpdateBracketStatus(ctx, rec.ID, bracketStatusActive, brokerOrder.StopLegOrderID, brokerOrder.TakeProfitLegOrderID, ""); err != nil {
+		if err := s.bracketRepo.ActivateBracket(ctx, rec.ID, brokerOrder.StopLegOrderID, brokerOrder.TakeProfitLegOrderID, bracketLegParent(order)); err != nil {
 			slog.WarnContext(ctx, "update bracket status failed", "order_id", order.OrderId, "error", err)
+			go s.emitBracketFailureAlert(context.WithoutCancel(ctx), order, bracketActivationFailure(err))
 		}
 		go s.emitLedgerEvent(context.WithoutCancel(ctx), "order.bracket_updated", order.OrderId, order.UserId,
 			bracketUpdatedPayload(order, brokerOrder.StopLegOrderID, brokerOrder.TakeProfitLegOrderID))
@@ -3702,8 +3722,9 @@ func (s *TradingService) createBracket(ctx context.Context, order *tradingv1.Ord
 			go s.emitBracketFailureAlert(context.WithoutCancel(ctx), order, fmt.Sprintf("bracket leg submission failed: %v", err))
 			return
 		}
-		if err := s.bracketRepo.UpdateBracketStatus(ctx, rec.ID, bracketStatusActive, resp.StopLegOrderID, resp.TakeProfitLegOrderID, ""); err != nil {
+		if err := s.bracketRepo.ActivateBracket(ctx, rec.ID, resp.StopLegOrderID, resp.TakeProfitLegOrderID, bracketLegParent(order)); err != nil {
 			slog.WarnContext(ctx, "update bracket status failed", "order_id", order.OrderId, "error", err)
+			go s.emitBracketFailureAlert(context.WithoutCancel(ctx), order, bracketActivationFailure(err))
 		}
 		go s.emitLedgerEvent(context.WithoutCancel(ctx), "order.bracket_updated", order.OrderId, order.UserId,
 			bracketUpdatedPayload(order, resp.StopLegOrderID, resp.TakeProfitLegOrderID))
@@ -3744,8 +3765,9 @@ func (s *TradingService) resizeBracket(ctx context.Context, order *tradingv1.Ord
 		go s.emitBracketFailureAlert(context.WithoutCancel(ctx), order, fmt.Sprintf("bracket resize failed: %v", err))
 		return
 	}
-	if err := s.bracketRepo.UpdateBracketStatus(ctx, existing.ID, bracketStatusActive, resp.StopLegOrderID, resp.TakeProfitLegOrderID, ""); err != nil {
+	if err := s.bracketRepo.ActivateBracket(ctx, existing.ID, resp.StopLegOrderID, resp.TakeProfitLegOrderID, bracketLegParent(order)); err != nil {
 		slog.WarnContext(ctx, "update bracket status (active, resize) failed", "order_id", order.OrderId, "error", err)
+		go s.emitBracketFailureAlert(context.WithoutCancel(ctx), order, bracketActivationFailure(err))
 	}
 	go s.emitLedgerEvent(context.WithoutCancel(ctx), "order.bracket_updated", order.OrderId, order.UserId,
 		bracketUpdatedPayload(order, resp.StopLegOrderID, resp.TakeProfitLegOrderID))

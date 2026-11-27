@@ -3283,3 +3283,81 @@ Tooling (steps 16+17): go1.27.0 ✓ · golangci-lint ✓ v2.14.0 (built with go1
 - Files modified: `services/xstockstrat-trading/internal/service/trading_offline_test.go`, `services/xstockstrat-trading/internal/service/trading_ledger_userid_test.go`
 - Deviations: the same Deviation Log entry (Steps 16+17).
 - Context read: the execution sessions (2026-11-20 sdd-design approval to here) were read in full; the design-round sessions (lines 30-2874) were searched for `appendLedgerEvent` and R-5, which match this step (key parameter, empty means a uuid).
+
+## Session 2026-11-27 — sdd-execute sequential (sdd-batch-execute), Steps 18+19+20
+
+Tooling (steps 18+19+20): go1.27.0 ✓ · golangci-lint ✓ v2.14.0 (built with go1.27.0, at `/root/go/bin`, put first on `PATH` for the lint runs)
+
+### Step 18 — service: `trading.bracket_legs` repository and reconciliation UNIONs [done]
+- Atomic unit with Steps 19 and 20 (planned, **Lands with**).
+- `bracket_repo.go`:
+  - `pgBracketRepo.pool` is now the `bracketDB` interface (`dbQuerier` plus `Begin`); `NewBracketRepo(*pgxpool.Pool)` is unchanged.
+  - Adds the exported `LegStatus*` constants, `RetiredLegStatuses`, `BracketLegRecord` and `BracketLegParent`.
+  - Six new methods. `ActivateBracket` runs Begin, then the shared ACTIVE UPDATE (`bracketStatusActive` = 3), then one `ON CONFLICT DO NOTHING` INSERT per non-empty leg id with OPEN, zero quantities and `adopted` false, then Commit. Any error rolls back. `ListTrackedLegs` binds `status <> ALL($1)` and orders by `adopted ASC, updated_at ASC`. `ListAdoptionCandidates` binds `status = ANY($1)` and flips the parent's latest side. `InsertAdoptedLeg` sets `adopted` true and reports `RowsAffected() == 1`. `RecordLegObservation` writes `observed_filled_qty` and `not_found_ticks`. `AdvanceLegEmit` writes `filled_qty` and `status`. Every UPDATE also bumps `updated_at`.
+- `trading_repo.go`: `KnownBrokerOrderIDs` gains `UNION SELECT leg_order_id FROM trading.bracket_legs` (retired rows count). `NetFilledQtyBySymbol` UNION ALLs the leg rows' `observed_filled_qty` under the same sign CASE, with no status filter. No leg row is written to `trading.orders`.
+- Steps 21, 23 and 26 need to know:
+  - Leg rows carry `trading_mode` as the enum name (`TRADING_MODE_PAPER`), the ledger-payload encoding. `ListAdoptionCandidates` converts the parent's stored `paper`/`live` through `parseMode(...).String()`, so adopted rows match.
+  - A candidate's `Status` and quantities are empty; Step 26 sets them before `InsertAdoptedLeg`.
+  - `RecordLegObservation` and `AdvanceLegEmit` on a missing row are a no-op with no error.
+- TDD (unit):
+  - RED `.sdd-logs/v-1.log`, `exit=1`, the right reason: `undefined: BracketLegParent`, `repo.ActivateBracket undefined (type *pgBracketRepo has no field or method ActivateBracket)`, `undefined: repository.BracketLegRecord`, then `FAIL github.com/xstockstrat/trading/internal/repository [build failed]` and `FAIL github.com/xstockstrat/trading/internal/service [build failed]`.
+  - GREEN: Step 20's block `v-4.log` shows `ok github.com/xstockstrat/trading/internal/repository 1.073s` and `ok github.com/xstockstrat/trading/internal/service 14.564s` (`-race`), with every `internal/...` package `ok`. `v-12.log` (`-v`, filtered) counts `36` `--- PASS` lines, none FAIL or SKIP, and every new test is listed.
+- Verification:
+  - Build: clean (`v-2.log`).
+  - `bracket_legs` count: `2` (`v-5.log`).
+  - Status grep: one declaration line each (`v-6.log`).
+  - Lint: `0 issues.` `exit=0` (`v-7.log`).
+- The config-wiring gate does not apply: the step declares no key.
+- Files modified: `services/xstockstrat-trading/internal/repository/bracket_repo.go`, `services/xstockstrat-trading/internal/repository/trading_repo.go`
+- Deviations: Deviation Log, "Steps 18+19+20 — Verification blocks stop after their first line" and "Step 18 — how `ListAdoptionCandidates` and `ActivateBracket` were built".
+
+### Step 19 — service: `ActivateBracket` at the three ACTIVE writes [done]
+- Atomic unit with Steps 18 and 20. The three ACTIVE `UpdateBracketStatus` calls (Alpaca `createBracket` `:3688`, IBKR `createBracket` `:3705`, `resizeBracket` `:3747`, as the re-spec anchored them) now call `s.bracketRepo.ActivateBracket(..., bracketLegParent(order))`.
+- New helpers:
+  - `closingSide(OrderSide) OrderSide` applies `oppositeSide`'s rule as an enum (A-13).
+  - `bracketLegParent(order)` carries the account, order id, user, `order.TradingMode.String()`, symbol and the closing side.
+  - `bracketActivationFailure(err)` builds the alert reason.
+- On an error each site keeps its WARN and adds `go s.emitBracketFailureAlert(context.WithoutCancel(ctx), order, …)`. `resizeBracket` still emits `order.bracket_updated` afterwards, with no early return.
+- `oppositeSide`, its two broker call sites and every non-ACTIVE `UpdateBracketStatus` call are unchanged.
+- TDD: the RED/GREEN results above.
+- Verification:
+  - Build: clean (`v-3.log`).
+  - The ACTIVE `UpdateBracketStatus` grep: nothing (`exit=1`, no match; `v-8.log`).
+  - `ActivateBracket(` count: `3` (`v-9.log`).
+  - Lint: `v-7.log`.
+- The config-wiring gate does not apply: the step declares no key.
+- Files modified: `services/xstockstrat-trading/internal/service/trading.go`
+- Deviations: the same Deviation Log entry ("Steps 18+19+20 — Verification blocks stop after their first line").
+
+### Step 20 — test: bracket-leg persistence, activation and reconciliation queries [done]
+- Atomic unit with Steps 18 and 19.
+- `trading_bracket_test.go`, `fakeBracketRepo`:
+  - Implements the six methods in memory. The leg map is keyed by `account|leg`. A write sequence stands in for `updated_at`. `putLeg` mirrors `ON CONFLICT DO NOTHING`.
+  - The retired filter reads `repository.RetiredLegStatuses`.
+  - `ListAdoptionCandidates` reads a `parents` map: no parent means no candidate, and the side comes from `closingSide`.
+  - Error hooks: `activateErr`, `listCandidatesErr` and `insertAdoptedErr`. `failingBracketScan` still compiles through embedding.
+- New `bracket_repo_test.go` (pgxmock):
+  - Begin, UPDATE, two INSERTs with `0.0, 0.0, LegStatusOpen, false`, then Commit.
+  - An empty take-profit id makes one INSERT.
+  - A failed second INSERT makes Rollback with no Commit, and the error is returned.
+  - `ListTrackedLegs` binds `RetiredLegStatuses`.
+  - `ListAdoptionCandidates` binds `[]int32{3, 4}`, flips the side and normalises the mode.
+  - `InsertAdoptedLeg` returns true, then false on conflict.
+  - `RecordLegObservation` and `AdvanceLegEmit` write only their own columns.
+- `trading_repo_test.go`:
+  - `TestKnownBrokerOrderIDs_IncludesTrackedLegAfterResize`: the trailing `bracket_legs` branch returns a blanked leg id (round-10 test 9).
+  - `TestNetFilledQtyBySymbol_AddsBracketLegsObservedQty`: a capturing matcher shows the `UNION ALL` leg branch reads `observed_filled_qty` with no status filter (round-10 test 8, pgxmock form; the sums are Step 21's).
+- New `trading_bracket_legs_test.go`:
+  - Alpaca and IBKR activation, each for long and short entries. Each writes two rows with zero cursors, OPEN, the parent's account, user, mode and symbol, and the closing side.
+  - IBKR stop-only activation writes one row.
+  - A resize keeps s1 and t1 and adds s2 and t2.
+  - An `ActivateBracket` failure at each of the three sites raises exactly one CRITICAL alert that names the cause. On the resize site the second `order.bracket_updated` emit still lands.
+- The existing `TestMaybeSubmitBracket_*`, `TestPollFills_PartialFillResizesActiveBracket` and `TestCreateBracket_FailureEmitsCriticalAlert` pass unchanged.
+- Fails-ledger rule (feature 347): the whole `service` package ran green under `-race` (`v-4.log`).
+- TDD: the RED/GREEN results above.
+- Coverage: `v-11.log` `total: (statements) 84.9%` `exit=0` (≥ 40%; `repository` and `service` are excluded from the figure).
+- `"NOT_OPEN_AT_ADOPTION"` grep: one line, the repository constant (`v-10.log`).
+- Files modified: `services/xstockstrat-trading/internal/repository/bracket_repo_test.go`, `services/xstockstrat-trading/internal/repository/trading_repo_test.go`, `services/xstockstrat-trading/internal/service/trading_bracket_test.go`, `services/xstockstrat-trading/internal/service/trading_bracket_legs_test.go`
+- Deviations: Deviation Log, "Steps 18+19+20 — Verification blocks stop after their first line" and "Step 20 — the pgxmock form of the mixed orders-plus-legs sum".
+- Context read: the execution sessions (2026-11-20 sdd-design approval to here) were read in full. The design-round sessions (lines 1-2874) were read at lines 1-33 and searched for `ActivateBracket` and `trading_mode`. The hits (filled_qty 0 on activation, empty ids skipped, a failed tx alerted and accepted, the join filling every parent-derived column) match this unit.
+- Open: `git diff --quiet origin/main-dev -- pnpm-lock.yaml` printed `rc=1`. The cause is `main-dev` commit `eb3839d9` (feature fix-orphaned-code), which changed the lockfile after the merge base `f802b184`. This branch has no commit touching `pnpm-lock.yaml`. Nothing in this unit is Node.

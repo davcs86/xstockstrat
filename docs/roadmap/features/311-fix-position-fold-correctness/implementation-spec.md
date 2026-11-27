@@ -817,7 +817,7 @@ New logic is in an excluded package — no coverage threshold applies.
 
 ### Step 18 — service: `trading.bracket_legs` repository and reconciliation UNIONs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/repository/bracket_repo.go` — modify
@@ -866,7 +866,7 @@ cd services/xstockstrat-trading && GOWORK=off golangci-lint run --modules-downlo
 
 ### Step 19 — service: `ActivateBracket` at the three ACTIVE writes
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/service/trading.go` — modify
@@ -905,7 +905,7 @@ cd services/xstockstrat-trading && GOWORK=off golangci-lint run --modules-downlo
 
 ### Step 20 — test: bracket-leg persistence, activation and reconciliation queries
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/repository/bracket_repo_test.go` — create
@@ -1506,3 +1506,34 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Spec said**: Step 16 gives a three-line block and Step 17 a two-line block. Each line starts `cd services/xstockstrat-trading && …` or names a repo-root-relative path. Step 16's evidence cites `trading.go:3953`, `:3965` and `:3997`.
 - **Actual**: the same pattern as Steps 3-15. Inside the one subshell the first line's `cd` persists, so later lines fail with `cd: services/xstockstrat-trading: No such file or directory` and the grep prints `No such file or directory`. Run verbatim, Step 16's block (`.sdd-logs/v-2.log`) ran only `go build ./...`, and Step 17's block (`v-3.log`) ran only the filtered `go test -race`. Both exited 1 for this reason alone. After the edit, `appendLedgerEvent` is still at `:3953` and the `emitLedgerEvent` call moved to `:4000` (three lines added: the empty-key fallback). The code located by symbol matched the evidence.
 - **Disposition**: each block was run verbatim once. Then every line that had not run was run unchanged, alone, from the repo root, with its own log. All passed: the grep (`v-4.log`) lists all 8 calls with the key argument; `golangci-lint` v2.14.0, the line both blocks share, printed `0 issues.` (`v-5.log`). The step bodies were not changed (F-09).
+
+### Steps 18+19+20 — Verification blocks stop after their first line (2026-11-27)
+- **Spec said**: Steps 18 and 19 each give a four-line block, and Step 20 a four-line block. Each line starts `cd services/xstockstrat-trading && …` or names a repo-root-relative path.
+- **Actual**: this is the same pattern as Steps 3-17. Inside the one subshell the first line's `cd` persists, so later lines fail with `cd: services/xstockstrat-trading: No such file or directory`, and the greps print `No such file or directory`. Run verbatim, three blocks ran only their first line and exited 1 for this reason alone:
+  - Step 18's block (`.sdd-logs/v-2.log`) ran only `go build ./internal/repository/...`.
+  - Step 19's block (`v-3.log`) ran only `go build ./...`.
+  - Step 20's block (`v-4.log`) ran only `go test ./internal/... -race`.
+- **Disposition**: each block was run verbatim once. Then every line that had not run was run unchanged, alone, from the repo root, with its own log. All passed:
+  - The `bracket_legs` count printed `2` (`v-5.log`).
+  - The status grep printed one declaration line each for `BASELINE_RETIRED` and `NOT_OPEN_AT_ADOPTION` (`v-6.log`).
+  - `golangci-lint` v2.14.0, the line all three blocks share, printed `0 issues.` (`v-7.log`).
+  - The ACTIVE `UpdateBracketStatus` grep printed nothing (`exit=1`, no match; `v-8.log`), and `ActivateBracket(` counted `3` (`v-9.log`).
+  - The `"NOT_OPEN_AT_ADOPTION"` grep printed one line, the repository constant (`v-10.log`).
+  - The coverage line printed `total: (statements) 84.9%` (`v-11.log`).
+
+  The step bodies were not changed (F-09).
+
+### Step 18 — how `ListAdoptionCandidates` and `ActivateBracket` were built (2026-11-27)
+- **Spec said** (Instruction 4): join each candidate to the parent's latest `trading.orders` row with `DISTINCT ON (order_id) … ORDER BY order_id, created_at DESC`. Step 19 writes `order.TradingMode.String()` into `BracketLegParent.TradingMode`.
+- **Actual**:
+  - The `DISTINCT ON` subquery is limited to `order_id IN (SELECT order_id FROM trading.order_brackets WHERE status = ANY($1))`, so it does not scan every order.
+  - `trading.orders.trading_mode` holds the `modeStr` encoding (`live`/`paper`). Leg rows written by `ActivateBracket` hold the enum name (`TRADING_MODE_LIVE`), which is the encoding every ledger payload uses (`bracketUpdatedPayload`, the parent `order.filled`). `ListAdoptionCandidates` therefore returns `parseMode(trading_mode).String()`, so an adopted row carries the same encoding as an activated one and Step 23 can copy it into the event unchanged.
+  - Candidates are ordered by `(account_id, leg_order_id)`.
+  - The repository needs the ACTIVE code without a status argument, so it declares `bracketStatusActive int32 = 3` with a migration-005 comment. `ListExpiredProtection` already encodes statuses as literals.
+  - `UpdateBracketStatus` and `ActivateBracket` share one UPDATE text, and `ActivateBracket` and `InsertAdoptedLeg` share one INSERT text.
+- **Disposition**: these stay within the listed **Files** and the instructions' intent. No step body changed. Step 21's real-Postgres cases are where the SQL first runs against a database.
+
+### Step 20 — the pgxmock form of the mixed orders-plus-legs sum (2026-11-27)
+- **Spec said** (Instruction 3): a mixed orders-plus-legs row set for one symbol sums with the right signs, and a tombstone row with 0 leaves the sum equal to the orders row alone.
+- **Actual**: pgxmock does not execute SQL, so `SUM` and the sign `CASE` run only on a server. `TestNetFilledQtyBySymbol_AddsBracketLegsObservedQty` asserts the SQL shape: the one sign `CASE` wraps both branches, and the leg branch reads `observed_filled_qty` with no status filter, so a tombstone adds its 0. It also asserts that the server's total is returned unchanged.
+- **Disposition**: the summed values are proven by Step 21 (`TestTradingRepoLegsDB_NetFilledQtyBySymbol`, `10 - 3 - 4 = 3`), as A-5 assigns. No step body changed.

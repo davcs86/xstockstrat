@@ -125,8 +125,8 @@ func (r *TradingRepo) GetOrder(ctx context.Context, orderID string) (*tradingv1.
 }
 
 // KnownBrokerOrderIDs returns the subset of brokerOrderIDs this account has a persisted record of
-// in trading.orders or as a bracket leg in trading.order_brackets (Alpaca lists legs as top-level
-// orders). Empty input returns empty, no query.
+// in trading.orders or as a bracket leg in trading.order_brackets or the leg-tracking table, retired
+// legs included (Alpaca lists legs as top-level orders). Empty input returns empty, no query.
 func (r *TradingRepo) KnownBrokerOrderIDs(ctx context.Context, accountID string, brokerOrderIDs []string) (map[string]bool, error) {
 	known := make(map[string]bool, len(brokerOrderIDs))
 	if len(brokerOrderIDs) == 0 {
@@ -147,6 +147,11 @@ func (r *TradingRepo) KnownBrokerOrderIDs(ctx context.Context, accountID string,
 		FROM trading.order_brackets
 		WHERE account_id = $1
 		  AND take_profit_leg_order_id = ANY($2)
+		UNION
+		SELECT leg_order_id
+		FROM trading.bracket_legs
+		WHERE account_id = $1
+		  AND leg_order_id = ANY($2)
 	`, accountID, brokerOrderIDs)
 	if err != nil {
 		return nil, err
@@ -166,8 +171,8 @@ func (r *TradingRepo) KnownBrokerOrderIDs(ctx context.Context, accountID string,
 // NetFilledQtyBySymbol returns the platform's own net filled quantity per symbol for an account,
 // summed from trading.orders (BUY +filled_qty, SELL -filled_qty). Deduped to the latest row per
 // order_id — the hypertable PK is (order_id, created_at) and UpsertOrder mints a fresh created_at on
-// a nil CreatedAt, so one logical order may hold >1 row and a naive SUM would double-count. Empty
-// input returns empty, no query.
+// a nil CreatedAt, so one logical order may hold >1 row and a naive SUM would double-count. Tracked
+// bracket legs add their observed_filled_qty under the same sign. Empty input returns empty, no query.
 func (r *TradingRepo) NetFilledQtyBySymbol(ctx context.Context, accountID string, symbols []string) (map[string]float64, error) {
 	net := make(map[string]float64, len(symbols))
 	if len(symbols) == 0 {
@@ -176,12 +181,20 @@ func (r *TradingRepo) NetFilledQtyBySymbol(ctx context.Context, accountID string
 	rows, err := r.db.Query(ctx, `
 		SELECT symbol, SUM(CASE WHEN side = 'sell' THEN -filled_qty ELSE filled_qty END)
 		FROM (
-			SELECT DISTINCT ON (order_id) order_id, symbol, side, filled_qty
-			FROM trading.orders
+			SELECT symbol, side, filled_qty
+			FROM (
+				SELECT DISTINCT ON (order_id) order_id, symbol, side, filled_qty
+				FROM trading.orders
+				WHERE account_id = $1
+				  AND symbol = ANY($2)
+				ORDER BY order_id, created_at DESC
+			) latest
+			UNION ALL
+			SELECT symbol, side, observed_filled_qty
+			FROM trading.bracket_legs
 			WHERE account_id = $1
 			  AND symbol = ANY($2)
-			ORDER BY order_id, created_at DESC
-		) latest
+		) fills
 		GROUP BY symbol
 	`, accountID, symbols)
 	if err != nil {
