@@ -145,8 +145,8 @@ show.
 - **Lease reversal.** Features 156 and 158 rejected leases because a lease taken before a crash
   wedged the schedule for the full hold (`docs/roadmap/ledger/insights.md`, 2026-08-26). Operator
   decision D-11 reverses that ruling. The design must show that heartbeat expiry bounds the wedge.
-  A job whose worker died becomes claimable again within `lease_seconds` + 10 s while the database
-  answers normally, and within a bound stated in the design if every database operation runs to
+  A job whose worker died becomes claimable again within `lease_seconds` + 10 s, plus up to 4 s of
+  event-loop lag, while the database answers normally, and within a bound stated in the design if every database operation runs to
   its timeout. Both require an instance with the worker enabled, that job kind and a free slot.
 - **Poison handling.** The ledger records events lost when a consumer skipped a failure and
   advanced (`fails.md`, fix-offline-book-consistency) and a transient allow-list misused as the

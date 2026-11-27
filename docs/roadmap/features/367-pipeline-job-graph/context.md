@@ -120,3 +120,13 @@
 - Two reopen petitions pending the operator: P-4 (D-49 lock strength) and P-5 (D-47 invariants 1
   and 3). One spec wording follow-up pending the operator (the 4 s lag in the lease constraint).
 - design.md not yet amended for round 6.
+
+## Session 2026-11-27 — sdd-design gate after round 6
+
+- **OPERATOR REOPEN P-5 (D-47 invariants 1 and 3): "correct both"** — D-51.
+- **OPERATOR REOPEN P-4 (D-49 lock strength): "weaker lock"** — reap and settle use
+  `FOR NO KEY UPDATE SKIP LOCKED` (D-52).
+- **OPERATOR DECISION: "Update the spec"** — the lease constraint in product-spec.md now reads
+  "`lease_seconds` + 10 s, plus up to 4 s of event-loop lag".
+- Kill-switch re-check and the other round-6 corrections applied to design.md (D-53).
+- Reopens require another round: round 7 started. Not approved.
