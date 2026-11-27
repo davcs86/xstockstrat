@@ -6,6 +6,8 @@
 **Severity**: SEV-3
 **Created**: 2026-11-25
 **Last Updated**: 2026-11-26
+**Committed to main**: 5eeca9c8d00bc549c14dcd852862574d806b0fd2
+**Launched date**: 2026-11-27
 
 ---
 
@@ -20,6 +22,7 @@
 | 2026-11-26 | `implementation-ready` → `in-progress` | /sdd-execute | → in-progress (sdd-batch-execute setup) |
 | 2026-11-26 | `in-progress` → `code-completed` | /sdd-execute | All 3 steps done (steps 1+2 atomic unit; step 3 docs) |
 
+| 2026-11-27 | `code-completed` → `launched` | CI workflow | Promoted via PR #1633; committed 5eeca9c8d00bc549c14dcd852862574d806b0fd2 |
 ---
 
 ## Artifacts

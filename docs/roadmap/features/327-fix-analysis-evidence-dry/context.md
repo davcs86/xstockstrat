@@ -907,3 +907,10 @@ Feature: fix-analysis-evidence-dry (bug fix)
 - Planned: 5 NEW, 0 DUP, 0 OVERLAP, 0 CONFLICT.
 - Every @AC-* is accounted for and none were skipped. The counts match.
 ```
+
+## Session 2026-11-27 (CI: feature status automation)
+
+- Promotion PR #1633 merged to main
+- Feature promoted and committed: 5eeca9c8d00bc549c14dcd852862574d806b0fd2
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-11-27

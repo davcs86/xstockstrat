@@ -6,6 +6,8 @@
 **Severity**: SEV-2
 **Created**: 2026-11-10
 **Last Updated**: 2026-11-27
+**Committed to main**: 5eeca9c8d00bc549c14dcd852862574d806b0fd2
+**Launched date**: 2026-11-27
 
 ---
 
@@ -21,6 +23,7 @@
 | 2026-11-26 | `implementation-ready` → `in-progress` | /sdd-execute (sdd-batch-execute setup) | → in-progress (sdd-batch-execute setup); merged main-dev f802b184 and re-specced steps 3,5,7,9,14,16,19,23,25,26,28,29 against it |
 | 2026-11-27 | `in-progress` → `code-completed` | /sdd-execute (sdd-batch-execute) | All 29 steps done (Step 29: service docs, findings and the `trading-db-test` CI row); `check-config-wiring.mjs --final` exit 0 |
 
+| 2026-11-27 | `code-completed` → `launched` | CI workflow | Promoted via PR #1633; committed 5eeca9c8d00bc549c14dcd852862574d806b0fd2 |
 ---
 
 ## Artifacts

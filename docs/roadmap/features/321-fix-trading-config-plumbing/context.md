@@ -417,3 +417,10 @@ Companion comment edit, which is additive and leaves the scenario text unchanged
 ## Session 2026-11-27 — C-16 promotion ruling recorded by the orchestrator (verbatim)
 
 Question: promote @AC-1..@AC-4 (trading suite for @AC-1..@AC-3; @AC-4 appended to platform.feature with only a "Superseded by @feature-321 @AC-4" comment above 304 @AC-14)? Operator answer: **"promote 321"** (the offered option "Promote all, comment only (Recommended)"). The HOLD line in the `sdd-batch-promotion-plan` block above was replaced by this confirmation before the gate was approved.
+
+## Session 2026-11-27 (CI: feature status automation)
+
+- Promotion PR #1633 merged to main
+- Feature promoted and committed: 5eeca9c8d00bc549c14dcd852862574d806b0fd2
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-11-27

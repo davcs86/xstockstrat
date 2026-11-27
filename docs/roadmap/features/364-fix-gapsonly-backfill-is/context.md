@@ -652,3 +652,10 @@ Feature: fix-gapsonly-backfill-is (agent)
 ### Coverage check
 - Source scenarios: 6. Planned (NEW+DUP+OVERLAP): 6 (NEW 6, DUP 0, OVERLAP 0, CONFLICT 0). Ingest gets 4 (AC-1..4), ui gets 1 (AC-5) and agent gets 1 (AC-6), which totals 6. No scenario was skipped.
 ```
+
+## Session 2026-11-27 (CI: feature status automation)
+
+- Promotion PR #1633 merged to main
+- Feature promoted and committed: 5eeca9c8d00bc549c14dcd852862574d806b0fd2
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-11-27

@@ -911,3 +911,10 @@ Question: with the retraction migration dropped, what happens to @AC-4 ("pre-246
 - Promotion plan (`sdd-batch-promotion-plan`, operator-confirmed, @AC-4 excluded) applied exactly: `services/xstockstrat-analysis/acceptance/fix-fundsignal-scoring-correctness.feature` (@AC-1, @AC-2, @AC-3) and `services/xstockstrat-ingest/acceptance/fix-fundsignal-scoring-correctness.feature` (@AC-5), each scenario tagged `@feature-309`. The plan's @AC-1 gate was checked on the branch: `@AC-3 @feature-246` now says "dividend_yield 0.013 as its only input" and no `pe_ratio 0.0` remains in the analysis suites; `@AC-8 @feature-201` carries the omit-absent wording.
 - @AC-4 is a recorded C-15 exception: not promoted, closed by the zero-row evidence (DO staging and homelab staging, 2026-11-27), not by a guarded scenario.
 - status.md `in-progress` → `code-completed`; feature.md history row added.
+
+## Session 2026-11-27 (CI: feature status automation)
+
+- Promotion PR #1633 merged to main
+- Feature promoted and committed: 5eeca9c8d00bc549c14dcd852862574d806b0fd2
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-11-27

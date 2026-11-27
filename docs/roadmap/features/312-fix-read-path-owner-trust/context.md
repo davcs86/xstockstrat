@@ -898,3 +898,10 @@ Feature: xstockstrat-notify - ListAlerts scopes ownership to the trusted x-user-
 ### Coverage check
 - Source scenarios: 6 (AC-1..AC-6; AC-4, AC-5 and AC-6 are Outlines promoted whole, with Examples intact). Planned: 6 NEW (4 trading, 1 notify, 1 platform), 0 DUP, 0 OVERLAP, 0 CONFLICT. Every @AC is accounted for and none were skipped. Counts match.
 ````
+
+## Session 2026-11-27 (CI: feature status automation)
+
+- Promotion PR #1633 merged to main
+- Feature promoted and committed: 5eeca9c8d00bc549c14dcd852862574d806b0fd2
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-11-27

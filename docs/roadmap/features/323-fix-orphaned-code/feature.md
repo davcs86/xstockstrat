@@ -6,6 +6,8 @@
 **Severity**: SEV-3
 **Created**: 2026-11-10
 **Last Updated**: 2026-11-27
+**Committed to main**: 5eeca9c8d00bc549c14dcd852862574d806b0fd2
+**Launched date**: 2026-11-27
 
 ---
 
@@ -20,6 +22,7 @@
 | 2026-11-26 | `implementation-ready` → `in-progress` | /sdd-execute sequential | → in-progress (sdd-batch-execute setup); steps 1,3,4,5,6,8 re-spec'd (conditional) |
 | 2026-11-27 | `in-progress` → `code-completed` | /sdd-execute (steps 7-9 by hand) | All 9 steps done; integration PR and C-16 promotion left to the batch runner |
 
+| 2026-11-27 | `code-completed` → `launched` | CI workflow | Promoted via PR #1633; committed 5eeca9c8d00bc549c14dcd852862574d806b0fd2 |
 ---
 
 ## Artifacts

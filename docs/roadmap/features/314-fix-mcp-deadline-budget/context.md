@@ -1172,3 +1172,10 @@ still the highest config migration; per the orchestrator, feature 321 also carri
 REPORTED: services/xstockstrat-analysis/app/engine/fundsignal_loop.py:marketdata/fundamentals.provider:readers-disagree
 REPORTED: services/xstockstrat-trading/internal/service/trading.go:platform/trading_state:readers-disagree
 ```
+
+## Session 2026-11-27 (CI: feature status automation)
+
+- Promotion PR #1633 merged to main
+- Feature promoted and committed: 5eeca9c8d00bc549c14dcd852862574d806b0fd2
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-11-27
