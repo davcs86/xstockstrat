@@ -18,8 +18,10 @@ import pytest
 from app.engine import mcp_client_loop as loop
 from app.repositories.signal_sources import derive_health_status
 from tests._helpers import rpc_error, transaction_conn
+from tests.conftest import _ctx
 from tests.test_ingest_servicer import make_servicer
 from tests.test_mcp_client import _FakeSecretStub, _watcher_with
+from tests.test_signal_ownership import _fresh_ingest_svc, _signal_req
 
 
 class _FakeResult:
@@ -210,6 +212,33 @@ async def test_second_identical_cycle_deduplicates(monkeypatch):
 
     assert results[0][1] is False  # first cycle: a fresh ingest
     assert results[1][1] is True  # second identical cycle: deduplicated
+
+
+async def test_feature313_ac1_loop_signal_event_is_owner_stamped(monkeypatch):
+    monkeypatch.setattr(
+        loop, "list_all_sources", AsyncMock(return_value=[_mcp_source(user_id="user-a")])
+    )
+    db, _conn = transaction_conn(
+        db_fetchrow_side_effect=[{"slug": "acme-mcp"}],
+        conn_fetchrow_side_effect=[{"id": 42}, {"signal_id": 42}],
+    )
+    svc = make_servicer(db=db)
+    svc._db = db
+    mcp = _FakeMcpClient(result=_FakeResult([_item()]))
+
+    await loop.run_one_cycle(svc, _FakeCfgWatcher(), mcp)
+
+    # AC-1 Then 2 is covered by ledger @AC-11 @feature-021 plus ledgerServiceImpl.test.ts:675-709
+    # (owner precedence) and the WHERE user_id = $1 predicate at ledgerServiceImpl.ts:404, not here
+    call = svc._ledger.AppendEvent.call_args
+    assert call.args[0].event_type == "ingest.signal.ingested"
+    assert call.args[0].user_id == "user-a"
+    assert "x-user-id" not in dict(call.kwargs["metadata"])
+
+    # Incidental hardening on the RPC path; traces to no scenario.
+    rpc_svc, _db, _rpc_conn = _fresh_ingest_svc(11)
+    await rpc_svc.IngestSignal(_signal_req("motley-fool"), _ctx("0", user_id="alice"))
+    assert rpc_svc._ledger.AppendEvent.call_args.args[0].user_id == "alice"
 
 
 async def test_source_failure_records_health_and_continues(monkeypatch):

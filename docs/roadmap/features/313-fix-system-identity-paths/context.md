@@ -1228,3 +1228,18 @@ Steps fixed: 2, 3, 4, 5, 6, 7, 8. Re-run Step 2 onward with the updated blocks v
 - Config-key wiring gate: not applicable (no config key).
 - Files modified: `services/xstockstrat-ingest/app/handlers/servicer.py`
 - Deviations: none
+
+## Session 2026-11-27 — sdd-execute sequential (sdd-batch-execute), step 5
+
+- Tooling (step 5): uv ✓ · `uv sync --extra dev` in `services/xstockstrat-ingest` ⬇ · ruff ✓ 0.16.9 (host) · pytest ✓ (service `.venv`, put first on `PATH` for each run). Hook check hook=0.
+
+### Step 5 — test: AC-1, the loop's ledger event is owner-stamped [done]
+- Added `test_feature313_ac1_loop_signal_event_is_owner_stamped(monkeypatch)` after `test_second_identical_cycle_deduplicates`. Loop half: one `_mcp_source(user_id="user-a")`, `_item()`, a dedup-miss `transaction_conn` (one `db.fetchrow` row, two `conn.fetchrow` rows), the real `_ingest_external_signal` via `run_one_cycle`; asserts `event_type == "ingest.signal.ingested"`, `user_id == "user-a"` and no `x-user-id` in the call metadata, with the AC-1 Then 2 delegation comment. RPC half (untraced incidental hardening, no AC-33 claim): `_fresh_ingest_svc(11)` + `IngestSignal(_signal_req("motley-fool"), _ctx("0", user_id="alice"))` → `user_id == "alice"`. Imports `_ctx` from `tests.conftest` and `_fresh_ingest_svc`, `_signal_req` from `tests.test_signal_ownership` (C-13: no copies, no new domain literal). The promoted `@AC-1` is not fully ingest-tested: its ExportEvents Then rests on the ledger tests named in the comment.
+- TDD: AC-1 red: `assert '' == 'user-a'` failed → green: passed. Step 4 was already on the branch, so RED ran on the pre-Step-4 tree by checking out `services/xstockstrat-ingest/app/handlers/servicer.py` from `5ac54339^` for one run, then restoring it from `HEAD` (only the test file differed before GREEN). RED `.sdd-logs/v-1.log`: `AssertionError: assert '' == 'user-a'` at `tests/test_mcp_client_loop.py:235`, `1 failed, 22 deselected` (its `exit=0` is the last line, the C-13 count check). GREEN `.sdd-logs/v-2.log` `exit=0`: `All checks passed!`, `58 files already formatted`, `1 passed, 22 deselected`, `623 passed`, `Total coverage: 87.68%`; the C-13 import count is 2.
+- Config-key wiring gate: not applicable (no config key).
+- Files modified: `services/xstockstrat-ingest/tests/test_mcp_client_loop.py`
+- Deviations: none
+
+## Open Threads
+
+- [ ] Carried: Verification `exit=` reflects only the last line (Steps 6-8), `@AC-3` PRESERVE comment file placement (operator), `**kw` spy rename risk (Step 7), two-header residual (Step 6), analysis findings `:24`/`:32` stale after Steps 2-3 (no step), merge-order row for 313/309.

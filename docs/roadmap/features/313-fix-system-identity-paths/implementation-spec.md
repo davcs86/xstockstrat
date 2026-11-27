@@ -451,7 +451,7 @@ test "$(grep -B3 -A8 'event_type="ingest.signal.ingested"' services/xstockstrat-
 
 ### Step 5 — test: AC-1, the loop's ledger event is owner-stamped
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/tests/test_mcp_client_loop.py` — modify
