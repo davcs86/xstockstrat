@@ -725,7 +725,7 @@ uv run --extra dev pytest tests/test_bounded_txn_real_pg.py -q -rs | grep -c SKI
 cd services/xstockstrat-analysis
 ruff check . && ruff format --check .
 uv run --extra dev python -c "from app.repositories.pipeline_jobs import PipelineJobsRepository, ParkRace, prune_batch"
-grep -n "asyncio.timeout\|wait_for\|shield\|is_transient_db_error\|datetime.now\|app.engine" app/repositories/pipeline_jobs.py ; test $? -eq 1
+grep -n "asyncio.timeout\|wait_for\|shield\|is_transient_db_error\|datetime\.now\|app\.engine" app/repositories/pipeline_jobs.py ; test $? -eq 1
 grep -c "SKIP LOCKED" app/repositories/pipeline_jobs.py   # claim, reap, settle, prune
 ```
 
@@ -845,6 +845,7 @@ test "$(grep -c "def pipeline_pg\|def insert_pipeline_job" tests/conftest.py)" -
 grep -n "def pipeline_pg\|def insert_pipeline_job" tests/test_pipeline_jobs_real_pg.py ; test $? -eq 1   # and not redefined by the test
 grep -q "pipeline_pg" tests/test_pipeline_jobs_real_pg.py   # and used by it
 test "$(grep -cE "^async def test_ac[0-9]+_" tests/test_pipeline_jobs_real_pg.py)" -ge 14   # one per covered scenario
+uv run --extra dev pytest tests/test_pipeline_jobs_real_pg.py -q -rs | grep -c SKIPPED ; test $? -eq 1   # nothing skipped
 ```
 
 ---
@@ -1093,10 +1094,12 @@ python3 ../../scripts/check-watcher-copies.py ../..
 
 **Instructions**:
 1. `tests/conftest.py`: a virtual-time event-loop helper (time advances only when the test advances
-   it or when every task is blocked on a timer) and a recording fake repository implementing
+   it or when every task is blocked on a timer), exposed as `await advance(seconds)`, the only way
+   a test moves time, and a recording fake repository implementing
    Step 7's method names with scripted results and injectable failures. Keep both small; a test
    builds its handlers inline (a `probe` kind).
-2. `tests/test_job_graph_worker.py` (fake repository, virtual time):
+2. `tests/test_job_graph_worker.py` (fake repository, virtual time, settings built from
+   `snapshot_watcher`):
    - `start_listening()`: a claim loop blocked on a full limiter (`worker_concurrency` 1, one
      running job) claims a second ready job after `pipeline.worker_concurrency` is raised to 2
      and the watcher's `_apply` runs; without `start_listening()` it stays blocked.
@@ -1158,7 +1161,8 @@ uv run --extra dev pytest tests/test_job_graph_worker.py tests/test_job_graph_wo
 uv run --extra dev pytest --cov=app --cov-fail-under=40
 ruff check . && ruff format --check .
 grep -q "snapshot_watcher" tests/test_job_graph_worker.py && grep -q "pipeline_pg" tests/test_job_graph_worker_real_pg.py   # C-13: shared helpers from conftest
-grep -c "asyncio.sleep(" tests/test_job_graph_worker.py ; test $? -eq 1   # 0 matches: virtual time only
+grep -nE "asyncio\.sleep\([^0)]" tests/test_job_graph_worker.py ; test $? -eq 1   # only sleep(0) yields; time moves through advance()
+uv run --extra dev pytest tests/test_job_graph_worker_real_pg.py -q -rs | grep -c SKIPPED ; test $? -eq 1   # nothing skipped
 ```
 
 ---
@@ -1209,7 +1213,6 @@ grep -c "asyncio.sleep(" tests/test_job_graph_worker.py ; test $? -eq 1   # 0 ma
 cd services/xstockstrat-analysis
 ruff check . && ruff format --check .
 uv run --extra dev pytest tests/test_job_handler_contract.py tests/test_job_graph_worker.py -q   # the new handler passes the contract scan
-grep -n "^from\|^import" app/jobs/retention_prune.py
 ```
 
 ---
@@ -1263,6 +1266,7 @@ uv run --extra dev pytest tests/test_retention_prune_job.py tests/test_job_handl
 uv run --extra dev pytest --cov=app --cov-fail-under=40
 ruff check . && ruff format --check .
 grep -q "pipeline_pg" tests/test_retention_prune_job.py && grep -q "insert_pipeline_job" tests/test_retention_prune_job.py   # C-13: fixtures from conftest
+uv run --extra dev pytest tests/test_retention_prune_job.py -q -rs | grep -c SKIPPED ; test $? -eq 1   # nothing skipped
 ```
 
 ---
@@ -1411,6 +1415,7 @@ uv run --extra dev pytest tests/test_pipeline_telemetry.py tests/test_telemetry_
 uv run --extra dev pytest --cov=app --cov-fail-under=40
 ruff check . && ruff format --check .
 grep -q "metric_reader" tests/test_pipeline_telemetry.py && grep -q "pipeline_pg" tests/test_pipeline_telemetry.py   # C-13: shared fixtures used
+uv run --extra dev pytest tests/test_pipeline_telemetry.py -q -rs | grep -c SKIPPED ; test $? -eq 1   # nothing skipped
 ```
 
 ---
@@ -1510,8 +1515,8 @@ cd services/xstockstrat-analysis
 uv run --extra dev pytest tests/test_supervision.py tests/test_pipeline_boot.py tests/test_owner_header_guard.py tests/test_telemetry.py tests/test_strategy_templates.py -q
 uv run --extra dev pytest --cov=app --cov-fail-under=40
 ruff check . && ruff format --check .
-grep -c "spawn(" app/main.py   # 11
-test -z "$(git status --short -- ../../docker-compose.yml ../../.do ../../deploy/homelab/compose.yml)"   # empty: no new env var or port, so no deploy-file change
+test "$(grep -c "spawn(" app/main.py)" -eq 11
+test -z "$(git diff --name-only origin/main-dev -- ../../docker-compose.yml ../../.do ../../deploy/homelab/compose.yml)"   # empty: no new env var or port, so no deploy-file change (same base as Step 5)
 ```
 
 ---

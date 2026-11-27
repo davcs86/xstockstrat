@@ -391,3 +391,15 @@ Carried from design.md § Open Risks; each needs an owner at `/sdd-spec` or late
     `PIPELINE_STATS_STALE_S` in `app/telemetry.py` only.
   - [x] N1 stats run on maintenance ticks 1, 4, 7, …; `stats_step()` is a named coroutine
     (added to S-10). N2 tests needing more than one pool take the DSN from `local_pg`.
+
+## Session 2026-11-27 — sdd-review impl-spec (advisory, round 5: criteria)
+
+- Result: 0 failures, 3 warnings, 2 notes; all round-4 fixes verified. All applied:
+  - [x] W1 Step 12's `asyncio.sleep(` ban failed a correct test; the virtual-time helper now
+    exposes `await advance(seconds)` and the grep bans only non-zero sleeps.
+  - [x] W2 Step 18: the spawn count is asserted (`-eq 11`) and the deploy-file check diffs
+    against `origin/main-dev`, so it still works after a commit.
+  - [x] W3 Steps 8, 12, 14 and 16 carry Step 6's "nothing skipped" guard for their real-Postgres
+    files.
+  - [x] N1 Step 13's informational import grep is removed (the handler contract test is the
+    gate). N2 Step 7's guard grep escapes its dots.
