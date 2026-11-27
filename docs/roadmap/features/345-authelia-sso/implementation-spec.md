@@ -1684,7 +1684,7 @@ grep -n "restBackendHeaders" src/app/accounts/api/sso/route.ts src/app/accounts/
 
 ### Step 43 — test: Link SSO route statuses
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/accounts/api/sso/route.test.ts` — create
