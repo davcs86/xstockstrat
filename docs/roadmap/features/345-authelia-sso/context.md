@@ -798,3 +798,8 @@
 - Verification: `pnpm --filter @xstockstrat/proto run build` exit=0; second `buf-gen.sh` run leaves `git diff --exit-code packages/proto/gen/` clean (exit=0, after reverting the two reflow files below); `buf lint` + `buf breaking --against …#branch=feature/authelia-sso` exit=0 (the branch exists, so the impl-review `buf breaking` fallback ⚠ is cleared without a fallback). TDD: N/A.
 - Files modified: `packages/proto/identity/v1/identity.proto`, `packages/proto/gen/{go,python,ts}/identity/v1/*`, `packages/proto/gen/ts/dist/identity/v1/*`.
 - Deviations: host-native codegen fallback; incidental `analysis.pb.go`/`trading.pb.go` doc-comment reflow not committed (Deviation Log).
+
+### Step 3 — migration: identity 007_external_identities [done]
+- Created `007_external_identities.{up,down}.sql` (`006` was the highest; `007` free — impl-review ⚠ "re-check identity `007`" cleared at execute). Offline check: both files exist, the constraint/IF NOT EXISTS grep counts 3, the down's `DROP TABLE IF EXISTS` inverts the up's single `CREATE TABLE IF NOT EXISTS`. TDD: N/A. Live apply deferred to CI.
+- Files modified: `services/xstockstrat-identity/migrations/007_external_identities.up.sql`, `.down.sql`
+- Deviations: none

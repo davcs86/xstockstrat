@@ -209,7 +209,7 @@ cd packages/proto && buf lint && buf breaking --against "../../.git#branch=featu
 
 ### Step 3 — migration: identity 007_external_identities
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-identity`
 **Files**:
 - `services/xstockstrat-identity/migrations/007_external_identities.up.sql` — create
