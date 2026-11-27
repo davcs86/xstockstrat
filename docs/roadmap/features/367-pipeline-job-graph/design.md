@@ -1,7 +1,7 @@
 # Design: pipeline-job-graph
 
 **Created**: 2026-11-27
-**Rounds**: 4 (full; round cap lifted by the operator; termination: pending operator approval)
+**Rounds**: 5, round 6 in progress (full; round cap lifted by the operator; termination: pending operator approval)
 **Approved by**: pending
 **Grounded in**: recon.md
 **Debate register**: debate.md
@@ -63,7 +63,9 @@ duplicate work.
   (`app/main.py:55-62`). A second, control pool has fixed `max_size=2`, `min_size=0`, built by a
   shared helper in `main.py` that applies the same `statement_cache_size=0` rule under
   `DB_PGBOUNCER` (`app/main.py:59-61`). Its only users are the heartbeat task and one serialized control
-  lane, so a client connection is always available. No backend slot is added: pooled client
+  lane, so a client connection is always available. The lane lock is taken before the control-pool
+  acquire and released after the connection is released or terminated; no retry or backoff sleep
+  happens under it. No backend slot is added: pooled client
   connections are not backend slots (`docs/patterns/database.md:175-180`; F-06).
 - **`bounded_txn`** in `app/repositories/read_budget.py`, beside the untouched `budgeted_read`:
   an explicit transaction opened with `BEGIN; SET LOCAL statement_timeout` as one query, with the
@@ -105,8 +107,11 @@ uses `bounded_txn(control_pool, 3 s)` without the lane lock.
 - **Claim:** `FOR UPDATE SKIP LOCKED` over ready rows whose next-attempt time has passed, filtered
   to the kinds this process has handlers for, ordered `lane DESC, next_attempt_at, job_id`
   (shape: `services/xstockstrat-marketdata/internal/repository/profile_repo.go:250-257`).
-- **Reap:** expired `running` rows go to `ready`, or `dead` once attempts are used up. The outer
-  update re-checks the state and the expiry. A reap does not count an attempt. `max_attempts` is
+- **Reap:** expired `running` rows go to `ready` with `next_attempt_at = now()`, or to `dead` with
+  `error_class = 'transient'` and `last_error = 'lease_expired'` once attempts are used up.
+  Candidates are selected with `ORDER BY job_id FOR UPDATE SKIP LOCKED`, so two instances never
+  block or deadlock each other; the outer update re-checks the state and the expiry. A reap does
+  not count an attempt. `max_attempts` is
   read fresh at each report and reap and compared with `>=`, so a job already above a lowered
   value runs once more and goes `dead` on its next failure.
 - **Heartbeat:** one batched update of the leases this instance holds, returning the renewed pairs.
@@ -117,11 +122,16 @@ uses `bounded_txn(control_pool, 3 s)` without the lane lock.
   `ParkRace`: the runner re-runs the park on the report retry schedule; the handler is not re-run
   and no attempt is consumed.
 - **Settle:** wakes or blocks parents whose children are all finished or include a failure, 500
-  per batch, repeating while a batch is full, until 20 batches or 8 s have been spent in the tick.
-  The verdict comes from the failed child with the lowest id. A wake sets `next_attempt_at = now()`.
+  per batch, selected with `ORDER BY job_id FOR UPDATE SKIP LOCKED`. It repeats while a batch is
+  full; checking before each batch, it stops once 20 batches have run or 8 s have passed since the
+  settle step began. A failed child gives `dependency_failed`, a dead child `dependency_dead`, a
+  blocked child its own verdict; among the children in `failed`, `dead` or `blocked`, the one with
+  the lowest `job_id` decides. A wake sets `next_attempt_at = now()`. Settle transitions are not
+  attempts and are not counted.
 - **Prune:** one unordered DELETE per finished state (four in all), each with a single cutoff
   timestamp, in batches of 500 with `SKIP LOCKED`, never deleting a child of an unfinished parent.
-  A batch loop ends when a batch returns fewer than 500 rows.
+  A batch loop ends when a batch returns fewer than 500 rows. The cutoffs are read once per DELETE
+  loop.
 - **List by run.**
 - **Ready stats per lane:** over rows with `state = 'ready' AND next_attempt_at <= now()`, depth is
   the count and age is `now() − min(next_attempt_at)`. Jobs in backoff are not backlog.
@@ -140,17 +150,19 @@ and worker. Handlers live in `app/jobs/`. Three tasks start through `supervision
   empty claim it doubles up to `max(poll_interval_ms, 5 s)`. Free slots are taken by repeated
   `acquire()` while `in_use < limit`; unused ones are released after the claim; `cfg.on_change`
   wakes the limiter (`app/handlers/servicer.py:544-547`). `live_limits.py` is not edited.
-- **Maintenance loop** (every 5 s). Reap and settle every tick, the daily prune ensure, and stats
+- **Maintenance loop** (the tick returns 5 s − elapsed, at least 0). Reap and settle every tick, the daily prune ensure, and stats
   every third tick, each in its own transaction. The in-memory "ensured for this UTC day" marker is
   set only after a committed ensure.
-- **Heartbeat loop** (every lease/6). One batched renewal of attempts in phase `running` or
-  `retry_wait`. It leaves out attempts that are reporting or were stopped as lost or self-fenced;
-  an attempt stopped at the 900 s deadline stays in the batch until its report is written. A runner
-  about to report waits for an in-flight batch that contains its key, so the heartbeat never
-  contends with its own instance's row lock. Loss is declared only from a result whose COMMIT
-  returned the tag `COMMIT` and which omits the pair. `lease_seconds` is read once per tick and
-  that value is used for the SQL expiry, the fence and the next period. The tick returns
-  interval − elapsed.
+- **Heartbeat loop** (fixed period 7.5 s, whatever `lease_seconds` is). One batched renewal of
+  attempts in phase `running` or `retry_wait`; an empty set issues no statement. It leaves out
+  attempts that are reporting or were stopped as lost or self-fenced; an attempt stopped at the
+  900 s deadline stays in the batch until its report is written. A runner takes the control lane
+  lock first and only then becomes `reporting`; until then it stays in the batch. Holding the
+  lane, and before acquiring a connection, it waits for an in-flight batch that contains its key
+  (at most the heartbeat's effective 6 s), so the heartbeat never contends with its own
+  instance's row lock. Loss is declared only from a result whose COMMIT returned the tag `COMMIT`
+  and which omits the pair. `lease_seconds` is read once per tick and that value sets both the SQL
+  expiry and the fence. The tick returns 7.5 s − elapsed, at least 0.
 - **Handler contract.** `async (ClaimedJob) -> Succeeded | WaitOn | Verdict`. Only
   `PermanentJobError` is permanent; any other exception is transient; a non-outcome return is a
   permanent failure. `ClaimedJob.wait_round` tells the handler its stage, and a woken parent may
@@ -163,22 +175,29 @@ and worker. Handlers live in `app/jobs/`. Three tasks start through `supervision
   park itself and is never cancelled. A failed report is retried (1, 2, 4 … 30 s) while the
   attempt stays heartbeated, until it succeeds, is rejected by the fence, or 300 s pass; then the
   key is dropped and the lease expires. The limiter slot is released by a done-callback on the
-  handler task (shape: `app/config/live_limits.py:67-72`), so a slot counts a live handler and an
-  attempt that is only retrying its report holds none.
+  runner task (shape: `app/config/live_limits.py:67-72`). The runner ends only after the handler
+  task has ended and its report or park is written, rejected or abandoned, so a slot counts an
+  attempt that can still use the control lane. Under a report outage an instance therefore stops
+  claiming for up to 300 s.
 - **Stop path.** A stop is a lost lease, the self-fence, or the 900 s attempt deadline. The
   attempt records the stage of its current database block: `gate`, `acquire` or `txn`; the stage
   becomes `txn` synchronously when the pool acquire returns. A stop terminates the connection when
   the stage is `txn` and cancels the handler task otherwise, so no cancellation is ever delivered
-  inside a transaction. A stop that became pending during the acquire terminates the connection
-  right after it and raises `AttemptStopped`. Once a stop is pending, or the fence deadline has
+  inside a transaction. If the pool acquire returns even though a stop was requested during it,
+  the block terminates the connection at once and raises `AttemptStopped`. A handler task that
+  ends cancelled after a stop is treated as having returned that stop's outcome. After a
+  lost-lease or self-fence stop the runner writes no report or park: it waits for the handler
+  task, drops its key, and the lease expires; the reaper counts the attempt `expired`. An attempt
+  in `retry_wait` whose pair a committed heartbeat omits stops retrying and is counted once, as
+  `lost_heartbeat`. Once a stop is pending, or the fence deadline has
   passed, the handler cannot open a new database block. A handler that ends within 10 s of a
   deadline stop, with its lease still valid, is reported as a transient `attempt_timeout`. A
   handler still running after 10 s is logged at ERROR and counted, gets no heartbeat and no
   report, and keeps its slot until its task ends; its lease expires and the reaper counts the
   attempt `expired`.
 - **Disabled worker.** Claims, the daily ensure and maintenance stop at the next tick and issue no
-  statements. Jobs already running keep their heartbeat and write their result. While every
-  instance is disabled no expired lease is reaped.
+  statements. A disabled claim or maintenance tick returns 5 s. Jobs already running keep their
+  heartbeat and write their result. While every instance is disabled no expired lease is reaped.
 - **Shutdown.** No lease is released; in-flight leases expire.
 
 ### Dependencies (D-15, D-23, D-35)
@@ -187,7 +206,9 @@ A handler returns `WaitOn(children)`. Before the park, children are deduplicated
 must be 1 to 10 000, never the parent's own key, and each child kind must be declared in the parent
 kind's `child_kinds`. The handler registry rejects a cyclic kind graph at boot, so no two parents
 can wait on each other. Park rounds are capped at 8. A larger fan-in is staged across rounds. A
-key repeated with two lanes keeps the higher one.
+key repeated with two lanes keeps the higher one. A `WaitOn` that fails these checks, or that is
+returned when `wait_round` is already 8, and a `Verdict` with an empty label, are permanent
+failures (`failed`, with `last_error` naming the check); no park is attempted.
 
 ### Handler database contract (D-33)
 
@@ -196,9 +217,11 @@ a per-instance gate of one, inside `bounded_txn`. Repositories called from a han
 nothing else is awaited inside the block; writes are idempotent. The job graph therefore holds at
 most one service-pool connection at a time.
 
-The gate wait is bounded by `asyncio.timeout(budget)`; it does no I/O. The gate is released
-exactly once, through a per-block flag, by whichever comes first: block exit, a stop's abort, or
-the transaction's expiry (through `on_terminate`). `AttemptStopped` subclasses `BaseException`.
+The gate wait is bounded by `asyncio.timeout(budget)`; it does no I/O. The gate is released at
+most once, and only if it was acquired: a per-block flag set on acquisition is cleared by
+whichever comes first, block exit, a stop's abort, or the transaction's expiry (through
+`on_terminate`). A stop while the block waits for the gate cancels the wait and releases nothing.
+A `job.db(budget)` above 30 s raises at block entry. `AttemptStopped` subclasses `BaseException`.
 
 `tests/test_job_handler_contract.py` parses `app/jobs/` and fails on any of:
 
@@ -210,22 +233,35 @@ the transaction's expiry (through `on_terminate`). `AttemptStopped` subclasses `
 - inside a `job.db()` block, an await that is neither a call on the block's `conn` nor a call
   passing `conn=`.
 
-### Lease timing (D-34)
+### Lease timing (D-34, D-47, D-48)
 
-Fixed: heartbeat period lease/6, self-fence margin 3 s, tolerated event-loop lag 2 s.
+Fixed: heartbeat period 7.5 s, self-fence margin 3 s, tolerated event-loop lag 2 s.
 `lease_seconds` is bounded `[45, 600]`. At the floor a holder survives two consecutive failed
-renewals and a pooler stall of 26 s; at the default of 60, three and 39 s.
+renewals and a pooler stall of 26 s; at the default of 60, four and 41 s. These hold from a
+holder's first renewal on. A claim acknowledged up to 7 s after it was sent delays that renewal,
+so until then the figures are two renewals and 19 s at 45, three and 34 s at 60.
 
 The send time is recorded before a claim or renewal is sent. Only when the COMMIT is acknowledged
 and returns the pair does the attempt's fence deadline become that send time + `lease_seconds` −
 3 s; a failed batch leaves it unchanged. Timer lateness beyond 2 s is logged.
 
-A job whose worker stopped is claimable again within `lease_seconds` + 10 s while the database
-answers normally (70 s at defaults). If every operation runs to its timeout the bound is
-`lease_seconds` + 22 + 40 × (`worker_concurrency` + 2) s (322 s at defaults): one maintenance
-tick of reap, settle, ensure and stats, each waiting on the control lane behind at most
-`worker_concurrency` reports and one other operation, then one claim. Both need an enabled
+A job whose worker stopped is claimable again within `lease_seconds` + 10 s, plus up to 4 s of
+event-loop lag, while the database answers normally (70 s at defaults). This needs an enabled
 instance with that job kind registered and a free slot.
+
+No closed-form worst case is stated. Takeover is bounded by client timers through these
+invariants, each testable with a fake clock:
+
+- The control lane is FIFO with at most `worker_concurrency` + 2 operations queued: runners, the
+  claim loop and the maintenance loop.
+- A lane operation lasts at most 8 s; a runner's at most 14 s, including its wait for an in-flight
+  heartbeat batch.
+- A maintenance tick is the settle window plus at most four lane operations.
+- The idle claim delay is at most 5 s.
+
+The worst case is therefore linear in `worker_concurrency`. It is measured by
+`db.duration{phase=wait}` and `oldest_ready_age`, not tested in CI. Any other caller of a
+repository method without `conn=` adds to the lane queue and voids the bound.
 
 ### Retention prune (D-38; product-spec FR-7)
 
@@ -235,7 +271,8 @@ instance ensures the day's job on its first maintenance pass of the UTC day and 
 The handler deletes succeeded rows older than `retention_days`, and `failed`, `dead` and `blocked`
 rows older than `max(30, retention_days)` days, each batch in its own `job.db()` block, through
 the repository's prune batch method with `conn=`. Rows skipped because they are locked wait for
-the next day; a backlog cut off by the attempt deadline resumes on the retry.
+the next day. The handler stops starting batches after 600 s and returns success, so a large
+backlog is spread over days and never ends `dead` on the attempt deadline.
 
 Manual recovery, documented in `services/xstockstrat-analysis/docs/pipeline-jobs.md` until program
 feature 4 adds a requeue: for a `failed` or `dead` job, set `state = 'ready'`, `attempts = 0`,
@@ -314,15 +351,22 @@ Step 3's real-Postgres tests gate step 4:
 - 1 200 settleable parents are woken in one tick with the lowest-id verdict;
 - each prune DELETE uses the `(state, finished_at)` index on a seeded table, and a `dead` row aged
   `retention_days` + 1 survives;
-- a heartbeat that waited for an in-flight batch records no false loss.
+- a runner that waited for an in-flight heartbeat batch records no false loss;
+- two instances running reap and settle on the same rows neither block nor deadlock.
+
+Already pinned in the repo: a terminated pooled connection frees its pool slot
+(`services/xstockstrat-analysis/tests/test_read_budget_real_pg.py:148-164`).
 
 Step 4's unit tests include: a stop inside a database block aborts it and raises
 `AttemptStopped`; a new block is refused after a stop; an unresponsive handler keeps its slot
-until its task ends; a disabled worker lets a running job report; the claim delay sequence; the
-clamp WARN fires once per changed value; the contract test.
+until its task ends; an attempt retrying its report keeps its slot; a job claimed right after
+`lease_seconds` is lowered is renewed before its fence; a disabled worker lets a running job
+report; the claim delay sequence; the lane invariants of the lease-timing section on a fake clock;
+the clamp WARN fires once per changed value; the contract test.
 
 Fixed constants, recorded invariants and not config keys: control budget 5 s; heartbeat budget
-3 s; handler block cap 30 s; grace 2 s; release bound 1 s; maintenance period 5 s; self-fence
+3 s; heartbeat period 7.5 s; handler block cap 30 s; prune self-stop 600 s; grace 2 s; release
+bound 1 s; maintenance period 5 s; self-fence
 margin 3 s; tolerated lag 2 s; attempt deadline 900 s; stop grace 10 s; report give-up 300 s;
 park rounds 8; children per park 10 000; settle batch 500, at most 20 batches or 8 s per tick;
 prune batch 500; stats every 15 s, stale after 45 s; idle claim ceiling 5 s.
@@ -355,10 +399,13 @@ prune batch 500; stats every 15 s, stale after 45 s; idle claim ceiling 5 s.
 
 ## Open Risks
 
-- [ ] asyncpg 0.31 behaviour could not be read in the design environment (terminate wakes an
-  in-flight await; a terminated pooled connection frees its slot; `create_pool(reset=…)`;
-  `min_size=0`). To be pinned by the step-3 tests before step 4. Fallback for `reset=`: drop it and
-  pay one round trip.
+- [ ] asyncpg 0.31 behaviour not yet pinned: terminate wakes an in-flight await;
+  `create_pool(reset=…)`; `min_size=0`. The step-3 tests pin them before step 4. Fallbacks, so no
+  decision is left for the build: if terminate does not wake the await, `bounded_txn` awaits each
+  statement as a child task raced against the timer with `asyncio.wait`, terminates on expiry and
+  stops awaiting the task, whose exception a done-callback retrieves; without `reset=`, drop it
+  and pay one round trip; without `min_size=0`, use 1 (one idle client connection, no backend
+  slot).
 - [ ] PgBouncer queueing cannot be tested in CI; a frozen backend stands in for it. To be measured
   through `db.duration{phase=wait}` in program feature 3's shadow run.
 - [ ] Tolerated event-loop lag of 2 s is a design tolerance. Timer lateness is logged; revisit the
@@ -373,6 +420,12 @@ prune batch 500; stats every 15 s, stale after 45 s; idle claim ceiling 5 s.
   the named relaxation.
 - [ ] Hazards H1 and H2 (D-33) apply to any later in-transaction report. To be carried into
   program feature 3's design.
+- [ ] A heartbeat batch already in flight when a self-fence fires can still commit and extend
+  that lease once, so such a job is claimable up to `lease_seconds` + 6 s later than otherwise.
+- [ ] A handler that crashes the process is re-run at once on the next instance, up to
+  `max_attempts` times.
+- [ ] Under a report outage an instance stops claiming for up to 300 s (the slot is held until
+  the report is written).
 - [ ] An unresponsive handler holds its slot until its task ends; when every slot is held that way
   the instance stops claiming until it is restarted. The contract test forbids the handler code
   that most directly causes it, not library code that suppresses cancellation.

@@ -96,3 +96,17 @@
 - O-34 (spec wording) is still with the operator; the before/after text was shown in session,
   with a proposed `@AC-18` for the 30-day deletion.
 - design.md not yet amended for round 5; corrections wait for the operator's rulings.
+
+## Session 2026-11-27 — sdd-design gate after round 5
+
+- **OPERATOR REOPEN P-1 (D-43): "hold the slot"** — a job keeps its worker slot until its report
+  or park is written, rejected or abandoned (D-46).
+- **OPERATOR REOPEN P-2 (D-42, D-34 worst case): "state invariants"** — no closed-form worst-case
+  takeover figure; bounding invariants plus the normal figure `lease_seconds` + 10 s (D-47).
+- **OPERATOR REOPEN P-3 (D-34, D-44): "fixed 7.5 s period"** — heartbeat period independent of
+  `lease_seconds` (D-48).
+- **OPERATOR DECISION (O-34): "Accept all, add AC-18"** — product-spec.md amended (FR-7, FR-9,
+  lease constraint, `poll_interval_ms` description); acceptance.feature amended (`@AC-3`,
+  `@AC-4`, `@AC-12`, `@AC-15`) and `@AC-17`, `@AC-18` appended. These change an approved spec
+  with explicit operator sign-off.
+- Reopens require another round: round 6 started over the amended design.md. Not approved.
