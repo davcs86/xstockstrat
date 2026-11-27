@@ -539,7 +539,7 @@ Confirm the `total:` line is ≥ 40% and that the `-v` output lists the cases as
 
 ### Step 7 — test: trading broker-account owner gate and pool skip
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/service/trading_broker_owner_gate_test.go` — create

@@ -605,3 +605,18 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Config-key wiring gate: does not apply, because no config key is declared.
 - Files modified: `services/xstockstrat-trading/internal/service/export_test.go`, `services/xstockstrat-trading/internal/service/trading_owner_scope_test.go`
 - Deviations: none
+
+### Step 7 — test: trading broker-account owner gate and pool skip [done]
+- Added `trading_broker_owner_gate_test.go` (`package service`) with five tests. The headerless `RegisterBrokerAccount` table runs over OFFLINE, ALPACA and IBKR, and the others cover a headerless Update and Deregister on a `UserID ""` row, a headerless List, and `LoadBrokerPool` with one owner-less and one `user-1` OFFLINE row, where the test asserts exactly one WARN `LoadBrokerPool: account has no owner, skipping account` with `account_id` `acct-ownerless`. A local `ownerGateAccountRepo` embeds `offlineAccountRepo` and adds recording `UpdateCredentials`/`ListBrokerAccounts`, so a missing gate fails on an assertion instead of a nil-interface panic. `http.DefaultTransport` is swapped to fail on any broker request. The Deregister row is ALPACA because the OFFLINE path reaches the nil `baselineStore`. Ids and `"user-1"` stay inline (C-13).
+- TDD: AC-2 red → green.
+  - RED: the step Verification ran with the new file against the pre-Step-4 `trading.go` (`24bfaf11`), restored temporarily and then reverted. Result: exit=1 (`.sdd-logs/v-2.log`).
+    - Register (all 3 rows): `headerless register persisted 1 record(s), first owner ""` and `code = OK, want PermissionDenied`
+    - Update: `headerless update rewrote credentials for [acct-ownerless]`
+    - List: `headerless list reached the repo ([""]) and returned 1 account(s)`
+    - Deregister: `headerless deregister deactivated [acct-ownerless]`
+    - `LoadBrokerPool`: `owner-less account was loaded into the broker pool` and `WARN records = []`
+  - The first RED run (`.sdd-logs/v-1.log`) aborted at the offline Deregister panic before `LoadBrokerPool` ran. That led to the ALPACA row.
+  - GREEN: the same Verification gave exit=0 (`.sdd-logs/v-3.log`) with `ok  github.com/xstockstrat/trading/internal/service 13.788s`, `total: (statements) 85.3%` (≥ 40%) and golangci-lint v2.14.0 `0 issues.` (`~/go/bin` first on PATH for the run). A `-v` run (`.sdd-logs/diag-1.log`) showed all five tests and the three register subtests `--- PASS`.
+- Config-key wiring gate: does not apply, because no config key is declared.
+- Files modified: `services/xstockstrat-trading/internal/service/trading_broker_owner_gate_test.go`
+- Deviations: none
