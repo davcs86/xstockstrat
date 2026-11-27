@@ -1293,3 +1293,97 @@ Steps fixed: 2, 3, 4, 5, 6, 7, 8. Re-run Step 2 onward with the updated blocks v
 
 - [ ] `implementation-spec.md` header `**Status**` still reads `pending` (no step flipped it). SESSION-END SUMMARY sets it to `complete`. Target: orchestrator, per-feature session-end summary.
 - [ ] Carried: `@AC-3` PRESERVE comment file placement (operator), analysis findings `:24`/`:32` stale after Steps 2-3 (no step), merge-order row for 313/309, `**kw` spy rename risk and the two-header residual (accepted, D-19).
+
+## Session 2026-11-27 — sdd-batch-execute promotion plan (awaiting operator confirm)
+
+- Branch check (`origin/feature/fix-system-identity-paths` at `5e54f560`): `acceptance.feature` holds @AC-1/@AC-2/@AC-3 with `@FR-*` tags. Its AC-2 and AC-3 match the blocks below. Its AC-1 still has the old Thens ("ledger event has user_id", "ExportEvents called as "user-a" returns that event"), so per the plan the AC-1 wording goes to the operator before anything is promoted. Nothing was written to any durable suite.
+
+```sdd-batch-promotion-plan
+## Promotion plan — fix-system-identity-paths (feature 313)
+
+### BLOCKER TO CLEAR BEFORE WRITING (source-of-truth gap)
+I am read-only with no git access, so I could not read `origin/feature/fix-system-identity-paths:docs/roadmap/features/313-fix-system-identity-paths/acceptance.feature`. The copies I could read disagree:
+- The main working tree (`/home/user/xstockstrat/docs/roadmap/features/313-fix-system-identity-paths/acceptance.feature`) is the stale pre-Step-1 file: 2 scenarios (@AC-1, @AC-2), no `@FR-*` tags, no @AC-3. Do NOT promote from it. Its AC-2 Then "_compose does not raise" is an implementation step that design D-15 and R-7 rejected, and promotion is permanent.
+- The worktree copies `/home/user/xstockstrat/.claude/worktrees/wf_fbbc69a4-10e-11`, `wf_f74e1465-c7b-6` and `wf_a4649d74-1f8-5` hold 3 scenarios with `@FR-*` tags, the reworded AC-2 and the new AC-3. Their AC-1 still has the old Thens ("ledger event has user_id", "ExportEvents called as user-a returns that event").
+- `implementation-spec.md` Step 1 (lines 130-163) specifies a reworded AC-1: "the ingest.signal.ingested AppendEvent request carries user_id "user-a"" and "no x-user-id call metadata is sent with it". `context.md` lines 1044, 1061 and 1070 say this wording is spec-authored and still needs operator confirmation.
+
+The blocks below use the Step 1 text, which is the design-approved, C-16-signed-off shape. Before writing, the orchestrator must compare the AC-1, AC-2 and AC-3 steps with `git show origin/feature/fix-system-identity-paths:docs/roadmap/features/313-fix-system-identity-paths/acceptance.feature`. If the reviewed branch text differs, substitute the branch's step text verbatim. Rule 2 (verbatim, never invented) outranks the blocks here. If the branch AC-1 still has the old Thens, flag that to the operator rather than promoting the un-asserted ExportEvents Then (design R-7/O-17).
+
+### Verdicts
+| @AC | target suite (path) | CREATE/APPEND | verdict | note |
+|---|---|---|---|---|
+| @AC-1 (@FR-1) mcp_client loop signal events are owner-stamped in the ledger | /home/user/xstockstrat/services/xstockstrat-ingest/acceptance/fix-system-identity-paths.feature | CREATE | NEW | The Then asserts ingest's `ingest.signal.ingested` AppendEvent request, so it is owned by ingest. Wording needs the gate above. |
+| @AC-2 (@FR-2) A system-owned order event yields a partial P&L snapshot | /home/user/xstockstrat/services/xstockstrat-analysis/acceptance/fix-system-identity-paths.feature | CREATE | NEW | The subject is analysis `PnLPatternConsumer`. Adjacent to `@AC-17 @feature-225` but not a duplicate (see Notes). |
+| @AC-3 (@FR-3) Signals from one mcp_client poll cycle share a per-source correlation id | /home/user/xstockstrat/services/xstockstrat-ingest/acceptance/fix-system-identity-paths.feature | CREATE (same file as AC-1) | NEW | The subject is ingest's per-cycle `correlation_id`. Net-new, so it needs C-15 traceability only. |
+
+### Ready-to-write blocks
+--- /home/user/xstockstrat/services/xstockstrat-ingest/acceptance/fix-system-identity-paths.feature (CREATE) ---
+# Durable business-rule suite for xstockstrat-ingest (Constitution C-16). Promoted from feature 313's
+# acceptance.feature (fix-system-identity-paths) at launch; @feature-313 marks provenance. These are the
+# guarantees a future feature must not regress (recon reads this suite; the design-adversary enforces it).
+
+Feature: xstockstrat-ingest - mcp_client loop ledger events keep owner attribution and a per-cycle correlation id
+  Server-initiated mcp_client poll-loop signal events are attributed to the source owner and share one
+  per-source, per-cycle correlation id.
+
+  # guards: docs/reports/2026-10-19-ingest-mcp-loop-ledger-events-ownerless-defect.md
+  # PRESERVE @AC-11 @feature-021 (services/xstockstrat-ledger/acceptance/ledger-event-export.feature):
+  # the export is scoped to user_id = caller, so an owner-stamped event is returned to its owner.
+  @AC-1 @FR-1 @regression @feature-313
+  Scenario: mcp_client loop signal events are owner-stamped in the ledger
+    Given an mcp_client signal source registered by owner "user-a"
+    When one ingest.mcp_client.poll_interval_seconds cycle ingests a signal from it
+    Then the ingest.signal.ingested AppendEvent request carries user_id "user-a"
+    And no x-user-id call metadata is sent with it
+
+  # the id persists as the ledger event's correlation_id; ledger ignores the x-trace-id header
+  # PRESERVE @AC-41, @AC-28, @AC-29 and @AC-53 @feature-294
+  # (services/xstockstrat-ingest/acceptance/signal-map-instrumentation.feature): neither user_id nor
+  # the per-cycle id becomes a metric label.
+  @AC-3 @FR-3 @feature-313
+  Scenario: Signals from one mcp_client poll cycle share a per-source correlation id
+    Given two mcp_client signal sources registered by owner "user-a", each returning two distinct, non-duplicate signals
+    When one poll cycle ingests all four signals
+    Then each ingest.signal.ingested ledger event from one source's cycle carries the same non-empty correlation_id
+    And the two sources' correlation ids differ
+    And no x-user-id is sent
+
+--- /home/user/xstockstrat/services/xstockstrat-analysis/acceptance/fix-system-identity-paths.feature (CREATE) ---
+# Durable business-rule suite for xstockstrat-analysis (Constitution C-16). Promoted from feature 313's
+# acceptance.feature (fix-system-identity-paths) at launch; @feature-313 marks provenance. These are the
+# guarantees a future feature must not regress (recon reads this suite; the design-adversary enforces it).
+
+Feature: xstockstrat-analysis - a system-owned order event degrades instead of raising
+  The P&L pattern consumer yields a partial snapshot for a system-owned order event; it is never retried or parked on that basis alone.
+
+  # guards: docs/reports/2026-10-19-analysis-pnl-compose-system-owner-raises-defect.md
+  @AC-2 @FR-2 @regression @feature-313
+  Scenario: A system-owned order event yields a partial P&L snapshot
+    Given an order.filled ledger event whose payload has user_id "system"
+    When PnLPatternConsumer processes the event
+    Then the event is processed on its first attempt with no retry backoff
+    And an order_snapshots row is written for that order with empty indicators and signals
+    And an analysis.snapshot.degraded event is emitted
+    And no pnl_positions window is opened
+    And the event is not parked
+
+### Notes / ambiguities / conflicts
+- Source-of-truth gap: see the BLOCKER section above. The AC-1 Then wording is the main risk, because promotion is permanent and `context.md` records it as unconfirmed by the operator.
+- Service attribution: AC-1 and AC-3 are ingest (the loop and `_ingest_external_signal` emit the ledger event). AC-2 is analysis. No scenario spans services, so nothing goes to `/home/user/xstockstrat/docs/sdd/business-rules/platform.feature`. `platform.feature` has no `@feature-313` entries and no overlapping rule. Its only system-identity block, at about line 258, covers the SAN-bound analysis->indicators/ingest contract.
+- Dedup. No `@feature-313` tag exists in any suite, so there are no DUPs and this is a first-time promotion.
+  - Ingest (`/home/user/xstockstrat/services/xstockstrat-ingest/acceptance/`): no scenario asserts `user_id` on `ingest.signal.ingested` or a per-cycle `correlation_id`. `mcp-client-signal-source.feature` and `fix-ingest-poller-backfill.feature` cover registration, poll isolation and last_error, not ledger attribution.
+  - Analysis: `/home/user/xstockstrat/services/xstockstrat-analysis/acceptance/private-by-default-enforce-contract.feature:42-47` (`@AC-17 @feature-225`) is adjacent. It covers an empty-owner event: no ingest or indicators call, snapshot stored, degraded event emitted. AC-2 covers a `system` owner and adds first-attempt processing, no `pnl_positions` window and not parked. That is a different input and different Thens, so it is not an OVERLAP. A future curation pass could group the two.
+- No CONFLICT. These standing rules hold alongside the new scenarios (design "Business Rules Touched"):
+  - `@AC-16 @feature-225`: an ungranted system identity is refused inbound. AC-2 is a ledger-stream event, not an inbound call.
+  - `@AC-8`, `@AC-14` and `@AC-15 @feature-225`: no `system`-owned window or ledger row is written.
+  - `@AC-7` and `@AC-9 @feature-259`: poison still parks.
+  - `@AC-33 @feature-224`: no `x-user-id` is forged. AC-1 and AC-3 assert none is sent.
+- File naming follows the source slug. The `acceptance/` dirs already exist for both services, so only the files are created. No directory creation is needed.
+- Tag order follows the existing convention (`@AC-n @FR-n [@regression] @feature-NNN`, e.g. `@AC-8 @FR-1 @regression @feature-261`). Original `@AC-*` numbers are not renumbered.
+- AC-3 only exists in the branch copy after Step 1. If `status.md` shows Steps 6-7 (ingest `trace_id`) are not done and merged, promoting AC-3 would record an unimplemented guarantee. The caller should promote only at launch or ALL-DONE.
+
+### Coverage check
+- Source scenarios: 3 (@AC-1, @AC-2, @AC-3 in the Step 1 / branch target version). The stale main-tree file has only 2.
+- Planned (NEW + DUP + OVERLAP): 3 (3 NEW, 0 DUP, 0 OVERLAP, 0 CONFLICT). Nothing is skipped. The counts match, so no scenario is dropped.
+- Files written: 2 CREATE (ingest 2 scenarios, analysis 1 scenario), 0 APPEND, 0 to platform.feature.
+```
