@@ -1361,7 +1361,7 @@ cd services/xstockstrat-ui && pnpm run typecheck && pnpm run lint && pnpm run te
 
 ### Step 34 — service: The SSO transaction and link cookies (ssoTxn.ts)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/ssoTxn.ts` — create

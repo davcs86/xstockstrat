@@ -982,3 +982,9 @@
 - TDD: red (before Step 32): `Cannot find module './oidcClient'` in both files → green: 24 passed; full `pnpm run test:coverage` 94 files, 917 passed / 2 skipped, `src/lib/**` 84.31 % lines (`oidcClient.ts` 100 % lines); typecheck and lint exit 0.
 - Files modified: `services/xstockstrat-ui/src/lib/{oidcClient,ssoLogout}.test.ts` (new)
 - Deviations: none
+
+### Step 34 — service: The SSO transaction and link cookies (ssoTxn.ts) [done]
+- New `ssoTxn.ts`: HKDF-SHA256 keys from `JWT_SECRET` (`xstockstrat-ui/sso-txn`, `xstockstrat-ui/sso-link`), dir/A256GCM JWEs only; `sealSsoTxn` (exp = now + 600, link `created_at = now`), `openSsoTxn` (local decrypt, refuses `now > exp`), `txnCookieName`, `TXN_COOKIE_OPTS`, `clearAllTxnCookies`; `SSO_LINK_COOKIE`, `sealSsoLink`/`openSsoLink` with the txn's absolute `exp`, `ssoLinkCookieOpts(exp)` (`maxAge = max(0, exp − now)`), `clearSsoLink`.
+- TDD: recorded under Step 35. Verification: typecheck and lint exit 0.
+- Files modified: `services/xstockstrat-ui/src/lib/ssoTxn.ts` (new)
+- Deviations: none. Gaps filled: `sealSsoTxn` takes the txn without `exp`/`created_at` and stamps them; the link-cookie options are exported as `ssoLinkCookieOpts(exp)` (the spec names the options, not the export); a missing `JWT_SECRET` throws on seal and opens as `null`.
