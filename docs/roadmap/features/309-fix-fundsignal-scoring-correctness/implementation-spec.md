@@ -619,7 +619,7 @@ ruff check . && ruff format --check .
 
 ### Step 14 — test: agent client sets presence only when conviction is given
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_client.py` — modify
@@ -844,3 +844,8 @@ _Populated by /sdd-execute as implementation proceeds._
 **Spec said**: `**TDD**: red-green required`, with the Verification block (the existing `test_client.py` / `test_tools.py` / `test_extraction_instructions.py` suites, two greps and ruff) as the run; Step 14 owns the new tests and is not a unit with Step 13.
 **Actual**: The block printed `exit=0` before and after the change (239 passed both times; ruff runs last). Only its grep lines changed: before, the `conviction_provided` grep printed nothing and `unknown confidence` hit `mcp-tools.md:269`; after, `client.py:258` and no `unknown confidence` hit. RED → GREEN was shown with an uncommitted scratch probe (`.sdd-logs/probe_step13.py`, three cases mirroring Step 14 plus a non-zero case): 2 failed / 1 passed before the change, 3 passed after. The probe is not staged; Step 14 commits the real tests.
 **Reason**: No existing agent test changes result under Step 13 (Step Dependencies), and `tests/test_client.py` is outside Step 13's **Files** (F-08). **Disposition**: in-scope TDD evidence, no scope change.
+
+### Deviation: Step 14 — test: agent client sets presence only when conviction is given
+**Spec said**: `**TDD**: red-green required`; RED "today: the flag is `False`".
+**Actual**: Step 13 had already landed, so the new tests pass on the branch tip. RED ran the Verification block with `services/xstockstrat-agent/app/client.py` temporarily checked out from `385ce947` (pre-Step-13) and restored before GREEN: 1 failed (`test_explicit_zero_conviction_sets_presence`, `assert False is True`). `test_omitted_conviction_leaves_presence_unset` passes on both trees because it pins the unchanged not-given behaviour. That block printed `exit=0` because its last command (ruff) passed.
+**Reason**: Step 13 lands before Step 14 (Step Dependencies; not an atomic unit). **Disposition**: in-scope TDD evidence, no scope change.

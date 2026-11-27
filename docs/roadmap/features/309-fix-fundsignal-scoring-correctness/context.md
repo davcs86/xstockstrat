@@ -763,3 +763,13 @@ Tooling setup (step 13): uv ✓ 0.11.32 · `uv sync --extra dev` ⬇ (worktree `
 - TDD: RED via an uncommitted scratch probe `.sdd-logs/v-2.log` `exit=1` — `2 failed, 1 passed` (`assert False is True` on `conviction_provided` for conviction 0.0 and 0.7). The Verification block before the change, `.sdd-logs/v-1.log` `exit=0`: `239 passed`, the `conviction_provided` grep printed nothing, `unknown confidence` hit `mcp-tools.md:269`. GREEN `.sdd-logs/v-3.log` `exit=0` — `239 passed`, grep hit `258:        signal.conviction_provided = True`, no `unknown confidence` hit, ruff `All checks passed!`, `79 files already formatted`; probe `.sdd-logs/v-4.log` `exit=0` `3 passed`. The block has no coverage command; Step 14 runs the coverage gate.
 - Files modified: `services/xstockstrat-agent/app/client.py`, `services/xstockstrat-agent/app/tools.py`, `services/xstockstrat-agent/app/prompts/signal_extraction.md`, `docs/runbooks/mcp-tools.md`
 - Deviations: RED shown by a scratch probe, not a committed test (Deviation Log).
+
+## Session 2026-11-27 — sdd-execute sequential (step 14)
+
+Tooling setup (step 14): uv ✓ 0.11.32 · `uv sync --extra dev` ⬇ (worktree `.venv`) · ruff ✓ 0.16.9 · no Node install. Config-key wiring gate: not applicable (no key, no config migration).
+
+### Step 14 — test: agent client sets presence only when conviction is given [done]
+- `TestIngestSignalClient` gains `test_explicit_zero_conviction_sets_presence` (`conviction=0.0` → sent signal `conviction == 0.0`, `conviction_provided is True`) and `test_omitted_conviction_leaves_presence_unset` (`conviction_provided is False`), both on the existing `app.client.mtls` / `IngestServiceStub` patch pattern, reading the request from `mock_stub.IngestSignal.await_args.args[0].signal`. No fixture home (C-13: scenario one-offs).
+- TDD: red with the pre-Step-13 `client.py` (`385ce947`) temporarily checked out, `.sdd-logs/v-1.log`: `1 failed, 78 passed` (`assert False is True` at `tests/test_client.py:481`); full suite `1 failed, 832 passed`; that block printed `exit=0` because ruff ran last → green `.sdd-logs/v-2.log` `exit=0`: `79 passed`; full suite `833 passed`, `Required test coverage of 40% reached. Total coverage: 88.47%`; ruff `All checks passed!`, `79 files already formatted`.
+- Files modified: `services/xstockstrat-agent/tests/test_client.py`
+- Deviations: RED run against the pre-Step-13 client (Deviation Log).
