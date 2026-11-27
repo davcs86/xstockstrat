@@ -782,7 +782,7 @@ grep -n "__tests__/fixtures" services/xstockstrat-config/src/__tests__/brokerPap
 
 ### Step 10 — proto: fix the stale `TRADING_MODE env` comment on `is_paper`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/trading/v1/trading.proto` — modify
@@ -823,7 +823,7 @@ grep -n "TRADING_MODE env" packages/proto/trading/v1/trading.proto ; test $? -eq
 
 ### Step 11 — proto-gen: regenerate the stubs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/gen/go/trading/v1/trading.pb.go` — modify (regenerated)
@@ -1013,3 +1013,8 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Spec said**: Step 8 Instruction 5 regenerates `scripts/config-wiring-stored.json` with `DATABASE_URL=<scratch postgres> python3 scripts/config-wiring-stored.py`; § Step Dependencies requires the route to be confirmed first, and SKILL.md never lets the execute agent start a database.
 - **Actual**: the operator authorized (go-ahead of 2026-11-26) a local throwaway PostgreSQL 16 that the main session provisioned and kept running; this agent started or stopped no database. The generator ran once against it (route (a)); `scripts/scratch_db.py` created and dropped its own scratch DB. The output is committed unedited: two `broker.paper` rows (`057_…up.sql`, staging `true` / production `false`) and a new `inputs_sha256`. Migration number re-checked: `origin/main-dev` tail is `056_analysis_live_only_cycle_max_days`, so `057` stands (`057` also exists on feature 314's branch only, not on main-dev). Verification stayed offline; the database was used for artifact generation only.
 - **Disposition**: operator-authorized generation route; no scope or behavior change.
+
+### Steps 10+11 — Verification blocks run inside the pinned `Dockerfile.codegen` image (2026-11-27)
+- **Spec said**: Step 10 runs `buf lint` / `buf breaking` and Step 11 runs `./scripts/buf-gen.sh` on the host; `buf` is not on this host's `PATH`.
+- **Actual**: both Verification blocks ran verbatim inside the already-built `xstockstrat-codegen` image (buf 1.72.0, protoc-gen-go v1.36.11, grpcio-tools 1.80.0, go1.27.4), with the worktree mounted read-write, the main checkout and its `packages/proto/gen/ts/node_modules` read-only (the worktree links the root `node_modules` only), and the host Go module cache read-only with `GOPROXY=off`. Instruction 1's toolchain check ran first on the unedited tree: `buf-gen.sh` left `packages/proto/gen` unchanged. The first Step 11 run failed only at `go build` (`module lookup disabled by GOPROXY=off`: the image's `GOMODCACHE` is `/go/pkg/mod`); re-run with `GOMODCACHE=/root/go/pkg/mod`, exit 0. Only the five listed trading stubs changed.
+- **Disposition**: CI-equivalent fallback; no scope or behavior change.

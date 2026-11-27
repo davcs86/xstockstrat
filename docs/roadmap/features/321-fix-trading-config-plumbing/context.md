@@ -230,3 +230,20 @@ Up-front confirmation: the operator approved the plan with this record (binding,
 - Files modified: `services/xstockstrat-config/src/__tests__/brokerPaperSeedMigration.test.ts`, `scripts/config-wiring.json`, `scripts/config-wiring.test.mjs`
 - Deviations: none
 - TDD: AC-4 red: "expected exactly one *_trading_broker_paper_per_environment.up.sql, got []" (4 subtests failed) → green: config suite `# tests 409 / # pass 409 / # fail 0`, coverage `All files 92.31` lines (>= 40), lint 0 errors; `config-wiring.test.mjs` 75/75; `--final` `exit 0` with `broker.paper` count `0` (only the two pre-existing `REPORTED:` readers-disagree lines); `--doc-check` + `check-watcher-copies: all groups byte-identical`; C-13 fixture grep none.
+
+## Session 2026-11-27 — sdd-execute sequential (sdd-batch-execute), unit Steps 10+11
+
+- Tree: detached at `origin/feature/fix-trading-config-plumbing@8599b995`. Discovery: comment `trading.proto:263-265`, field `bool is_paper = 3 [deprecated = true];` `:266`; the only `.proto` hit for `TRADING_MODE env` is `:264`; `grep -rln` over `packages/proto/gen` lists exactly the five Step 11 files.
+- Tooling (steps 10+11): buf ✗ on host → `xstockstrat-codegen` image ✓ (buf 1.72.0, protoc-gen-go v1.36.11, grpcio-tools 1.80.0, go1.27.4; Docker daemon up) · hook check hook=0. Toolchain check on the unedited tree: `buf-gen.sh` left `packages/proto/gen` unchanged. Config-key wiring gate: not applicable (comment only; no key read or seeded).
+
+### Step 10 — proto: fix the stale `TRADING_MODE env` comment on `is_paper` [done]
+- Atomic unit Steps 10+11. Rewrote the three comment lines only: `trading.broker.paper` seeded per environment, `APPLICATION_ENV` fallback when the row is absent, the server derives `is_paper` and ignores the field. Field unchanged.
+- Files modified: `packages/proto/trading/v1/trading.proto`
+- Deviations: Verification run inside the codegen image (Deviation Log "Steps 10+11 — Verification blocks run inside…").
+- TDD: N/A (proto). Verification exit=0; per-line re-run: `lint rc=0`, `breaking rc=0` (against `origin/main-dev`), `noncomment grep rc=1`, `stale grep rc=1`.
+
+### Step 11 — proto-gen: regenerate the stubs [done]
+- Atomic unit Steps 10+11. `./scripts/buf-gen.sh` changed exactly the five listed trading files (`5 files changed, 15 insertions(+), 15 deletions(-)`); no Python or other stub changed.
+- Files modified: `packages/proto/gen/go/trading/v1/trading.pb.go`, `packages/proto/gen/ts/trading/v1/{trading.ts,trading_pb.ts}`, `packages/proto/gen/ts/dist/trading/v1/{trading.d.ts,trading_pb.d.ts}`
+- Deviations: same as Step 10 (codegen image); the first run failed only at `go build` on the image's module-cache path, re-run green.
+- TDD: N/A (proto-gen). Verification exit=0: no `TRADING_MODE env` hit in `packages/proto/gen`; `GOWORK=off go build ./...` in `services/xstockstrat-trading` clean.
