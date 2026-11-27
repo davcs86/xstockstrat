@@ -479,3 +479,17 @@ Every enabled staging target means DO `xstockstrat-staging` and, while `HOMELAB_
 homelab staging VM. A `main-dev` push that deploys while portfolio is stopped breaks the cutover: an old and a new
 portfolio can then overlap and apply a fill twice. Only the per-database result the runbook records (§2) shows
 this. Peer features need not wait. They must not merge to `main-dev` between `T_stop` and 311's green Deploy run.
+
+## Config seed number: 367 ↔ 345 (2026-11-27, non-blocking)
+
+`authelia-sso` (345, `implementation-ready`) plans
+`services/xstockstrat-config/migrations/060_authelia_sso_keys`; trunk's last config migration is `059`.
+`pipeline-job-graph` (367, `implementation-ready`) first planned `060` too and was renumbered to
+`061_analysis_pipeline_keys` at `/sdd-review` impl-spec (operator decision 2026-11-27): 345 was specced first and
+keeps `060`. There is no ordering constraint between them, so this is a prose note, not a table row: neither feature
+waits for the other. If 367 merges first, 345 renumbers its config migration above `061` at its own merge (the CI
+`migration-order-gate` refuses a lower number) and `060` stays an unused gap. Whichever merges second regenerates
+`scripts/config-wiring-stored.json` (its `inputs_sha256` covers the whole config migration set). Each re-derives the
+number from `origin/main-dev` at the `/sdd-execute` step that creates the migration and again at merge. The two also
+share `scripts/config-wiring.json` (`registry.receivers`), `docs/patterns/config-governance.md`,
+`docs/patterns/database.md` and the root `CLAUDE.md` in different sections; the second merger rebases.

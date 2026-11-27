@@ -313,8 +313,8 @@ before the gate. A refused block (stop pending or fence deadline passed) raises
 `tests/test_job_handler_contract.py` parses `app/jobs/` and fails on any of:
 
 - `asyncpg` imports, any `.acquire(` call, or the names `db_pool` / `control_pool`;
-- imports from `app.repositories.read_budget`, or of the job repository other than its prune
-  batch method;
+- imports from `app.repositories.read_budget`, or of the job repository module other than its
+  `prune_batch` function;
 - catching `BaseException`, `CancelledError` or `AttemptStopped`, or a bare `except:`;
 - `asyncio.shield`, or `asyncio.timeout` / `wait_for` around a `.db(` block;
 - inside a `job.db()` block, an await that is neither a call on the block's `conn` nor a call
@@ -370,7 +370,8 @@ instance ensures the day's job on its first maintenance pass of the UTC day and 
 The handler deletes succeeded rows older than `retention_days`, and `failed`, `dead` and `blocked`
 rows older than `max(30, retention_days)` days, each batch in its own `job.db()` block with a
 30 s budget, through
-the repository's prune batch method with `conn=`. Rows skipped because they are locked wait for
+the repository module's `prune_batch` function with `conn=` (a module-level function, so a handler
+never holds a repository object). Rows skipped because they are locked wait for
 the next day. The handler stops starting batches after 600 s and returns success, so a large
 backlog is spread over days and never ends `dead` on the attempt deadline.
 
@@ -447,7 +448,8 @@ and logs one WARN per distinct clamped value.
 | `max_attempts` | 5 | `[2, 20]` |
 | `retention_days` | 7 | `[1, 90]` |
 
-Config migration `060_analysis_pipeline_keys`, the `SCALAR_BOUNDS_REGISTRY` rows
+Config migration `061_analysis_pipeline_keys` (`060` is feature 345's; operator decision
+2026-11-27), the `SCALAR_BOUNDS_REGISTRY` rows
 (`services/xstockstrat-config/src/grpc/configServiceImpl.ts:115`), the reader, the two
 `scripts/config-wiring.json` receivers, the regenerated stored set, the five int keys in `FR3_KEYS` of
 `tests/test_config_read_classification.py:25-63` (each also a literal in another test,
@@ -525,7 +527,6 @@ Step 3's real-Postgres tests gate step 4:
 - each prune candidate select uses the `(state, finished_at)` index, and the claim select the
   unfinished-rows index, on a seeded table; with `retention_days` = 7, a `dead` row aged 8 days
   survives;
-- a runner that waited for an in-flight heartbeat batch records no false loss;
 - a waiting parent held `FOR KEY SHARE` by another parent's open park is still settled, and a
   ready child held the same way is still claimed;
 - two instances running reap and settle on the same rows neither block nor deadlock.
@@ -533,7 +534,9 @@ Step 3's real-Postgres tests gate step 4:
 Already pinned in the repo: a terminated pooled connection frees its pool slot
 (`services/xstockstrat-analysis/tests/test_read_budget_real_pg.py:148-164`).
 
-Step 4's unit tests include: a stop inside a database block aborts it and raises
+Step 4's tests include, against real Postgres: a runner that waited for an in-flight heartbeat
+batch records no false loss (it needs the runner, so it cannot gate the engine). Step 4's unit
+tests include: a stop inside a database block aborts it and raises
 `AttemptStopped`; a new block is refused after a stop; an unresponsive handler keeps its slot
 until its task ends; an attempt retrying its report keeps its slot; a claim loop blocked on a
 full limiter when the worker is disabled claims nothing once the slot is freed; a job claimed right after
@@ -637,7 +640,7 @@ prune batch 500 with a 30 s block budget; stats every third maintenance tick (15
 
 - `C-05` — honored by: six namespace-relative keys, each seeded and read, declared in the product
   spec.
-- `C-07` — honored by: analysis `031`, config `060`, each the next free number.
+- `C-07` — honored by: analysis `031`, config `061` (`060` is reserved for feature 345), re-checked at execute.
 - `C-08` — honored by: paired test steps; real-Postgres tests for the SQL; analysis threshold 40.
 - `C-13` — honored by: job-row fixtures in `services/xstockstrat-analysis/tests/conftest.py`.
 - `C-14` — honored by: consumer surface None, justified in the product spec.

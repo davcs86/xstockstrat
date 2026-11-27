@@ -229,6 +229,41 @@
   F-07, P-03. Floor breaches: none in any round.
 - Status: spec-ready → design-approved.
 
+## Session 2026-11-27 — sdd-spec
+
+- Generated implementation-spec.md with 19 steps. Status → implementation-ready.
+- Tree: ccr-fe135a59-nyslbm@19d095b ≡ origin/main-dev. `feature/pipeline-job-graph` does not exist
+  on origin yet, so `main-dev` was the target; the tree-freshness check passed without a switch.
+- Discovery ran inline in this session (no `codebase-discovery` subagents). recon.md's Codebase Map
+  was reused; only what it does not cover was searched.
+- The ledger files (about 650 KB each) were read by targeted search for the affected services and
+  surfaces, not end to end.
+- Key codebase findings:
+  - Next free numbers on `origin/main-dev`: analysis migration `031`, config migration `060`.
+    Feature 345 (`authelia-sso`, implementation-ready) also plans config `060_authelia_sso_keys`;
+    whichever merges first keeps the number. No `merge-order.md` row exists yet for 367 against 345.
+  - Three pins the design and recon did not name (spec decision S-9):
+    `scripts/migration-rerun.py:1114` hard-codes the analysis clean end version `30` (Step 4);
+    `tests/test_config_zero_clamps.py:96-97` requires `AC6_ROWS` to equal `FR3_KEYS` (Step 3);
+    `tests/test_supervision.py:143-148` pins the number of `spawn(` calls in `app/main.py`
+    (Step 18).
+  - `scripts/config-wiring.json` `registry.receivers` keys a read by `<file>:<receiver>`; the reader
+    needs the two entries `…/job_graph.py:int_positive` and `…/job_graph.py:self._cfg`, and no
+    `findings` entry. The wiring gate also compares a literal read default with the seeded default.
+  - `asyncpg` is locked at 0.31.0, whose `create_pool` accepts `reset` and `min_size`. PostgreSQL 16
+    binaries are present in the sandbox, so the `real_pg` tests run here (77 baseline tests passed).
+  - No virtual-time event loop, fake job repository or job-row fixture exists in `tests/`; Steps 8
+    and 12 create them in `tests/conftest.py`.
+  - Regenerating `scripts/config-wiring-stored.json` needs a database. Feature 366 did it on a
+    throwaway local PostgreSQL 16 under an operator ruling; Step 1 lists the routes.
+- Spec-time decisions S-1..S-9 are in implementation-spec.md § Spec-time decisions (repository
+  method names; `prune_batch` as a module-level function; `control_pool_reset` in `read_budget.py`;
+  boot task names; file names; the unconditional daily ensure; one gate test moved to Step 12;
+  config docs rows in Step 1; the three unlisted pins).
+- Not run at spec time: the `xstockstrat-config` lint and test commands (`node_modules` is not
+  installed in this sandbox). In this sandbox a bare `uv run pytest` resolved a `pytest` outside the
+  service environment, so the spec's analysis commands pass `--extra dev`.
+
 ## Open Threads
 
 Carried from design.md § Open Risks; each needs an owner at `/sdd-spec` or later:
@@ -241,3 +276,138 @@ Carried from design.md § Open Risks; each needs an owner at `/sdd-spec` or late
 - Hazards H1 and H2 for an in-transaction report, and executor-thread handlers: program feature 3.
 - `docs/roadmap/program-job-graph-analysis-pipeline.md` line 81 (advisory-lock note) is corrected
   in build step 8.
+- Config migration `060` is also planned by feature 345; re-check the number at `/sdd-execute`
+  Step 1 and before the integration PR. `/sdd-review pipeline-job-graph impl-spec` owns the
+  `merge-order.md` row.
+- Step 6's asyncpg pins gate Step 9 onward; a failed pin applies the design.md fallback and is
+  recorded in the Deviation Log.
+- Step 1's stored-set regeneration starts a database for artifact generation; name the route at
+  the Phase-2 confirmation.
+
+## Session 2026-11-27 — sdd-review impl-spec (advisory, round 1)
+
+- Tree: ccr-fe135a59-nyslbm@bbc6e89 (origin/main-dev@19d095b plus the spec commit).
+- Result: 2 failures (one root cause), 7 warnings (advisory — did not block). No Floor breach.
+  Every `@AC-1`..`@AC-18` has a test step; every design test has a step; no rejected alternative
+  is reintroduced.
+- Unresolved ✗ / ⚠ carried into execution:
+  - Steps 15/16: adding `Loop.PIPELINE_WORKER` turns `tests/test_analysis_tick_telemetry.py:164-166`
+    red (F-05 exposure) — [x] fixed in the spec: the file is in Step 16's Files, and Steps 15 and
+    16 land together.
+  - Step 1: no seed-to-reader value test (C-05) — [x] fixed: Step 3 parses the seed migration.
+  - Step 1: TDD marked N/A despite a bounds-registry code change (P-06) — [x] fixed.
+  - Step 1: eight files — [x] recorded as S-11 (one commit required by D-25 / C-10).
+  - Step 8/12: 1 200 settleable parents not tested in one tick — [x] fixed: Step 12 adds it.
+  - Step 11: fixed-constants list incomplete — [x] fixed.
+  - Step 12: Covers omitted `@AC-5/6/7` — [x] fixed.
+  - Step 16: no `host.provider` assertion for the durable `@AC-3 @feature-337` — [x] fixed.
+  - Undeclared seams — [x] recorded as S-10.
+  - Step 7 (S-2): `prune_batch` is a module-level function where design.md says "method" —
+    [x] design.md wording corrected with operator approval (D-61).
+  - S-7: one design gate test lands in Step 12, not before the engine — [x] design.md test lists
+    corrected with operator approval (D-61).
+- Overlap findings: config migration `060` is claimed by both 367 and 345 (`authelia-sso`); no
+  `merge-order.md` row exists — [x] conditional row added with operator confirmation.
+  All other overlaps are clean or rebase-only.
+
+## Session 2026-11-27 — operator rulings on the impl-spec review
+
+- **OPERATOR DECISION: "Add a conditional row"** — `docs/roadmap/features/merge-order.md` gains a
+  367 ↔ 345 row: whichever merges first keeps config `060`; the other renumbers and regenerates
+  the stored set. Neither waits.
+- **OPERATOR DECISION: "Correct the design text"** — design.md amended after approval, wording
+  only (D-61): the prune batch is the repository module's `prune_batch` function; the
+  runner-versus-heartbeat test is an engine test. No mechanism changed.
+- **OPERATOR: loop the impl-spec review until all warnings are addressed.**
+
+## Session 2026-11-27 — sdd-review impl-spec (advisory, round 2: overlap)
+
+- Overlap scan round 2: the 367 ↔ 345 entry was a Blocking Dependencies table row with
+  `Resolved = No`, which would make `/sdd-execute` warn 367's integration PR until 345 launches,
+  contradicting the operator's "neither waits". Converted to a non-blocking prose section in
+  `merge-order.md` (the file's existing form for config-seed-number overlaps), naming merge-time
+  renumbering as the accepted remedy and adding `scripts/config-wiring-stored.json`. No other
+  collision; the rest is rebase-only.
+
+## Session 2026-11-27 — sdd-review impl-spec (advisory, round 2: criteria)
+
+- Result: 1 failure, 8 warnings, 6 notes (advisory). No Floor breach. Every round-1 fix verified
+  in the text; the pin search found no existing test the spec had missed.
+- Unresolved ✗ / ⚠ carried into execution:
+  - F1 Steps 15+16 had no Step Dependencies line — [x] added.
+  - W1 batch-size, prune block budget and prune self-stop constants unnamed — [x] `BATCH_SIZE`,
+    `PRUNE_BLOCK_BUDGET_S`, `PRUNE_SELF_STOP_S`; `prune_batch` returns `full`.
+  - W2 `start_listening()` had no watcher source — [x] `JobGraphSettings.on_change`.
+  - W3 Step 18's pool assertions could not run — [x] `_create_pools(dsn)` helper in `main.py`.
+  - W4 `@AC-7` not driven through the worker — [x] test added to Step 12.
+  - W5 duplicate test bullet in Step 12 — [x] removed.
+  - W6 `host.provider` assertion had no method — [x] precedent and steps cited in Step 16.
+  - W7 `prune_batch(conn, …)` positional conflicted with the handler contract — [x] `conn` is
+    keyword-only everywhere.
+  - W8 service steps' Verification does not exercise behaviour — [x] each names its gating test step.
+  - N1–N5 — [x] applied (Step 15 gate, staleness clock, Step 17 symbol list, a grep that could not
+    fail, table names in the analysis `CLAUDE.md` section).
+  - N6 stored-set regeneration needs a database route at execute confirmation — [ ] unaddressed:
+    an execute-time choice, not a spec defect.
+  - N6 config-service lint and tests not run in this sandbox (`node_modules` absent) —
+    [ ] unaddressed: run at execute.
+
+## Session 2026-11-27 — sdd-review impl-spec (advisory, round 3: overlap)
+
+- Overlap scan round 3: the `060` collision still fails by the letter of the overlap rule
+  ("Rename one before executing"); a prose note is not a waiver.
+- **OPERATOR DECISION: "Renumber 367 to 061"** — 345 was specced first and keeps `060`. Every
+  `060` in implementation-spec.md, design.md and product-spec.md now reads `061`; the merge-order
+  note is updated. If 367 merges first, 345 moves above `061` and `060` stays a gap.
+- The scan's `host.provider` seam with feature 337 is moot: `_with_host_provider` is already on
+  `main-dev` for analysis (`app/telemetry.py:49`).
+
+## Session 2026-11-27 — sdd-review impl-spec (advisory, round 3: criteria)
+
+- Result: 0 failures, 6 warnings, 8 notes. All round-2 fixes verified present; all 18 `@AC-*`
+  traced; no Floor breach. All 14 items applied to implementation-spec.md:
+  - [x] W1 Step 14 lacked evidence for `make_handler` and a test of the 30 s block budget; the
+    self-stop test now builds its own registry with an injected clock.
+  - [x] W2 `on_change` / `start_listening()` were untested and Step 11's rationale was wrong
+    (`snapshot_watcher` does support `on_change`, `app/config/watch_core.py:92-97`); tests added
+    in Steps 3 and 12.
+  - [x] W3 Step 16 never called `register_pipeline_gauges()` before reading the gauges.
+  - [x] W4, W5 two verification greps could not fail; both now exit non-zero on a match.
+  - [x] W6 Step 8 gates Step 9 onward and Step 12 gates Step 13 onward (design.md § Build order).
+  - [x] N1 Deviation Log seeded with the `061` ruling. N2 S-10 lists the remaining seams.
+    N3 Step 15 no longer requires Step 13. N4 the stats step uses the real monotonic clock.
+    N5 the handler gate is an `asyncio.Lock`. N6 `_create_pool` is async; `serve()` pool
+    defaults stated. N7 `prune_batch` tests run inside a transaction. N8 two more greps gate.
+
+## Session 2026-11-27 — sdd-review impl-spec (advisory, round 4)
+
+- Overlap: clean. No other claimant of config `061`, analysis `031` or `analysis.pipeline.*`;
+  the shared-file overlaps (stored set, `config-wiring.json`, `config-governance.md` next to
+  feature 322's edits, `database.md`) are rebase-only and need no merge-order row.
+- Criteria: 0 failures, 2 warnings, 2 notes; all round-3 fixes verified. All applied:
+  - [x] W1 seven more verification commands always exited 0 (Steps 5, 8, 12, 14, 16, 18, 19,
+    and the `spawn(` grep in Step 11); each now fails on the wrong result.
+  - [x] W2 the 45 s stats-staleness bound was declared in both Step 11 and Step 15; it is now
+    `PIPELINE_STATS_STALE_S` in `app/telemetry.py` only.
+  - [x] N1 stats run on maintenance ticks 1, 4, 7, …; `stats_step()` is a named coroutine
+    (added to S-10). N2 tests needing more than one pool take the DSN from `local_pg`.
+
+## Session 2026-11-27 — sdd-review impl-spec (advisory, round 5: criteria)
+
+- Result: 0 failures, 3 warnings, 2 notes; all round-4 fixes verified. All applied:
+  - [x] W1 Step 12's `asyncio.sleep(` ban failed a correct test; the virtual-time helper now
+    exposes `await advance(seconds)` and the grep bans only non-zero sleeps.
+  - [x] W2 Step 18: the spawn count is asserted (`-eq 11`) and the deploy-file check diffs
+    against `origin/main-dev`, so it still works after a commit.
+  - [x] W3 Steps 8, 12, 14 and 16 carry Step 6's "nothing skipped" guard for their real-Postgres
+    files.
+  - [x] N1 Step 13's informational import grep is removed (the handler contract test is the
+    gate). N2 Step 7's guard grep escapes its dots.
+
+## Session 2026-11-27 — sdd-review impl-spec (advisory, round 6: criteria) — PASS
+
+- Result: PASS, 0 failures, 0 warnings, 1 note. All round-5 fixes verified; paths, signatures,
+  step order and all 18 `@AC-*` traces check out. The review loop is closed.
+  - [x] N1 Step 12's sleep regex let `sleep(0.5)` through; the pattern now catches it.
+- Still open by choice, for `/sdd-execute`: the stored-set regeneration database route, and the
+  config-service lint and tests (not runnable in the spec sandbox).
