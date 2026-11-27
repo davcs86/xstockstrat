@@ -1,7 +1,7 @@
 # Product Spec: authelia-sso
 
 **Created**: 2026-11-15
-**Amended**: 2026-11-24 (re-spec against homelab-edge `docs/superpowers/specs/2026-11-23-authelia-sso-respec.md`; see `context.md`)
+**Amended**: 2026-11-24 (re-spec against homelab-edge `docs/superpowers/specs/2026-11-23-authelia-sso-respec.md`; see `context.md`); 2026-11-27 (owner: no stale signing keys, no Claude Code clients on the homelab; see `context.md`)
 
 ---
 
@@ -442,8 +442,9 @@ Rebase only: `324-fix-ci-enforcement-gaps` (CI gate over `manage-users.py`), and
 clients with RFC 8707 `resource`, the `scp` array, custom `xstockstrat.*` scopes, a stable per-user `sub`, `typ=at+jwt`,
 `requested_audience_mode: implicit` for `aud`, no `end_session_endpoint` (portal logout), group membership not re-checked
 on refresh, and `error=access_denied` for a person outside the group. Its email findings now matter only for the link
-confirmation's label (FR-16.2). Still to be proven by homelab-edge, before this feature's cutover: Claude.ai and Claude
-Code against the deployed portal (SSO spec S1, S5, S9), `prompt=login` with `max_age=0` returning a fresh `auth_time` in
+confirmation's label (FR-16.2). Still to be proven by homelab-edge, before this feature's cutover: Claude.ai against
+the deployed portal (SSO spec S1, S5; the homelab registers no Claude Code client and S9 is retired, SSO spec § 4.6 and
+§ 11 as amended 2026-11-27), `prompt=login` with `max_age=0` returning a fresh `auth_time` in
 the ID token (S17), the web client registered with scopes `openid profile email` (SSO spec § 4.6 as amended 2026-11-24;
 the UI requests all three) and its ID-token claims `email`, `preferred_username` and `auth_time` (by default or via the claims policy, per S17),
 and refresh after
@@ -472,12 +473,14 @@ above is covered by ≥1 tagged scenario there; FR-5 is removed and has none.
   path-scoped rate-limit zone covering `POST /accounts/api/sso/confirm` is a **required cutover gate** before `both` is set on a homelab deployment
   (owner, 2026-11-24). homelab-edge is adding it to the SSO spec's § 4.3 zones and the gate to `sso.md` § 6 (owner,
   2026-11-24); until that change lands there, this gate is tracked only here and in design.md § 6.
-- **Stale signing keys (design D-31/D-37), pending owner sign-off before Step 19.** In `oidc` the agent verifies a token
-  whose key it already holds for up to `_JWKS_STALE_MAX_S` (24 h) after its last successful JWKS fetch while the JWKS
-  cannot be fetched again; with the JWKS reachable, a retired key stays usable only until the next refresh after the
-  300 s fresh window. So during a JWKS outage a key the issuer has retired or revoked is accepted for up to 24 h, longer
-  than the SSO spec § 4.7 rotation runbook's "retire the old" after one access-token lifetime. The cutover runbook
-  states it.
+- **Signing keys at most 3600 s old, no stale-key grace (owner, 2026-11-27; SSO spec § 3 "Signing keys"; design
+  D-138).** In `oidc` the agent verifies a token only with a key from an issuer key set fetched within the last 3600 s
+  (`_JWKS_MAX_AGE_S`). Past that, a token needs a refetch; if the refetch fails or is held by the cooldown, the call gets
+  HTTP 503 without `WWW-Authenticate` (as FR-2's unfetchable-keys case), never a verify with the old keys (AC-79). So a
+  JWKS outage that outlasts 3600 s from the last good fetch makes every `oidc` MCP call 503 until the JWKS is reachable
+  again; the owner accepts that availability cost. This supersedes the 24 h stale-key window (`_JWKS_STALE_MAX_S`) that
+  was pending owner sign-off. The web relying party already complies (openid-client refetches at 300 s and fails
+  closed). The cutover runbook states it.
 - **Identity runs in every mode** (owner, 2026-11-24): it holds users, roles, links and sessions. An identity-less `oidc`
   deployment is out of scope (an idea for the owner's xstockstrat-only Authentik exploration).
 

@@ -2,7 +2,7 @@
 
 **Development Branch**: `feature/authelia-sso`
 **Created**: 2026-11-15
-**Last Updated**: 2026-11-24
+**Last Updated**: 2026-11-27
 
 ---
 
@@ -22,6 +22,7 @@
 | 2026-11-24 | `spec-ready` → `design-approved` | /sdd-design | Design re-debated (rounds 10–13, full) and approved; recon.md + debate.md + design.md rewritten |
 | 2026-11-24 | `design-approved` (unchanged) | /sdd-review | Product spec re-approved after the design-round amendments (pass 2; 1 cosmetic warning fixed); merge-order row for config `056` vs 314/317/321 |
 | 2026-11-24 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec regenerated after the re-spec with 58 steps (supersedes the 2026-11-16 52-step spec) |
+| 2026-11-27 | `implementation-ready` (unchanged) | owner | Owner decisions: no tokens on stale keys (D-138 via P-6, AC-79; Steps 19, 20, 24, 54 amended before execution) and no Claude Code clients on the homelab (Step 54 runbook) |
 
 ---
 
@@ -30,7 +31,7 @@
 - [Product Spec](product-spec.md) — requirements and governance
 - [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15)
 - [Recon](recon.md) — grounded codebase dossier
-- [Debate Register](debate.md) — D-1..D-137, R-1..R-30, O-1..O-127, P-1..P-5 (35 decisions superseded 2026-11-24)
+- [Debate Register](debate.md) — D-1..D-138, R-1..R-30, O-1..O-127, P-1..P-6 (35 decisions superseded 2026-11-24; D-2/D-31/D-37 narrowed by D-138, 2026-11-27)
 - [Design](design.md) — approved architecture
 - [Implementation Spec](implementation-spec.md)
 - [Context Log](context.md) — session history, decisions, deviations
@@ -64,5 +65,5 @@ implementation-spec.md, per docs/runbooks/reviewer-registry.md. Stable unless `/
 ## Next Action
 
 `/sdd-execute authelia-sso` — the advisory `/sdd-review impl-spec` ran 2026-11-24 (`3392050`); first clear the ⚠ items
-still open in `context.md` (Session 2026-11-24 — sdd-review impl-spec) and the owner sign-off on the 24 h stale-key
-window (before Step 19).
+still open in `context.md` (Session 2026-11-24 — sdd-review impl-spec). The 24 h stale-key sign-off is closed: the
+owner removed the window on 2026-11-27 (D-138).

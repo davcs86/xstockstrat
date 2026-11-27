@@ -613,7 +613,8 @@
       `prompt=login` + `max_age=0` returning a fresh `auth_time`; `sso.md` § 6 listing design § 6 gates 1–4; `sso.md` § 4
       "Change an xstockstrat role" noting the web delay up to `jwt.access_ttl_seconds` (finding 11). Due before
       `set-auth-mode both` on a homelab deployment.
-- [ ] Owner sign-off on the 24 h stale-key window (`_JWKS_STALE_MAX_S`). Due before Step 19.
+- [x] Owner sign-off on the 24 h stale-key window (`_JWKS_STALE_MAX_S`). Due before Step 19. Superseded 2026-11-27: the
+      owner removed the window (D-138; session below).
 - [ ] Remaining impl-review ⚠ items (Step 52 firefox `testIgnore`, Step 37 `bffAllowlist`, Step 1/2 `buf breaking`
       fallback, Step 4/3 migration re-check, Step 6 Node assert). Due at those steps.
 
@@ -624,3 +625,52 @@
 - Gate 3 (D-119, design § 6): `auth_time` must be present in the ID token by default or via the claims policy, as spike S17
   shows; the claims policy lists `email` and `preferred_username`. This matches homelab-edge SSO spec § 4.6 at `3b4e7a5`.
 - Step 23's cited range `test_auth_deadline.py:51-99` (the file has 99 lines).
+
+## Session 2026-11-27 — owner decisions: no stale keys; no Claude Code clients
+
+- Source: davcs86/homelab-edge `docs/superpowers/specs/2026-11-23-authelia-sso-respec.md` @ `1d12328` (branch
+  `ccr-589817f0-cyg7gy`). Tree: `ccr-589817f0-cyg7gy` restarted from `origin/main-dev@f3a506d` (PR #1602 merged). Docs
+  only; execution has not started (every step `pending`), so the step-body edits below are allowed (F-09 binds only
+  during execution) and are listed here.
+- **Decision 1 — no tokens on stale keys, no exceptions (owner).** SSO spec § 3 "Signing keys": a token or ID token is
+  accepted only on a key from an issuer key set fetched within the last 3600 s; past that, a failed refresh refuses every
+  token; no stale-key grace window anywhere.
+  - debate.md: **P-6** (target D-2's stale-on-error, D-31's STALE_MAX branches, D-37's `_JWKS_STALE_MAX_S`, D-110's carry
+    of them; user reopened) and **D-138** (`_JWKS_MAX_AGE_S = 3600` in the D-13/D-37 constant list; a token needing a key
+    from an older set, known `kid` or not, waits for a refetch under D-31's single-flight task and 30 s cooldown; a failed,
+    timed-out or cooled-down refetch → 503 `jwks_unavailable`, text/plain, no `WWW-Authenticate`; never a verify with the
+    old keys). Status cells of D-2, D-31, D-37 and D-110 point at D-138; their decision text is unchanged. D-71 (which
+    restated D-31's cooldown branch) was already superseded by P-4; nothing else to change there.
+  - design.md: header register line; new "Amendment after approval (owner, 2026-11-27)" section (D-138); § 2 MCP status
+    map step 4 gains the key-set-age branch; § 3 "Other UI pieces" gains one line on the UI's keys; § 7 seam row 79 and
+    its footnote; Open Risks "Stale signing keys" ticked as superseded, with the availability residual.
+  - UI relying party verified, no change: openid-client 6.8.9 with `enableNonRepudiationChecks` (D-29/D-34, Step 32);
+    oauth4webapi 3.8.9 `getPublicSigKeyFromIssuerJwksUri` (`build/index.js:1026-1046`, tarball fetched 2026-11-27)
+    clears and refetches the JWKS once the cached set is 300 s old and throws if that fetch fails.
+  - acceptance.feature: **AC-79** (`@FR-2`): a known `kid` on a set 3601 s past its last successful fetch with the
+    JWKS unreachable → HTTP 503, no `WWW-Authenticate`, `jwks_unavailable`, no verify with the cached key. AC-61 is
+    unchanged (unknown `kid`); no existing scenario pinned the known-`kid` case.
+  - product-spec.md: **Amended** line; Risks "Stale signing keys … pending owner sign-off" replaced by "Signing keys at
+    most 3600 s old, no stale-key grace" (availability cost accepted by the owner). FR-2 unchanged (its "keys cannot be
+    fetched → 503" sentence covers AC-79).
+  - implementation-spec.md: spec-level choice 2 (`_JWKS_MAX_AGE_S`, sign-off superseded); coverage table AC-79 → 20, 24;
+    Step 19 Instructions 1 (constant) and 4 (`key_for` per D-138); Step 20 Covers AC-61, AC-79 and the `test_jwks.py`
+    cases (the "stale serve" and "beyond STALE_MAX → unknown" cases replaced); Step 24 Covers + AC-79 case in
+    `test_sso_auth.py`; Step 54 cutover-runbook content (the signing-key rule replaces the 24 h trade-off; cites D-138)
+    and its grep (`_JWKS_MAX_AGE_S` replaces `_JWKS_STALE_MAX_S`).
+  - feature.md: Last Updated, an `(unchanged)` Status History row, the Artifacts register range, Next Action.
+  - Open Threads: the stale-key sign-off item is ticked as superseded.
+- **Decision 2 — no Claude Code clients on the homelab (owner).** SSO spec § 4.6 and decision 21 as amended: Claude.ai
+  clients only; S9 retired (§ 11). FRs and config keys unchanged: the two `ui/oidc.mcp_client_id_claude_code*` keys (four
+  rows) stay, and an empty value hides the line on the card (FR-11).
+  - implementation-spec.md Step 54: the cutover runbook tells the operator to leave `oidc.mcp_client_id_claude_code` and
+    `oidc.mcp_client_id_claude_code_readonly` empty in both environments on the homelab; its grep checks
+    `mcp_client_id_claude_code`.
+  - product-spec.md Feature Workflow Notes: the edge proofs before cutover are Claude.ai only (S1, S5); S9 is no longer
+    cited as a gate.
+  - Not changed (FR-level, owner call): FR-13 and AC-20 still require `docs/runbooks/mcp-tools.md` to list the four
+    Claude Code client IDs and a loopback redirect, and FR-13 still cites "SSO spec S9" for that redirect; Step 54 item 2
+    and Step 58's grep follow them. The Consumer Surface line "pre-registered … clients for Claude.ai and Claude Code" is
+    a capability statement, not a homelab claim.
+- Status stays `implementation-ready`: no FR changed and the new scenario is covered (C-15), so no SDD rule forces a
+  re-review; an advisory `/sdd-review authelia-sso impl-spec` pass over Steps 19/20/24/54 is optional.

@@ -4,7 +4,7 @@
 **Rounds**: 13 total; this run 4 (rounds 10–13, full; termination: approved)
 **Approved by**: user @ 2026-11-24 (round-13 gate)
 **Grounded in**: recon.md (2026-11-24)
-**Debate register**: debate.md (this run: D-101..D-137, R-23..R-30, O-85..O-127, P-4..P-5)
+**Debate register**: debate.md (this run: D-101..D-137, R-23..R-30, O-85..O-127, P-4..P-5; owner amendment 2026-11-27: D-138, P-6)
 
 ---
 
@@ -31,6 +31,15 @@ Sign-out, the UI discovery documents (all `xstockstrat-ui`), and every MCP tool'
 - **D-136** In `oidc`, an unreadable `agent/oidc.issuer` makes the UI's protected-resource document answer 503 `no-store`
   (as for an invalid issuer). D-133's fallback to today's documents applies only when the mode itself is unreadable.
 - **D-137** Link `no_access` copy: "Your single sign-on account doesn't have access to xstockstrat. Ask an admin."
+
+### Amendment after approval (owner, 2026-11-27; overrides the text below)
+
+- **D-138 No tokens on stale keys** (P-6; homelab-edge SSO spec § 3 "Signing keys", no exceptions). The agent uses a
+  key only while its issuer key set is at most `_JWKS_MAX_AGE_S = 3600` s old (in the D-13/D-37 constant list, replacing
+  `_JWKS_STALE_MAX_S`). A token that needs a key from an older set, known `kid` or not, triggers a refetch under D-31's
+  single-flight task and 30 s cooldown; a failed refetch, a deadline or a cooldown with no task → 503 `jwks_unavailable`
+  (text/plain, no `WWW-Authenticate`, the existing JWKS-unavailable path), never a verify with the old keys (AC-79). The
+  FRESH-to-3600 s band keeps D-31's verify plus gated background refresh. The 24 h stale-key Open Risk is closed.
 
 ### 0. Summary
 
@@ -146,7 +155,9 @@ Sign-out, the UI discovery documents (all `xstockstrat-ui`), and every MCP tool'
    - `alg` must be in the asymmetric allow-list; HS256 and `none` are refused.
    - The unverified `iss` must equal the issuer.
    - Garbage tokens are refused.
-4. JWKS lookup under one `asyncio.timeout_at` (D-18/D-31):
+4. JWKS lookup under one `asyncio.timeout_at` (D-18/D-31, D-138):
+   - the key set is older than `_JWKS_MAX_AGE_S` (3600 s) or was never fetched: no cached key is used; the refetch
+     failed, timed out or is held by the cooldown → 503 `jwks_unavailable`;
    - unknown `kid` and the fetch failed or timed out → 503 `jwks_unavailable`;
    - unknown `kid` and the fetch succeeded → 401.
 5. Verified decode (any failure → 401):
@@ -298,7 +309,7 @@ Every refusal records `sso_link_failed{reason}`. A refusal is never 401, because
 - `SignOutButton` (D-53/D-63).
 - Middleware exempt sets (D-40/D-62).
 - `OIDC_CLOCK_SKEW_S = 30` in the F-07 form (D-13).
-- `openid-client@6.8.9`, exact pin (D-34).
+- `openid-client@6.8.9`, exact pin (D-34). Its keys already meet D-138: with `enableNonRepudiationChecks`, oauth4webapi 3.8.9 refetches the JWKS once the cached set is 300 s old and fails the attempt if that fetch fails (`build/index.js:1026-1046`), so the ID token is never checked on a set older than 3600 s.
 - The `typecheck` CI step (D-93).
 - `APP_URL` in compose and in the Playwright env (D-67).
 - **E2E:**
@@ -437,9 +448,10 @@ Seam labels:
 | 76 (proposed) | D-132 advisory `openSsoTxn` at step 3 | UV (link txn + `error=access_denied` → 303 `/accounts/sso?error=no_access`, `sso_link_failed{no_access}`, `sso_login_failed` not recorded, txn cleared; `server_error` → `failed`; expired link txn → login page); E2E (`page.route` intercept) |
 | 77 (added post-design) | D-107/D-124 link-route statuses; row 1 is the middleware redirect, the handler's 401 is the stale-token case | UV (`middleware.test.ts`: no cookie → `/auth/login`; the three route tests, one case per remaining row) |
 | 78 (added post-design) | D-136 UI PRM 503 `no-store` when `agent` / `oidc.issuer` is unreadable in `oidc` | UV (`protected-resource/route.test.ts`) |
+| 79 (added 2026-11-27) | D-138 key-set age: a known `kid` on a set older than 3600 s + a failed refetch → 503 `jwks_unavailable` | AP (respx, fake clock: `test_jwks.py`, `test_sso_auth.py`) |
 
 No live AC is uncovered. The guard rows are labelled as guards (D-118). Rows 77 and 78 were added on 2026-11-24 after
-the post-design `/sdd-review product-spec` added those scenarios.
+the post-design `/sdd-review product-spec` added those scenarios; row 79 on 2026-11-27 with D-138.
 
 
 ## Rejected Alternatives
@@ -486,10 +498,12 @@ All locked alternatives in debate.md, both runs (R-2, R-13 and R-14 are moot und
   registered with `openid profile email` (else every SSO login and Link fails with `invalid_scope`) and
   `claims_policy.id_token` with `email`, `preferred_username` (`auth_time` by default or via the policy, per S17); seed-row `reset-password`. — homelab-edge
   (SSO spec § 4.3, § 4.6 and `sso.md` § 6 being amended, owner 2026-11-24), before `set-auth-mode both`.
-- [ ] **Stale signing keys** (D-31/D-37): while the JWKS cannot be fetched, the agent keeps verifying with a key it
+- [x] **Stale signing keys** (D-31/D-37): while the JWKS cannot be fetched, the agent keeps verifying with a key it
   already holds for up to `_JWKS_STALE_MAX_S` (24 h) after its last successful fetch, so a key the issuer retired or
-  revoked stays accepted that long, beyond SSO spec § 4.7's rotation window. — owner sign-off before Step 19; the
-  cutover runbook states it (Step 54).
+  revoked stays accepted that long, beyond SSO spec § 4.7's rotation window. — superseded by the owner's decision
+  2026-11-27 (D-138): no stale-key window; keys only from a set at most 3600 s old. The residual is availability: a
+  JWKS outage outlasting 3600 s from the last good fetch makes every `oidc` MCP call 503 (accepted; the cutover
+  runbook states it, Step 54).
 - [ ] **No identity DB-test job** (recon R-8): AC-25's row count and AC-50 rest on labelled Postgres guards and
   `migration-rerun` (D-118). — accepted residual.
 - [ ] **Config migration number contested**: `056` is also planned by 314, 317 and 321; take the next free number at

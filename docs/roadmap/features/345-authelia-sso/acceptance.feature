@@ -8,6 +8,7 @@ Feature: authelia-sso
   # Changed meaning, same ID: AC-1, AC-2, AC-3, AC-4, AC-6, AC-16, AC-17, AC-25, AC-28, AC-30, AC-31, AC-32, AC-36,
   # AC-41, AC-44, AC-45, AC-47, AC-50, AC-21, AC-35, AC-46, AC-65, AC-69 (no RED test cites them yet).
   # Added 2026-11-24: AC-73..AC-78.
+  # Added 2026-11-27 (owner: no tokens on stale keys, D-138): AC-79.
 
   Background:
     Given the issuer is "https://auth.example.test"
@@ -577,3 +578,11 @@ Feature: authelia-sso
     When a client fetches "/.well-known/oauth-protected-resource/agent" from the staging UI
     Then the response is HTTP 503 with "Cache-Control: no-store"
 
+  @AC-79 @FR-2
+  Scenario: The agent never verifies with a signing key set older than 3600 seconds
+    Given the agent's last successful fetch of the issuer's JWKS, which holds kid "k-1", was 3601 seconds ago
+    And the issuer's JWKS endpoint is unreachable
+    When an MCP client calls the staging agent with a token signed by kid "k-1" whose iss is the staging issuer and whose claims are otherwise valid
+    Then the agent returns HTTP 503 with no WWW-Authenticate header
+    And the agent's auth-rejection metric records "jwks_unavailable"
+    And the token is not verified with the cached key
