@@ -1942,7 +1942,7 @@ grep -n "from '../fixtures'\|helpers/auth" e2e/helpers/stubIdp.ts
 
 ### Step 51 — test: Mock-backend SSO handlers and the stub-IdP lifecycle
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/mock-backend.ts` — modify
