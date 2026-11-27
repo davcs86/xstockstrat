@@ -766,3 +766,11 @@
 - Not changed: FR-13, AC-20 and Steps 54/58's Claude Code client documentation (open owner question, session "owner
   decisions: no stale keys; no Claude Code clients" above).
 - Status stays `implementation-ready`.
+
+## Session 2026-11-27 — owner answers (plans review)
+
+- FR-13 / AC-20 / Steps 54 and 58 (Claude Code client documentation): **owner decided to keep them** (2026-11-27). The
+  capability stays documented for other self-hosted deployments that register Claude Code clients; the homelab registers
+  none and leaves the two `ui/oidc.mcp_client_id_claude_code*` keys empty (Step 54's cutover runbook already says so).
+  The open thread at the 2026-11-27 entries above (FR-level owner call) is closed. FR-13's citation of the retired
+  homelab-edge spike item S9 stays as the redirect's design reference for those deployments; no spec text changes.
