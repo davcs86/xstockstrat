@@ -239,7 +239,12 @@ _PASS_THROUGH_CODES = frozenset(
 )
 # Exact backend strings a call site allow-lists for UNAVAILABLE; a cross-service contract pinned by
 # tests/test_tool_errors.py::test_unavailable_pass_strings_match_backend_sources.
-_SCORE_UNAVAILABLE_PASS = frozenset({"fundamentals availability unknown — grade unchanged"})
+_SCORE_UNAVAILABLE_PASS = frozenset(
+    {
+        "fundamentals availability unknown — grade unchanged",
+        "formula version unavailable — grade unchanged",
+    }
+)
 _OFFLINE_UNAVAILABLE_PASS = frozenset({"positions not published; re-confirm to retry"})
 _BACKFILL_UNAVAILABLE_PASS = frozenset({"callback_url could not be validated; no job was created"})
 _RETRY_TAIL = "retry shortly"
@@ -1201,7 +1206,8 @@ def register_tools(server: MCPServer) -> None:
         found nothing"), and null when analysis did not report it. Errors: PERMISSION_DENIED
         (strategy missing or not owned); NOT_FOUND (no eligible evidence — the stale grade is
         cleared; includes the "all evidence symbols excluded (fundamentals unavailable: …)"
-        variant); UNAVAILABLE ('fundamentals availability unknown — grade unchanged' is passed
+        and "formula … is not readable" variants); UNAVAILABLE ('fundamentals availability
+        unknown — grade unchanged' and 'formula version unavailable — grade unchanged' are passed
         through verbatim; a store outage surfaces as 'UNAVAILABLE: upstream unavailable; outcome
         unknown, verify before retrying'). A deadline means the outcome is unknown: verify with
         list_strategies rather than assuming the grade was or was not refreshed.

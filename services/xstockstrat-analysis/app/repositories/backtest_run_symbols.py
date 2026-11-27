@@ -104,3 +104,26 @@ class BacktestRunSymbolsRepository:
             user_id,
         )
         return [_to_dict(r) for r in rows]
+
+    async def latest_formula_fingerprint(
+        self, user_id: str, strategy_id: str, def_hash: str
+    ) -> str | None:
+        """Newest formula-aware fingerprint for an owner's strategy, or ``None``.
+
+        Owner-scoped. Matches only composite fingerprints (``<def_hash>.<suffix>``), never a bare
+        pre-feature hash. Uses only the ``(user_id, strategy_id)`` equality prefix of
+        ``idx_brs_owner_eligibility`` followed by an in-memory sort, so its cost grows with the
+        strategy's cell count. Ordering by ``completed_at`` may pick a slightly older composite
+        when runs complete concurrently (accepted)."""
+        return await self._db.fetchval(
+            """
+            SELECT definition_fingerprint
+            FROM analysis.backtest_run_symbols
+            WHERE user_id = $1 AND strategy_id = $2 AND starts_with(definition_fingerprint, $3)
+            ORDER BY completed_at DESC
+            LIMIT 1
+            """,
+            user_id,
+            strategy_id,
+            def_hash + ".",
+        )

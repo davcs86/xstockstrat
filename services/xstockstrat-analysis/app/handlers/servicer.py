@@ -23,6 +23,7 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
+from typing import NamedTuple
 
 import asyncpg
 import grpc
@@ -280,6 +281,14 @@ class _GradeInputsUnknown(Exception):
     def __init__(self, symbol: str):
         super().__init__(f"{symbol}: fundamentals availability unknown")
         self.symbol = symbol
+
+
+class _FormulaVersionUnknown(_GradeInputsUnknown):
+    """A formula could not be read, so the evidence fingerprint is unknown; keep the old grade."""
+
+    def __init__(self, formula_id: str):
+        Exception.__init__(self, f"{formula_id}: formula version unavailable")
+        self.formula_id = formula_id
 
 
 class _FundamentalsUnknown(Exception):
@@ -924,13 +933,11 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
 
         # Fingerprint the executed definition only when the run executes the strategy's OWN
         # registered definition; the hash is from the DB definition_json, never a request dict.
-        run_fingerprint = None
-        if (
+        stamps_fingerprint = bool(
             request.strategy_id_ref
             and request.strategy_id == request.strategy_id_ref
             and executed_row is not None
-        ):
-            run_fingerprint = _definition_fingerprint(executed_row["definition_json"])
+        )
 
         # Cap every backtest to analysis.backtest.max_range_days: both bounds set + span over cap
         # → reject (not silent clamp); an unset bound is defaulted so ALL backtests stay bounded.
@@ -991,6 +998,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         fund_refusals = 0
         fund_unknown: list[str] = []
         refused_diags: dict[str, analysis_pb2.SymbolDiagnostics] = {}
+        formula_digests: dict = {}
         formula_fund_map: dict[str, list] = {}
         if active_definition is not None:
             if start_set:
@@ -1001,11 +1009,20 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                     formula_deleted_cache,
                     formula_fund_map,
                     failures=fund_failures,
+                    digests=formula_digests,
                 )
             else:
                 formula_fund_map = await self._formula_fundamentals(
-                    active_definition, propagation_meta, failures=fund_failures
+                    active_definition,
+                    propagation_meta,
+                    failures=fund_failures,
+                    digests=formula_digests,
                 )
+        run_fingerprint = None
+        if stamps_fingerprint and all(isinstance(d, str) for d in formula_digests.values()):
+            run_fingerprint = _evidence_fingerprint(
+                executed_row["definition_json"], formula_digests
+            )
 
         # Benchmark (source_symbol) bars preloaded ONCE per run, shared across evaluated symbols.
         # A benchmark warmup shortfall is a run-wide coverage gap → INSUFFICIENT_DATA (AC-4).
@@ -1343,6 +1360,8 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         # definition). Detected during the warm-up prefetch's GetFormula — no extra fetch here.
         if formula_deleted_cache:
             result.warnings.extend(formula_deleted_cache.values())
+        if stamps_fingerprint and any(d is None for d in formula_digests.values()):
+            result.warnings.append(_FORMULA_VERSION_WARNING)
         if seed_symbols:
             sector_warnings.append(
                 sector_params.SEED_SPAN_WARNING.format(symbols=", ".join(sorted(seed_symbols)))
@@ -1414,14 +1433,22 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         # Feature 215 (@AC-11): a refused-only run still recomputes, so a legacy grade built on
         # the refused symbol clears; the run-level PIT cache/failures are reused.
         if result.status == analysis_pb2.BACKTEST_STATUS_OK or fund_refusals > 0:
+            recompute_formulas = {
+                fid: _FormulaRead(formula_fund_map.get(fid, []), d)
+                for fid, d in formula_digests.items()
+                if d is not None
+            }
             try:
                 await self._recompute_headline(
                     caller_user_id,
                     request.strategy_id,
                     fund_cache=fund_cache,
+                    formula_cache=recompute_formulas,
                     failures=fund_failures,
                     meta=propagation_meta,
                 )
+            except _FormulaVersionUnknown as e:
+                log.warning("formula version unavailable — grade unchanged: %s", e)
             except _GradeInputsUnknown as e:
                 log.warning("fundamentals availability unknown — grade unchanged: %s", e)
             except Exception as e:
@@ -1921,7 +1948,14 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         return out
 
     async def _formula_fundamentals(
-        self, definition, propagation_meta, *, cache=None, failures=None, warmups=None
+        self,
+        definition,
+        propagation_meta,
+        *,
+        cache=None,
+        failures=None,
+        warmups=None,
+        digests=None,
     ):
         """Feature 200 — build ``{formula_id: [FundamentalMetric enum int]}`` for the definition's
         custom-formula components that declare fundamentals inputs, via one ``GetFormula`` per
@@ -1929,7 +1963,8 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         cache). An empty result means the definition has no fundamentals-formula operand. A
         refused ``GetFormula`` (NOT_FOUND/PERMISSION_DENIED) is "not a fundamentals formula" and
         records no failure; an outage records UNKNOWN. Either caches ``[]``. When ``warmups`` is
-        given, each fetched formula's declared ``warmup_period`` is recorded in it (feature 341)."""
+        given, each fetched formula's declared ``warmup_period`` is recorded in it (feature 341),
+        and when ``digests`` is given, every visited formula's ``_formula_digest`` (feature 327)."""
         out: dict[str, list] = {}
         for comp in definition.components:
             if comp.kind != analysis_pb2.COMPONENT_KIND_CUSTOM_FORMULA or not comp.formula_id:
@@ -1938,7 +1973,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             if fid in out:
                 continue
             if cache is not None and fid in cache:
-                metrics = cache[fid]
+                metrics, digest = cache[fid]
             else:
                 try:
                     formula = await self._indicators.GetFormula(
@@ -1946,14 +1981,18 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                         metadata=propagation_meta,
                     )
                     metrics = [int(m) for m in getattr(formula, "fundamental_inputs", [])]
+                    digest = _formula_digest(formula)
                     if warmups is not None:
                         warmups[fid] = int(getattr(formula, "warmup_period", 0) or 0)
                 except grpc.RpcError as e:
                     metrics = []
+                    digest = _UNREADABLE if _rpc_code(e) in UNREADABLE_FORMULA_CODES else None
                     if failures is not None and _rpc_code(e) not in UNREADABLE_FORMULA_CODES:
                         failures[("formula", fid)] = Availability.UNKNOWN
                 if cache is not None:
-                    cache[fid] = metrics
+                    cache[fid] = _FormulaRead(metrics, digest)
+            if digests is not None:
+                digests[fid] = digest
             if metrics:
                 out[fid] = metrics
         return out
@@ -2535,7 +2574,14 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         return warmup
 
     async def _declared_formula_warmup(
-        self, formula_id, cache, propagation_meta, deleted_cache=None, fund_map=None, failures=None
+        self,
+        formula_id,
+        cache,
+        propagation_meta,
+        deleted_cache=None,
+        fund_map=None,
+        failures=None,
+        digests=None,
     ) -> int:
         """Declared `warmup_period` for one formula, memoized in `cache` for the whole run.
 
@@ -2565,8 +2611,14 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                     cache[formula_id] = int(getattr(formula, "warmup_period", 0) or 0)
                 if deleted_cache is not None and getattr(formula, "deleted", False):
                     deleted_cache[formula_id] = _deleted_formula_warning(formula.name, formula_id)
+                if digests is not None:
+                    digests[formula_id] = _formula_digest(formula)
             except grpc.RpcError as e:
                 cache[formula_id] = 0
+                if digests is not None:
+                    digests[formula_id] = (
+                        _UNREADABLE if _rpc_code(e) in UNREADABLE_FORMULA_CODES else None
+                    )
                 if (
                     fund_map is not None
                     and failures is not None
@@ -2576,7 +2628,14 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         return cache[formula_id]
 
     async def _prefetch_formula_warmups(
-        self, definition, cache, propagation_meta, deleted_cache=None, fund_map=None, failures=None
+        self,
+        definition,
+        cache,
+        propagation_meta,
+        deleted_cache=None,
+        fund_map=None,
+        failures=None,
+        digests=None,
     ) -> None:
         """Fill `cache` for every referenced custom formula BEFORE the symbol loop (feature 071).
 
@@ -2621,7 +2680,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                     formula_ids.append(comp.formula_id)
         for fid in formula_ids:
             await self._declared_formula_warmup(
-                fid, cache, propagation_meta, deleted_cache, fund_map, failures
+                fid, cache, propagation_meta, deleted_cache, fund_map, failures, digests
             )
 
     @owner_scoped
@@ -2655,6 +2714,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
 
         async with self._lock_for(caller_user_id, request.strategy_id):
             excluded: list[str] = []
+            unreadable: list[str] = []
             try:
                 score = await self._fetch_and_aggregate(
                     caller_user_id,
@@ -2662,7 +2722,17 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                     row,
                     meta=propagation_meta,
                     excluded=excluded,
+                    unreadable=unreadable,
                 )
+            except _FormulaVersionUnknown as e:
+                log.warning("score: formula version unavailable for %s", e.formula_id)
+                await context.abort(
+                    grpc.StatusCode.UNAVAILABLE,
+                    "fundamentals availability unknown — grade unchanged"
+                    if self._cfg.get_bool("backtest.fundamentals.enabled", False)
+                    else _FORMULA_VERSION_UNKNOWN_MSG,
+                )
+                return
             except _GradeInputsUnknown as e:
                 log.warning("score: fundamentals availability unknown for %s", e.symbol)
                 await context.abort(
@@ -2685,6 +2755,14 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                         log.warning("failed to clear stale score: %s", e)
                         await context.abort(grpc.StatusCode.UNAVAILABLE, "score store unavailable")
                         return
+                if unreadable:
+                    await context.abort(
+                        grpc.StatusCode.NOT_FOUND,
+                        f"no eligible evidence — formula {', '.join(unreadable)} is not readable "
+                        "and no evidence was recorded for a readable version; restore access to "
+                        "the formula or rebind the component, then run a backtest",
+                    )
+                    return
                 if excluded:
                     await context.abort(
                         grpc.StatusCode.NOT_FOUND,
@@ -2880,8 +2958,10 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         meta=None,
         sem=None,
         excluded=None,
+        unreadable=None,
     ):
-        """Read eligible cells for the strategy's CURRENT fingerprint and derive a score.
+        """Read eligible cells for the strategy's CURRENT formula-aware evidence fingerprint and
+        derive a score.
 
         Returns the derived (unpersisted) StrategyScore, or ``None`` when there is zero eligible
         evidence. Raises on a cells-read error so callers can choose best-effort vs. abort. Does
@@ -2891,8 +2971,34 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         guard-refused cells are excluded before the per-symbol dedup (never deleted). ``meta``
         defaults to the owner identity (the boot path has no inbound request).
         """
-        fingerprint = _definition_fingerprint(strategy_row["definition_json"])
+        formula_cache = formula_cache if formula_cache is not None else {}
+        failures = failures if failures is not None else {}
+        meta = meta if meta is not None else owner_metadata(user_id)
+        def_hash = _definition_fingerprint(strategy_row["definition_json"])
         definition = _row_to_strategy_definition(strategy_row)
+        fingerprint = def_hash
+        if any(
+            c.kind == analysis_pb2.COMPONENT_KIND_CUSTOM_FORMULA and c.formula_id
+            for c in definition.components
+        ):
+            digests: dict = {}
+            await self._formula_fundamentals(
+                definition, meta, cache=formula_cache, failures=failures, digests=digests
+            )
+            missing = sorted(fid for fid, d in digests.items() if d is None)
+            refused = sorted(fid for fid, d in digests.items() if d is _UNREADABLE)
+            if missing:
+                raise _FormulaVersionUnknown(missing[0])
+            if refused:
+                fingerprint = await self._backtest_run_symbols_repo.latest_formula_fingerprint(
+                    user_id, strategy_id, def_hash
+                )
+                if fingerprint is None:
+                    if unreadable is not None:
+                        unreadable.extend(refused)
+                    return None
+            else:
+                fingerprint = _evidence_fingerprint(strategy_row["definition_json"], digests)
         guarded = self._cfg.get_bool("backtest.fundamentals.enabled", False) and any(
             c.kind
             in (analysis_pb2.COMPONENT_KIND_FUNDAMENTAL, analysis_pb2.COMPONENT_KIND_CUSTOM_FORMULA)
@@ -2915,9 +3021,9 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             definition,
             cells,
             fund_cache=fund_cache if fund_cache is not None else {},
-            formula_cache=formula_cache if formula_cache is not None else {},
-            failures=failures if failures is not None else {},
-            meta=meta if meta is not None else owner_metadata(user_id),
+            formula_cache=formula_cache,
+            failures=failures,
+            meta=meta,
             sem=sem,
         )
         if excluded is not None:
@@ -3344,9 +3450,11 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             union.CopyFrom(_row_to_strategy_definition(pre))
             union.components.extend(definition.components)
             formula_outputs = await self._fetch_formula_outputs(union, propagation_meta)
+            locked_hash: list[str] = []
 
             async def _apply(current, _defn=definition, _mask=mask_paths, _has=has_mask):
                 old_json = current["definition_json"] or {}
+                locked_hash[:] = [_definition_fingerprint(old_json)]
                 if _has:
                     merged_json = _merge_definition_json(old_json, _defn, _mask)
                     # Rebuild through the shared row→proto mapper (single source of the overlay),
@@ -3394,11 +3502,15 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                     f"strategy '{definition.strategy_id}' not found",
                 )
                 return
-            # A definition change usually changes the fingerprint, so clear the stale in-memory
-            # grade FIRST, then best-effort recompute; the UPDATE never fails on a recompute error.
+            # Clear the grade first only when the hash of the row update_locked locked differs from
+            # the written one: a rename must keep the grade when the recompute cannot run.
             sid = definition.strategy_id
+            changed = not locked_hash or locked_hash[0] != _definition_fingerprint(
+                row["definition_json"]
+            )
             async with self._lock_for(caller_user_id, sid):
-                self._strategies.pop((caller_user_id, sid), None)
+                if changed:
+                    self._strategies.pop((caller_user_id, sid), None)
                 try:
                     await self._recompute_headline_locked(
                         caller_user_id, sid, row, meta=propagation_meta
@@ -5142,7 +5254,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         benchmark_cache: dict[str, list] = {}
         fundamentals_cache: dict[str, list] = {}  # feature 198 — per-symbol PIT history dedup
         # feature 200 — routing map keyed by formula_id (shared across strategies) + snapshot dedup.
-        formula_fund_cache: dict[str, list] = {}
+        formula_fund_cache: dict[str, _FormulaRead] = {}
         fund_snap_cache: dict[str, list] = {}
         heal_failures: dict = {}  # feature 215 — this heal's loader failures (guard input)
         fund_gate = self._cfg.get_bool("backtest.fundamentals.enabled", False)
@@ -5783,7 +5895,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         fundamentals_cache: dict[str, list] = {}
         # feature 200 — fundamentals-only formula routing map (keyed by formula_id, shared across
         # candidates) + per-symbol snapshot dedup; both filled lazily in _row_for (idempotent).
-        formula_fund_cache: dict[str, list] = {}
+        formula_fund_cache: dict[str, _FormulaRead] = {}
         fund_snap_cache: dict[str, list] = {}
         # Feature 215: (channel, symbol)/(formula, id) loader failures for this pass; row-local,
         # never folded into the symbol-wide fetch_failed.
@@ -7502,6 +7614,72 @@ def _definition_fingerprint(definition_json: dict) -> str:
     }
     canonical = json.dumps(filtered, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+# Every FormulaDefinition/FormulaParameter/FormulaOutput field must sit in exactly one set; the
+# descriptor-walk test fails on an unclassified proto field. `author` stays DISPLAY (legacy repair).
+_FORMULA_BEHAVIOURAL_FIELDS = frozenset(
+    {"source", "input_schema", "parameters", "outputs", "warmup_period", "fundamental_inputs"}
+)
+_FORMULA_DISPLAY_FIELDS = frozenset(
+    {
+        "formula_id",
+        "name",
+        "description",
+        "author",
+        "created_at",
+        "updated_at",
+        "is_public",
+        "deleted",
+        "origin",
+    }
+)
+_FORMULA_PARAMETER_BEHAVIOURAL_FIELDS = frozenset(
+    {"name", "type", "default_value", "required", "min", "max"}
+)
+_FORMULA_PARAMETER_DISPLAY_FIELDS = frozenset({"description"})
+_FORMULA_OUTPUT_BEHAVIOURAL_FIELDS = frozenset({"name"})
+_FORMULA_OUTPUT_DISPLAY_FIELDS = frozenset({"description"})
+
+
+def _formula_digest(formula) -> str:
+    """sha256 of a formula's behavioural content; a display-only edit leaves it unchanged."""
+    raw = json_format.MessageToDict(formula, preserving_proto_field_name=True)
+    kept = {k: v for k, v in raw.items() if k in _FORMULA_BEHAVIOURAL_FIELDS}
+    if "parameters" in kept:
+        kept["parameters"] = [
+            {k: v for k, v in p.items() if k in _FORMULA_PARAMETER_BEHAVIOURAL_FIELDS}
+            for p in kept["parameters"]
+        ]
+    if "outputs" in kept:
+        kept["outputs"] = [
+            {k: v for k, v in o.items() if k in _FORMULA_OUTPUT_BEHAVIOURAL_FIELDS}
+            for o in kept["outputs"]
+        ]
+    canonical = json.dumps(kept, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+# A refused formula's digest marker; an object(), never a string, so it can never be hashed.
+_UNREADABLE = object()
+_FORMULA_VERSION_WARNING = "evidence not recorded: formula version unavailable — rerun"
+_FORMULA_VERSION_UNKNOWN_MSG = "formula version unavailable — grade unchanged"
+
+
+class _FormulaRead(NamedTuple):
+    metrics: list
+    digest: object  # hex str, _UNREADABLE, or None for an outage
+
+
+def _evidence_fingerprint(definition_json: dict, digests: dict) -> str:
+    """The evidence-cell key: the definition hash, plus a formula suffix when digests exist."""
+    def_hash = _definition_fingerprint(definition_json)
+    if not digests:
+        return def_hash
+    if any(not isinstance(d, str) for d in digests.values()):
+        raise ValueError("a refused or unknown formula digest cannot be stamped")
+    joined = ";".join(f"{fid}={digests[fid]}" for fid in sorted(digests))
+    return def_hash + "." + hashlib.sha256(joined.encode("utf-8")).hexdigest()
 
 
 def _row_to_strategy_template(row: dict) -> "analysis_pb2.StrategyTemplate":
