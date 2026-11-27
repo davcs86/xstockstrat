@@ -997,3 +997,102 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - [ ] `feature.md` § Next Action still says to run `/sdd-review … impl-spec` and then `/sdd-execute`. The next action is now the integration PR into `main-dev`, which promotes this feature's `acceptance.feature` scenarios into the durable suites (C-16). This step did not edit that section.
 - [ ] The stale comment above `sym_unavailable` in `_row_for` (Steps 11+12 Open Threads) is still unaddressed. Step 23's **Files** do not include `servicer.py`, so it is left for the integration PR.
 - [ ] The service `CLAUDE.md` "Fundamentals-skip (feature 215) and formula-unreadable (289) rows" pointer (`services/xstockstrat-ui/CLAUDE.md`) does not mention the 308 evaluation-failed row or `evaluationFailed`. It is outside Step 23's **Files**.
+
+## Session 2026-11-27 — sdd-batch-execute promotion plan (awaiting operator confirm)
+
+````sdd-batch-promotion-plan
+## Promotion plan — fix-analysis-per-symbol-isolation (feature 308)
+
+Source: /home/user/xstockstrat/docs/roadmap/features/308-fix-analysis-per-symbol-isolation/acceptance.feature. I read the working-tree copy, because I have no git access. It already carries the 2026-11-20 amended @AC-2 and @AC-3 wording. The caller should confirm it matches origin/feature/fix-analysis-per-symbol-isolation before writing.
+
+### Verdicts
+| @AC | target suite (path) | CREATE/APPEND | verdict | note |
+|---|---|---|---|---|
+| @AC-1 | services/xstockstrat-analysis/acceptance/fix-analysis-per-symbol-isolation.feature | CREATE | NEW | `_compute_opportunities` per-candidate isolation. A generic FormulaExecutionError degrades only that row, with a fault marker. See Notes 1 and 2. |
+| @AC-2 | services/xstockstrat-analysis/acceptance/fix-analysis-per-symbol-isolation.feature | CREATE | NEW | EvaluateReadiness per-symbol isolation. Uses the amended wording, with an empty SymbolReadiness and no cache row staged. See Notes 1 and 3. |
+| @AC-3 | services/xstockstrat-analysis/acceptance/fix-analysis-per-symbol-isolation.feature | CREATE | NEW | Readiness kick, materializer and opportunity-heal isolation. Uses the amended outcome split by site. See Notes 1 and 4. |
+
+No scenario is DUP, OVERLAP or CONFLICT. The suite file does not exist yet, so there is no `@feature-308` scenario to dedup against. The `acceptance/` directory already exists.
+
+### Ready-to-write blocks
+
+--- /home/user/xstockstrat/services/xstockstrat-analysis/acceptance/fix-analysis-per-symbol-isolation.feature (CREATE) ---
+```gherkin
+# Promoted business-rule suite for xstockstrat-analysis (Constitution C-16). Promoted from feature 308's
+# acceptance.feature at launch; @feature-308 marks provenance. These are the guarantees a future
+# feature must not regress (recon reads this suite; the design-adversary enforces it).
+
+Feature: Analysis per-symbol fan-outs isolate a failing symbol or candidate
+  Regression guard: one failing symbol or candidate must degrade only itself in xstockstrat-analysis
+  per-symbol fan-outs (opportunities compute, EvaluateReadiness, readiness kick / materializer /
+  opportunity heal), never discard its healthy siblings' rows.
+
+  # guards: docs/reports/2026-10-21-analysis-opportunities-row-gather-no-per-symbol-isolation-defect.md
+  @AC-1 @regression @feature-308
+  Scenario: A candidate whose evaluation raises degrades to its own row and healthy candidates are materialized
+    Given a user whose opportunity candidates are "AAPL", "MSFT" and "NVDA"
+    And evaluate_conditions_traced raises FormulaExecutionError for "NVDA"
+    When _compute_opportunities runs for that user
+    Then the compute does not raise
+    And opportunity rows are written for "AAPL" and "MSFT"
+    And the "NVDA" row is degraded with a fault marker instead of aborting the compute
+
+  # guards: docs/reports/2026-10-21-analysis-readiness-gather-no-per-symbol-isolation-defect.md
+  # wording amended 2026-11-20 (C-16 operator sign-off, design gate option A; design.md § 2)
+  @AC-2 @regression @feature-308
+  Scenario: EvaluateReadiness returns and caches healthy symbols when one symbol's compute raises
+    Given compute_readiness_row raises ZeroDivisionError for "NVDA"
+    When EvaluateReadiness is called with symbols "AAPL", "MSFT" and "NVDA"
+    Then the RPC succeeds
+    And readiness is returned for "AAPL" and "MSFT"
+    And "NVDA" is returned as an empty SymbolReadiness (0 of 0 conditions; the proto has no unavailable field)
+    And the "AAPL" and "MSFT" SLOW rows are persisted to readiness_cache
+    And no readiness_cache row is staged for "NVDA"
+
+  # guards: docs/reports/2026-11-05-analysis-readiness-batch-loss-on-indicator-outage-defect.md
+  # outcome split by site, amended 2026-11-20 (C-16 operator sign-off, design gate option A; design.md § 2)
+  @AC-3 @regression @feature-308
+  Scenario: An indicators outage on one strategy component does not discard the user's readiness batch
+    Given indicators ExecuteFormula returns UNAVAILABLE for one component of strategy "s1" on "NVDA"
+    And the user's other strategy/symbol pairs evaluate normally
+    When the readiness refresh kick or the readiness materializer tick runs for that user
+    Then readiness rows are written for every healthy pair
+    And the failing "s1"/"NVDA" pair is cached as the bar_epoch -1 data-unavailable sentinel (UNKNOWN, 300 s cooldown), never as a fresh success
+    When the opportunity surgical retry runs for that user
+    Then the heal rows of the healthy symbols are written
+    And the failing pair keeps its "unavailable" provenance, no readiness_cache row is written for it, and one WARN tally names it
+```
+
+### Notes / ambiguities / conflicts
+1. **Tags.** 308's acceptance.feature carries only `@AC-n @regression` and no `@FR-*` tags. I added `@feature-308` and did not invent `@FR-*` tags. The `@AC-*` numbers are unchanged.
+2. **@AC-1 and 289 @AC-10, not an OVERLAP.**
+   - Amended feature-289 @AC-10 (Step 17 of 308, in `opportunity-compute-robustness.feature`) asserts only that a formula timeout marks the row `unavailable`.
+   - 308 @AC-1 asserts the generic per-candidate isolation outcome, with a fault marker. The two guarantees differ, so I planned @AC-1 as NEW.
+   - A consolidation review could still look at the pair, but nothing here is deleted.
+3. **@AC-2 and 289 @AC-13, not an OVERLAP.**
+   - Amended 289 @AC-13 covers the timeout case. 308 @AC-2 covers a non-RPC compute exception (ZeroDivisionError) and the persistence split. So @AC-2 is NEW.
+   - The timeout case is not duplicated here.
+4. **@AC-3 routing.**
+   - Indicators is in the Reviewers table (steps 3-4), but @AC-3 asserts on analysis-owned rows: readiness_cache, `bar_epoch -1`, heal provenance and the WARN tally.
+   - The indicators change is only the `exit_reason=TIMEOUT` field on its deadline-refusal response. No indicators scenario exists in the source, so nothing goes to `services/xstockstrat-indicators/acceptance/`.
+   - Nothing is cross-cutting, so `docs/sdd/business-rules/platform.feature` is untouched.
+5. **C-16 conflict check against the existing suites.**
+   - On main-dev, 289 @AC-10 (`opportunity-compute-robustness.feature:108-112`) and 289 @AC-13 (`readiness-caching-poll-discipline.feature:94-98`) assert that a FormulaExecutionError timeout aborts the recompute and the RPC.
+   - That would contradict 308 @AC-1 and @AC-2. It is not an open CONFLICT, for two reasons:
+     - The operator signed off on the change on 2026-11-20 at the design gate, option A (context.md line 431; design.md § "Business Rules Touched").
+     - Step 17 of implementation-spec.md amends both scenarios in place, keeping their ids and adding `@feature-308`.
+   - The promotion write must therefore come after Step 17 has landed on the branch. I have not checked that. If the two old "still fails" / "still aborts" wordings are still present, the amendment is missing. Do not write the suite until it is in.
+   - The Step 17 verification grep shows whether it landed: `grep -n "still fails the opportunities recompute\|still aborts EvaluateReadiness" services/xstockstrat-analysis/acceptance/*.feature` should return nothing.
+6. **Other suites checked, no equivalent scenario found.**
+   - `fix-screener-symbol-isolation.feature` (feature 245) covers ScreenSymbols per-symbol isolation, a different RPC.
+   - `fix-backtest-silent-symbol-skip.feature` covers backtest.
+   - `opportunity-compute-robustness.feature` and `readiness-caching-poll-discipline.feature` cover data-unavailable sentinels, but not this per-symbol-failure isolation, except the 289 timeout scenarios in notes 2 and 3.
+   - `docs/sdd/business-rules/platform.feature` has no `feature-308`, readiness or compute scenario.
+7. **Files this promotion does not write.** Step 17 edits `opportunity-compute-robustness.feature` and `readiness-caching-poll-discipline.feature`. This plan leaves those two files untouched.
+
+### Coverage check
+- Source scenarios: 3 (@AC-1, @AC-2, @AC-3).
+- Planned: 3 NEW, 0 DUP, 0 OVERLAP, 0 CONFLICT, 0 skipped.
+- All three scenarios are accounted for.
+- They go into one CREATE block, and the scenario text is verbatim.
+````
