@@ -2260,3 +2260,8 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Expected**: `<SignOutButton />` after `<CopilotToggle />` in the header row in every viewport, with the Step 53 mobile check passing.
 - **Actual**: at 390 px the extra 44 px button overflows the `/trader` header row (`mobile-overflow.spec.ts` failed 5 routes). Applied D-63's pre-settled fallback: the header icon is `hidden sm:inline-flex`; below `sm` the Sign out action lives in the mobile offcanvas sheet (`SidebarFooter`). The Step 53 mobile case asserts the sheet entry instead of a header icon below `sm`.
 - **Disposition**: D-63 fallback (settled in the debate); no owner decision needed beyond D-63.
+
+### Step 4 — truncated issuer descriptions fixed before merge
+- **Expected**: `ui/oidc.issuer` and `agent/oidc.issuer` descriptions state the FR-14 grammar (Step 4 instruction 2).
+- **Actual**: the seed shipped `'OIDC Iss'` for both keys (an orchestrator generator bug: an implicitly concatenated string indexed as a tuple); found by the Step 54 executor.
+- **Disposition**: `060` has never left this feature branch (not on `main-dev`, never applied), so the four description literals were corrected in place and `scripts/config-wiring-stored.json` regenerated on the same owner-approved throwaway Postgres 16 (stopped and deleted after); `--final` exit 0, config 449/449.

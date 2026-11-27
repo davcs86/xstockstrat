@@ -175,7 +175,7 @@
             "is_secret": false,
             "namespace": "agent",
             "value_type": "string",
-            "description": "OIDC Iss",
+            "description": "OIDC issuer URL for MCP bearer tokens in auth.mode oidc. Read by xstockstrat-agent. Valid form (FR-14): https (http only on localhost, 127.0.0.1 or [::1]), a lowercase host, no IP except loopback, no IDN or xn-- label, no default port, no userinfo, query, fragment or %, and no trailing slash. Empty is invalid in auth.mode both or oidc.",
             "environment": "production",
             "default_value": "",
             "consuming_service": "xstockstrat-agent"
@@ -187,7 +187,7 @@
             "is_secret": false,
             "namespace": "agent",
             "value_type": "string",
-            "description": "OIDC Iss",
+            "description": "OIDC issuer URL for MCP bearer tokens in auth.mode oidc. Read by xstockstrat-agent. Valid form (FR-14): https (http only on localhost, 127.0.0.1 or [::1]), a lowercase host, no IP except loopback, no IDN or xn-- label, no default port, no userinfo, query, fragment or %, and no trailing slash. Empty is invalid in auth.mode both or oidc.",
             "environment": "staging",
             "default_value": "",
             "consuming_service": "xstockstrat-agent"
@@ -5287,7 +5287,7 @@
             "is_secret": false,
             "namespace": "ui",
             "value_type": "string",
-            "description": "OIDC Iss",
+            "description": "OIDC issuer URL for web sign-in and Link SSO. Read by xstockstrat-ui. Valid form (FR-14): https (http only on localhost, 127.0.0.1 or [::1]), a lowercase host, no IP except loopback, no IDN or xn-- label, no default port, no userinfo, query, fragment or %, and no trailing slash. Empty is invalid in auth.mode both or oidc.",
             "environment": "production",
             "default_value": "",
             "consuming_service": "xstockstrat-ui"
@@ -5299,7 +5299,7 @@
             "is_secret": false,
             "namespace": "ui",
             "value_type": "string",
-            "description": "OIDC Iss",
+            "description": "OIDC issuer URL for web sign-in and Link SSO. Read by xstockstrat-ui. Valid form (FR-14): https (http only on localhost, 127.0.0.1 or [::1]), a lowercase host, no IP except loopback, no IDN or xn-- label, no default port, no userinfo, query, fragment or %, and no trailing slash. Empty is invalid in auth.mode both or oidc.",
             "environment": "staging",
             "default_value": "",
             "consuming_service": "xstockstrat-ui"
@@ -5449,5 +5449,5 @@
             "consuming_service": "xstockstrat-ui"
         }
     ],
-    "inputs_sha256": "dcfbfbc29e115a180f29b68bf9a1c335878352efe13d0d0a7a611d25f3bf20a1"
+    "inputs_sha256": "cd2cef35ec7457b138f854cde1fe0209056a4256fa83a4e3796aa949d3ca56f6"
 }

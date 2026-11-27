@@ -1155,3 +1155,7 @@
 - TDD: red: on the pre-docs tree (before Step 54) the block exited 1 at its first check, `grep -qF xstockstrat-mcp-claude docs/runbooks/mcp-tools.md`; every later check also failed (no `authelia-sso-cutover.md`, no IDENTITY-15 `SEED_USER_ID` line, no `` `identity` `` in AGENT-9, none of `auth.mode`/`ui/oidc.`/`agent/oidc.issuer`/`Link SSO` in the three CLAUDE.md files or `frontend-auth.md`) → green: the block prints `GREEN`, exit 0. Covers @AC-20, @AC-36.
 - Files modified: none (verification-only)
 - Deviations: none
+
+### Post-execution fix 2026-11-27 — 060 issuer descriptions
+- The Step 54 executor reported that `060` seeded `ui/oidc.issuer` and `agent/oidc.issuer` with the description `'OIDC Iss'`. Fixed in place (the migration is unmerged and unapplied) with the FR-14 grammar text; the stored set was regenerated on the owner-approved throwaway Postgres (Step 4 override, same purpose). `check-config-wiring.mjs --final` exit 0 (only the two pre-existing `REPORTED` readers-disagree lines); config 449/449.
+- Owner accepted the Steps 45–53 gap-fills (2026-11-27). Docs executor's open notes: the Claude Code loopback redirect is written as `http://localhost:<port>/callback` (unverified by repo evidence); `docs/runbooks/CLAUDE.md` and the root Context Guide do not list `authelia-sso-cutover.md` (no step owned them).

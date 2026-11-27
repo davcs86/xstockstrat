@@ -11,10 +11,10 @@ VALUES
    'Login mode for this deployment: local (password; built-in MCP OAuth), both (SSO and password; Link SSO; built-in MCP OAuth) or oidc (SSO only; MCP accepts issuer tokens only). Any other value reads as local. Read globally; set with scripts/manage-users.py set-auth-mode.',
    'local', 'xstockstrat-identity', 'system:config-migration-feature-authelia-sso', 'production', NULL),
   ('ui', 'oidc.issuer', 'string', '',
-   'OIDC Iss',
+   'OIDC issuer URL for web sign-in and Link SSO. Read by xstockstrat-ui. Valid form (FR-14): https (http only on localhost, 127.0.0.1 or [::1]), a lowercase host, no IP except loopback, no IDN or xn-- label, no default port, no userinfo, query, fragment or %, and no trailing slash. Empty is invalid in auth.mode both or oidc.',
    '', 'xstockstrat-ui', 'system:config-migration-feature-authelia-sso', 'staging', NULL),
   ('ui', 'oidc.issuer', 'string', '',
-   'OIDC Iss',
+   'OIDC issuer URL for web sign-in and Link SSO. Read by xstockstrat-ui. Valid form (FR-14): https (http only on localhost, 127.0.0.1 or [::1]), a lowercase host, no IP except loopback, no IDN or xn-- label, no default port, no userinfo, query, fragment or %, and no trailing slash. Empty is invalid in auth.mode both or oidc.',
    '', 'xstockstrat-ui', 'system:config-migration-feature-authelia-sso', 'production', NULL),
   ('ui', 'oidc.client_id', 'string', '',
    'OIDC client ID of the xstockstrat web client registered at ui/oidc.issuer. Empty is invalid in auth.mode both or oidc.',
@@ -47,10 +47,10 @@ VALUES
    'Pre-registered issuer client ID shown on /accounts/authorized-apps for Claude Code MCP clients (read-only scope) in auth.mode oidc. Empty hides the line.',
    '', 'xstockstrat-ui', 'system:config-migration-feature-authelia-sso', 'production', NULL),
   ('agent', 'oidc.issuer', 'string', '',
-   'OIDC Iss',
+   'OIDC issuer URL for MCP bearer tokens in auth.mode oidc. Read by xstockstrat-agent. Valid form (FR-14): https (http only on localhost, 127.0.0.1 or [::1]), a lowercase host, no IP except loopback, no IDN or xn-- label, no default port, no userinfo, query, fragment or %, and no trailing slash. Empty is invalid in auth.mode both or oidc.',
    '', 'xstockstrat-agent', 'system:config-migration-feature-authelia-sso', 'staging', NULL),
   ('agent', 'oidc.issuer', 'string', '',
-   'OIDC Iss',
+   'OIDC issuer URL for MCP bearer tokens in auth.mode oidc. Read by xstockstrat-agent. Valid form (FR-14): https (http only on localhost, 127.0.0.1 or [::1]), a lowercase host, no IP except loopback, no IDN or xn-- label, no default port, no userinfo, query, fragment or %, and no trailing slash. Empty is invalid in auth.mode both or oidc.',
    '', 'xstockstrat-agent', 'system:config-migration-feature-authelia-sso', 'production', NULL)
 ON CONFLICT (namespace, key, environment, COALESCE(user_id, '')) DO NOTHING;
 
