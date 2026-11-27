@@ -1082,3 +1082,13 @@ test "$(git diff origin/main-dev HEAD -- docs/roadmap/ledger/fails.md | grep -c 
 - Step 6: the `tsc && node --test … "real grpc-js"` line and the 10-run `for` loop line are each wrapped in `( … )`, as are its `lint` and `test:coverage` lines.
 - Step 2: the trailing `grep -n "__tests__/fixtures" …` (exit 1 on its expected no-match, since the file imports `./fixtures/…`) became `test "$(grep -c "__tests__/fixtures" …)" = 0`, expect exit 0.
 - Not changed: mid-block `grep` lines whose expectation is "no output" (Steps 4, 5, 7, 8) exit 1 by design; none is the last command of its block, and each is judged on its printed output, as in Step 1's `git diff --stat`.
+
+## Session 2026-11-26 — sdd-execute sequential (sdd-batch-execute), Step 1
+
+- Tree: detached @ `origin/feature/fix-notify-stream-contract` `6837cf03`; `origin/main-dev` is now `f802b184` (moved past `2b2dec92`), already contained via merge `d368f1f0` (parents `9098c847`, `f802b184`), so Instruction 2's stop condition did not apply.
+- Tooling: node v24 (`/opt/node24/bin` prefixed on PATH for the run; default PATH node is v22.23.5) · pnpm 9.15.9 · linked notify `node_modules` grpc-js 1.14.7. No install run.
+
+### Step 1 — docs: branch sync gate — notify on grpc-js 1.14.7 (design.md "Step 0") [done]
+- Verify-only gate passed (re-specced Verification block, run verbatim once): `package.json:21` `^1.14.7`; lock importer `:378-380` `^1.14.7`/`1.14.7`; `pnpm ls` → `@grpc/grpc-js 1.14.7`; notify suite `tests 416 / pass 416 / fail 0`; `merge-base --is-ancestor` `rc=0`; `git diff origin/main-dev HEAD --stat` shows only this feature's directory and `docs/roadmap/ledger/fails.md` (+5); zero removed `fails.md` lines; `exit=0`. TDD: N/A (branch sync; no executable logic).
+- Files modified: none (verify-only); `implementation-spec.md` Step 1 status → done, `context.md`.
+- Deviations: none.

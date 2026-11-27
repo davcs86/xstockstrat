@@ -59,7 +59,7 @@ Existing durable rules the tests also pin (C-16, design.md § Business Rules Tou
 
 ### Step 1 — docs: branch sync gate — notify on grpc-js 1.14.7 (design.md "Step 0")
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-notify` (branch-level precondition)
 **Files**:
 - `services/xstockstrat-notify/package.json` — verify only (already at the target; no edit)
