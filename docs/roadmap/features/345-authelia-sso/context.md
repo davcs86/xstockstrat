@@ -1113,3 +1113,9 @@
 - TDD: N/A (test configuration; RED→GREEN via Step 53). Verification: typecheck, lint exit 0; the grep hits `chromium-sso` `:140`, `workers: 1` `:144`, `testIgnore` `:115,:128`, `APP_URL` `:189`; `playwright test --list` exit 0. The per-shard `--list` sum is checked in Step 53 once the SSO file exists.
 - Files modified: `services/xstockstrat-ui/playwright.config.ts`
 - Deviations: none. Gap filled: `BASE_URL` is imported from `e2e/helpers/auth.ts` (where the same literal already lives as `BASE_URL`) instead of re-declaring it (DRY guard rail).
+
+### Step 50 — stub IdP client_secret_basic decoding [done]
+- Found by Step 53's first green run: openid-client (oauth4webapi) form-urlencodes the client id and secret inside `client_secret_basic` (RFC 6749 § 2.3.1, `-` → `%2D`), so the stub's byte-compare of the Basic header answered `invalid_client` and every callback logged `sso_callback_failed`. The stub `/token` now base64-decodes the header and form-decodes each part before comparing.
+- Verification: typecheck exit 0; host Playwright `e2e/sso --project=chromium-sso --no-deps` 37 passed (was 1 failed, `@AC-1` → `?error=failed`).
+- Files modified: `services/xstockstrat-ui/e2e/helpers/stubIdp.ts`
+- Deviations: none (harness bug fix).

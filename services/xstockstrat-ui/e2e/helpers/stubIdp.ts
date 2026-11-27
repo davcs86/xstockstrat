@@ -170,10 +170,15 @@ async function handle(req: http.IncomingMessage, res: http.ServerResponse): Prom
     }
     case '/token': {
       const form = new URLSearchParams(await readBody(req));
-      const basic = Buffer.from(
-        `${encodeURIComponent(SSO_WEB_CLIENT_ID)}:${encodeURIComponent(SSO_WEB_CLIENT_SECRET)}`,
-      ).toString('base64');
-      if (req.headers.authorization !== `Basic ${basic}`) {
+      // client_secret_basic form-urlencodes both parts (RFC 6749 § 2.3.1), so decode before comparing.
+      const [id, secret] = Buffer.from(
+        (req.headers.authorization ?? '').replace(/^Basic /, ''),
+        'base64',
+      )
+        .toString()
+        .split(':')
+        .map((p) => decodeURIComponent(p.replace(/\+/g, ' ')));
+      if (id !== SSO_WEB_CLIENT_ID || secret !== SSO_WEB_CLIENT_SECRET) {
         return json(res, 401, { error: 'invalid_client' });
       }
       const grant = codes.get(form.get('code') ?? '');
