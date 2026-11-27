@@ -1275,3 +1275,21 @@ Steps fixed: 2, 3, 4, 5, 6, 7, 8. Re-run Step 2 onward with the updated blocks v
 
 - [ ] `**kw` spy rename risk: accepted by D-19; the AC-3 `correlation_id` assertion is the guard. Two-header residual: the docstring constraint plus AC-3's one-`x-trace-id` assertion cover today's loop caller only.
 - [ ] Carried: Verification `exit=` reflects only the last line (Step 8), `@AC-3` PRESERVE comment file placement (operator), analysis findings `:24`/`:32` stale after Steps 2-3 (no step), merge-order row for 313/309.
+
+## Session 2026-11-27 — sdd-execute sequential (sdd-batch-execute), step 8
+
+- Tooling (step 8): docs step, none needed. Hook check hook=0.
+- Anchors re-grepped (instruction 0): the open-question bullet at `context-constitution-findings.md:38` (under `## Open questions` `:34`, `## Resolved` `:41`), the event row at `CLAUDE.md:197`; `_ingest_external_signal` at `servicer.py:1346` (with `correlation_id=trace_id` at `:1514`), `poll_one_source` at `mcp_client_loop.py:117` (hint `:116`; the mint is at `:157`). The ingest docs had no diff against merge-base `f802b184` before the edit.
+
+### Step 8 — docs: ingest findings row and CLAUDE.md event row after Steps 4 and 6 [done]
+- `services/xstockstrat-ingest/docs/context-constitution-findings.md`: deleted the "no `propagation_meta`" open question and added `RESOLVED 2026-11-27 — ... (feature 313)` as the first `## Resolved` bullet, using the spec text verbatim. The `## Filed as defect reports` ownerless row stays: its report sidecar flips through `/sdd-triage backmerge`. `services/xstockstrat-ingest/CLAUDE.md`: replaced the `ingest.signal.ingested` row with the spec text. No other line changed.
+- TDD: N/A (docs). Verification `.sdd-logs/v-1.log` `exit=0` (empty log). The block reports only its last line, so each line was re-run alone: the open-questions `propagation_meta` count is 0, the `RESOLVED .*feature 313` count is 1, the defect-row count is 1, the CLAUDE.md `user_id.*correlation_id` count is 1, and the merge-base diff lists exactly the two Files.
+- All-done gate: `node scripts/check-config-wiring.mjs --final` `.sdd-logs/v-2.log` `exit=0`. It printed only two baseline lines from other features, `REPORTED: services/xstockstrat-analysis/app/engine/fundsignal_loop.py:marketdata/fundamentals.provider:readers-disagree` and `REPORTED: services/xstockstrat-trading/internal/service/trading.go:platform/trading_state:readers-disagree`. This feature declares no config key. Status in-progress → code-completed.
+- No insights ledger line: nothing generalizes beyond what the ledger already holds.
+- Files modified: `services/xstockstrat-ingest/docs/context-constitution-findings.md`, `services/xstockstrat-ingest/CLAUDE.md`
+- Deviations: none
+
+## Open Threads
+
+- [ ] `implementation-spec.md` header `**Status**` still reads `pending` (no step flipped it). SESSION-END SUMMARY sets it to `complete`. Target: orchestrator, per-feature session-end summary.
+- [ ] Carried: `@AC-3` PRESERVE comment file placement (operator), analysis findings `:24`/`:32` stale after Steps 2-3 (no step), merge-order row for 313/309, `**kw` spy rename risk and the two-header residual (accepted, D-19).

@@ -693,7 +693,7 @@ test "$(grep -c 'orig(signal, propagation_meta, owner=owner, \*\*kw)' services/x
 
 ### Step 8 — docs: ingest findings row and CLAUDE.md event row after Steps 4 and 6
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/docs/context-constitution-findings.md` — modify
