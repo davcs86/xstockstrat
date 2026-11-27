@@ -33,7 +33,6 @@ _None open in this section_ — open doc-lie rows are in the additions section b
 
 ## Open questions (unresolved *why* — needs a maintainer)
 
-- Fan-out ignores `call.write()` backpressure (drops only on thrown exception, no `drain`) — is unbounded per-slow-subscriber server-side buffering acceptable, or should an over-buffered subscriber be dropped? `notifyServiceImpl.ts#persistAndBroadcast` `sub.call.write(alert)` (~L124) — status: **open**
 - `ListAlerts.unreadCount` ignores both `limit` and `unreadOnly` (counts all targeted-or-broadcast unread alerts for the user) — intended? `src/grpc/notifyServiceImpl.ts#listAlerts` — status: **open**
 - `unregisterPushSubscription` takes no `x-user-id` at all, not even a presence check (consistent with NOTIFY-6) — intended? — status: **open**
 - The acknowledged-flag filter in `matchesSubscriber` looks unreachable on the live stream, since every emitted alert has `acknowledged: false` — status: **open**
@@ -43,6 +42,8 @@ _None open in this section_ — open doc-lie rows are in the additions section b
 - `fanoutWebhook` dedupes on `idempotency_key` alone: a repeat carrying a different `callback_url` or payload is a silent OK no-op (same shape as ledger's idempotent-append payload question). Intended? `src/grpc/notifyServiceImpl.ts#fanoutWebhook` `ON CONFLICT (idempotency_key) DO NOTHING` (~L344) — status: **open** (found 2026-11-13, refresh)
 
 ## Resolved
+
+- **RESOLVED 2026-11-27 — Fan-out ignores `call.write()` backpressure (open question), by feature `316-fix-notify-stream-contract`.** A subscriber with 1024 queued alerts (`MAX_QUEUED_ALERTS`, checked before the write in `src/grpc/notifyServiceImpl.ts#persistAndBroadcast`) is removed from the map and evicted with status 8 (`RESOURCE_EXHAUSTED`), counted as `notify.stream.evictions{reason=backpressure}`. Covered by the `@AC-2` tests in `src/__tests__/notifyServiceImpl.test.ts`, including "StreamAlerts backpressure over real grpc-js"; the grpc-js status-path invariant is NOTIFY-18 in the constitution.
 
 - **RESOLVED 2026-11-26 — Severity filter type/runtime mismatch (latent bug), by feature `316-fix-notify-stream-contract`.** `StreamSubscriber.severities` is `AlertSeverity[]` (`src/grpc/notifyServiceImpl.ts#StreamSubscriber`), matching the string enum the filter compares at runtime; the `@AC-1` test in `src/__tests__/notifyServiceImpl.test.ts` covers the string form, and the severity fixtures there are string enums.
 
@@ -71,7 +72,7 @@ The open rows above were re-verified against `1302e6d` and recorded as `docs/rep
 | `2026-10-19-notify-claude-md-drift-defect` (pruned 2026-11-10; `git show adf411c3:docs/reports/2026-10-19-notify-claude-md-drift-defect.md`) | Notify CLAUDE.md banner and credential note cite resolved or retired items |
 | [`2026-10-19-notify-listalerts-owner-fallback-unscoped-defect`](../../../docs/reports/2026-10-19-notify-listalerts-owner-fallback-unscoped-defect.md) | ListAlerts trusts the body userId and is unscoped with no identity |
 | [`2026-10-19-notify-severities-type-runtime-mismatch-defect`](../../../docs/reports/2026-10-19-notify-severities-type-runtime-mismatch-defect.md) | StreamAlerts severities filter typed number[] but carries string enums at runtime — **resolved (feature 316)**, see the Resolved section |
-| [`2026-10-19-notify-stream-ignores-backpressure-defect`](../../../docs/reports/2026-10-19-notify-stream-ignores-backpressure-defect.md) | StreamAlerts fan-out ignores write backpressure (unbounded buffering) |
+| [`2026-10-19-notify-stream-ignores-backpressure-defect`](../../../docs/reports/2026-10-19-notify-stream-ignores-backpressure-defect.md) | StreamAlerts fan-out ignores write backpressure (unbounded buffering) — **resolved (feature 316)**, see the Resolved section |
 | `2026-10-19-notify-untargeted-push-broadcasts-all-users-defect` (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-19-notify-untargeted-push-broadcasts-all-users-defect.md) | Untargeted alert sends a Web Push to every user's devices — **resolved (feature 242; verified 2026-11-04)**, see the Resolved section |
 | [`2026-10-19-orphaned-code-defect`](../../../docs/reports/2026-10-19-orphaned-code-defect.md) | Orphaned modules, scripts and dependencies across services |
 | [`2026-10-28-node-leaf-c8-check-coverage-unenforced-defect`](../../../docs/reports/2026-10-28-node-leaf-c8-check-coverage-unenforced-defect.md) | Node-leaf c8 `--lines 40` is declared but never enforced (no `--check-coverage`) |

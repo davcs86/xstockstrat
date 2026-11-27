@@ -472,7 +472,7 @@ grep -n "1024 alerts queued" docs/roadmap/features/316-fix-notify-stream-contrac
 
 ### Step 8 — docs: add the `NOTIFY-*` grpc-js status-path invariant, retire the backpressure records, flip that report's sidecar
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-notify` (`services/xstockstrat-notify/docs/`, `docs/reports/`)
 **Files**:
 - `services/xstockstrat-notify/docs/context-constitution.md` — modify
