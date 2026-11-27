@@ -498,7 +498,7 @@ grep -n "conftest\|_helpers" tests/test_ingest_servicer.py | head -3
 
 ### Step 11 — service: producer sets presence; scorer reads it
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/engine/fundsignal_loop.py` — modify
@@ -534,7 +534,7 @@ ruff check . && ruff format --check .
 
 ### Step 12 — test: emit presence, scorer zero and the real-proto signal helper
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_analysis_helpers.py` — modify

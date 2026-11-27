@@ -181,16 +181,12 @@ def _seconds_to_datetime(seconds: int):
 
 def _make_signal(
     direction: str, conviction: float, valid_from_sec: int = 0, valid_until_sec: int = 0
-) -> MagicMock:
-    sig = MagicMock()
-    sig.direction = direction
-    sig.conviction = conviction
-    sig.valid_from.seconds = valid_from_sec
-    sig.valid_until.seconds = valid_until_sec
+) -> ingest_pb2.ExternalSignal:
+    sig = ingest_pb2.ExternalSignal(direction=direction, conviction=conviction)
     if valid_from_sec > 0:
-        sig.valid_from.ToDatetime.return_value = _seconds_to_datetime(valid_from_sec)
+        sig.valid_from.FromDatetime(_seconds_to_datetime(valid_from_sec))
     if valid_until_sec > 0:
-        sig.valid_until.ToDatetime.return_value = _seconds_to_datetime(valid_until_sec)
+        sig.valid_until.FromDatetime(_seconds_to_datetime(valid_until_sec))
     return sig
 
 
@@ -237,6 +233,15 @@ class TestComputeSignalScore:
         sig = _make_signal("buy", 0.0)  # zero conviction → uses 0.5
         result = _compute_signal_score({"uw": [sig]}, bar, ["uw"])
         assert result > 0.5  # buy with default conviction 0.5 → score > 0.5
+
+    def test_explicit_zero_conviction_scores_zero(self):
+        """@AC-3 @feature-309"""
+        bar = _make_bar()
+        not_given = _make_signal("buy", 0.0)
+        given = _make_signal("buy", 0.0)
+        given.conviction_provided = True
+        assert _compute_signal_score({"uw": [not_given]}, bar, ["uw"]) == pytest.approx(0.75)
+        assert _compute_signal_score({"uw": [given]}, bar, ["uw"]) == pytest.approx(0.5)
 
     def test_reads_bar_time_field_in_window(self):
         """@AC-2: compute_signal_score reads the bar's `time` field (not `timestamp`).

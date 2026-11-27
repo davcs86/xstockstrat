@@ -668,6 +668,7 @@ class FundamentalsSignalLoop:
                         symbol=symbol,
                         direction=direction,
                         conviction=float(conviction),
+                        conviction_provided=True,
                         valid_from=valid_from,
                         valid_until=valid_until,
                     )

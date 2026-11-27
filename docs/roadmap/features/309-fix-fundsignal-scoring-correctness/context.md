@@ -737,3 +737,19 @@ Tooling setup (step 10): uv ✓ 0.11.32 · `uv sync --extra dev` ⬇ (worktree `
 - TDD: AC-5 red: with the pre-Step-9 service files (`faea4d0f`) temporarily checked out, `.sdd-logs/v-1.log` shows `3 failed, 211 passed` (`assert (None is not None)`; `At index 0 diff: (False, 0.0) != (True, 0.0)`; `assert False is True`) → green: `.sdd-logs/v-2.log` `exit=0`, `214 passed`; full suite `626 passed`, `Required test coverage of 40% reached. Total coverage: 87.70%`; ruff `All checks passed!`, `58 files already formatted`; the helpers grep prints the `tests._helpers` imports.
 - Files modified: `services/xstockstrat-ingest/tests/test_ingest_servicer.py`, `services/xstockstrat-ingest/tests/test_mcp_client_loop.py`
 - Deviations: RED run against the pre-Step-9 service files (Deviation Log).
+
+## Session 2026-11-27 — sdd-execute sequential (steps 11+12, atomic unit)
+
+Tooling setup (steps 11+12): uv ✓ 0.11.32 · `uv sync --extra dev` ⬇ (worktree `.venv`) · ruff ✓ 0.16.9 · no Node install. Config-key wiring gate: not applicable (no key, no config migration).
+
+### Step 11 — service: producer sets presence; scorer reads it [done]
+- Unit 11+12. `_emit_signal` builds `ExternalSignal(..., conviction_provided=True, ...)` unconditionally (D-8). `compute_signal_score` reads `sig.conviction if (sig.conviction_provided or sig.conviction != 0.0) else 0.5`; the two neutral `return 0.5` lines and the other `servicer.py` readers are unchanged. A legacy NULL row (flag unset, 0.0) keeps its 0.5 weight (R-1).
+- GREEN (Step 11 block) `.sdd-logs/v-2.log` `exit=0` — `173 passed`; grep hits `fundsignal_loop.py:671`, `scoring.py:32`; ruff `All checks passed!`, `143 files already formatted`.
+- Files modified: `services/xstockstrat-analysis/app/engine/fundsignal_loop.py`, `services/xstockstrat-analysis/app/services/scoring.py`
+- Deviations: none
+
+### Step 12 — test: emit presence, scorer zero and the real-proto signal helper [done]
+- Unit 11+12. `_make_signal` is now a real `ingest_pb2.ExternalSignal` (same signature; `valid_from`/`valid_until` set via `FromDatetime` only when > 0); all 16 call sites and `test_zero_conviction_uses_default_half` (the R-1 pin, unchanged) passed on the pre-Step-11 tree. New: `test_explicit_zero_conviction_scores_zero` (`@AC-3 @feature-309`: not given → 0.75, given → 0.5); `test_screener.py::test_ac3_screen_scores_explicit_zero_conviction_as_zero` (`@AC-3 @feature-309`, `_in_window_signal("buy", 0.0)` plus the flag, a capturing wrapper over `scoring.compute_signal_score` → `[0.5]`); `test_fundsignal_loop.py::TestUnscoredSymbols::test_zero_score_emits_explicit_zero_conviction` (pe 40, roe 0, eps -1, pb / d-e missing → `conviction == 0.0`, `conviction_provided is True`).
+- TDD: AC-3 red `.sdd-logs/v-1.log` — `3 failed, 170 passed` (`assert 0.75 == 0.5 ± 5.0e-07`; `assert [0.75] == [0.5 ± 5.0e-07]`; `assert False is True` on `conviction_provided`); that block printed `exit=0` because its last command (the MagicMock grep guard) passed → green `.sdd-logs/v-3.log` `exit=0` — `173 passed`; full suite `1846 passed`, `Required test coverage of 40% reached. Total coverage: 91.91%`; ruff clean; no `sig = MagicMock()` left.
+- Files modified: `services/xstockstrat-analysis/tests/test_analysis_helpers.py`, `services/xstockstrat-analysis/tests/test_screener.py`, `services/xstockstrat-analysis/tests/test_fundsignal_loop.py`
+- Deviations: none

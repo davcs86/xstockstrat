@@ -1012,6 +1012,22 @@ class TestUnscoredSymbols:
         assert insert.args[4] == pytest.approx(0.30, abs=1e-9)
 
     @pytest.mark.asyncio
+    async def test_zero_score_emits_explicit_zero_conviction(self):
+        loop = _identity_loop()
+        rows = {
+            "NIL": fundamentals_row(
+                "NIL", pe_ratio=40.0, roe=0.0, eps=-1.0, missing=("pb_ratio", "debt_to_equity")
+            )
+        }
+        _serve_rows(loop, rows)
+        await loop.run_once(override_symbols=["NIL"])
+
+        (_m, req, _meta), *rest = loop._ingest.of("IngestSignal")
+        assert rest == []
+        assert req.signal.conviction == 0.0
+        assert req.signal.conviction_provided is True
+
+    @pytest.mark.asyncio
     async def test_ac3_formula_all_missing_skipped_partial_scored(self):
         """@AC-1 @feature-309: the formula input carries only the present metrics."""
         loop = _identity_loop({"fundsignal.scoring_formula_id": _SYSTEM_FORMULA})
