@@ -5,7 +5,7 @@
 **GitHub Issue**: none (Issues disabled) — reports: `docs/reports/2026-10-21-analysis-fundsignal-formula-partial-row-wire-zero-defect.md`, `docs/reports/2026-10-21-analysis-fundsignal-small-cross-section-quantile-defect.md`, `docs/reports/2026-10-21-analysis-zero-conviction-read-as-neutral-defect.md`, `docs/reports/2026-10-21-ingest-fundsignal-fabricated-signals-not-retracted-defect.md`
 **Severity**: SEV-2
 **Created**: 2026-11-10
-**Last Updated**: 2026-11-20
+**Last Updated**: 2026-11-27
 
 ---
 
@@ -17,6 +17,9 @@
 | 2026-11-10 | `draft` → `spec-ready` | /sdd-review | Product spec approved (7 warnings) |
 | 2026-11-20 | `spec-ready` → `design-approved` | /sdd-design | Design debated (3 rounds, full) and approved; recon.md + debate.md + design.md written |
 | 2026-11-20 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 18 steps |
+| 2026-11-26 | `implementation-ready` → `in-progress` | /sdd-execute | → in-progress (sdd-batch-execute setup) |
+| 2026-11-27 | `in-progress` (unchanged) | /sdd-spec re-spec | Steps 16-18 (ingest `019` retraction migration, fixture, cross-schema docs) dropped by operator ruling: the frozen retraction list is empty; spec now 15 steps, `@AC-4` closed by recorded zero-row evidence |
+| 2026-11-27 | `in-progress` → `code-completed` | /sdd-execute | All 15 steps done; @AC-1..@AC-3 and @AC-5 promoted to the durable analysis/ingest suites (C-16); @AC-4 not promoted (operator ruling, zero-row evidence) |
 
 ---
 
@@ -52,7 +55,7 @@ re-run /sdd-spec if the registry changes.)_
 | `xstockstrat-ingest` owner | Signal normalization correctness, idempotent ingestion, newsletter source schema stability |
 | `xstockstrat-indicators` owner | Numeric precision, no side-effects from formula execution |
 | `xstockstrat-agent` owner | MCP tool contract stability and `docs/runbooks/mcp-tools.md` parity |
-| `xstockstrat-marketdata` owner | Acknowledges the migration-time read of `marketdata.fundamentals` by ingest `019` (design D-12) |
+| `xstockstrat-marketdata` owner | _No longer applies: ingest `019` (the migration-time read of `marketdata.fundamentals`, design D-12) was dropped on 2026-11-27 — see implementation-spec.md § Dropped Steps_ |
 
 ## Next Action
 

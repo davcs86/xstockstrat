@@ -1,6 +1,6 @@
 # Implementation Spec: fix-migration-tooling-safety
 
-**Status**: `pending`
+**Status**: `complete`
 **Created**: 2026-11-20
 **Feature**: `docs/roadmap/features/318-fix-migration-tooling-safety/feature.md`
 **Total Steps**: 13
@@ -115,7 +115,7 @@ CHANGEd in Step 13 under operator sign-off O-3; `@AC-27` (279) is EXTENDed by th
 
 ### Step 1 — service: remove the `force 0` arm from `db-migrate.sh up`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: platform tooling (`scripts/`)
 **Files**:
 - `scripts/db-migrate.sh` — modify
@@ -159,7 +159,7 @@ bash scripts/migration-dirty-guard.test.sh && bash scripts/migration-ahead-check
 
 ### Step 2 — test: `db-migrate.sh up` never forces a dirty service
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: platform tooling (`scripts/`)
 **Files**:
 - `scripts/tests/test_db_migrate.py` — create
@@ -216,7 +216,7 @@ Coverage threshold: none applies — `scripts/` has no coverage gate in CI (`ci.
 
 ### Step 3 — service: the dirty guard refuses every dirty state and computes the recovery
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: platform tooling (`scripts/`)
 **Files**:
 - `scripts/migration-dirty-guard.sh` — modify
@@ -332,7 +332,7 @@ cd scripts && uv run --extra dev pytest tests/test_migration_dirty_guard.py test
 
 ### Step 4 — test: port the guard tests to pytest and delete the legacy shell test
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: platform tooling (`scripts/`)
 **Files**:
 - `scripts/tests/test_migration_dirty_guard.py` — create
@@ -428,7 +428,7 @@ Coverage threshold: none applies (`scripts/` has no coverage gate — `ci.yml:89
 
 ### Step 5 — service: reword the ahead-check's dirty-ahead refusal
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: platform tooling (`scripts/`)
 **Files**:
 - `scripts/migration-ahead-check.sh` — modify
@@ -436,9 +436,11 @@ Coverage threshold: none applies (`scripts/` has no coverage gate — `ci.yml:89
 **Reviewers**: DBA — run-order compliance with `scripts/db-migrate.sh`; Platform Lead — cross-service architecture
 
 **Codebase Evidence**:
-- Confirmed via: `grep -n "prev\|refusing" scripts/migration-ahead-check.sh` → `:55` `prev=$((n - 1))`, `:58`
+- Confirmed via: `grep -n "prev\|refusing" scripts/migration-ahead-check.sh` → `:17` and `:46` (other refusals,
+  unchanged), `:55` `prev=$((n - 1))`, `:58`
   "...; refusing \`force 0\` (a newer release's migration failed part-way; this image cannot see its files).",
-  `:59` the `Recover with the newer release's files: migrate ... force $prev` line, `:60` the `?` note.
+  `:59` the `Recover with the newer release's files: migrate ... force $prev` line. `:60` (the
+  `(use '?x-migrations-table=' ...` note) matches neither word; confirm it with `sed -n 60p`.
 - Asserted strings that must survive: `force <n-1>` and `<schema> is dirty at version <n>`
   (`scripts/migration-ahead-check.test.sh:44-45`, `scripts/migration-rerun.py:1174-1175`), exit 4 (`:43`,
   `migration-rerun.py:1169-1170`), literal `$DATABASE_URL`, no `postgres://` (`:67-69`; durable `@AC-25`).
@@ -466,7 +468,7 @@ bash scripts/migration-ahead-check.test.sh
 
 ### Step 6 — test: a dirty-ahead service is refused with the reworded recovery
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: platform tooling (`scripts/`)
 **Files**:
 - `scripts/tests/test_db_migrate.py` — modify
@@ -506,7 +508,7 @@ Coverage threshold: none applies (`scripts/` has no coverage gate — `ci.yml:89
 
 ### Step 7 — service: add the ordering gate `scripts/check-migration-order.py`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: platform tooling (`scripts/`)
 **Files**:
 - `scripts/check-migration-order.py` — create
@@ -568,7 +570,7 @@ cd scripts && uv run --extra dev ruff check . && uv run --extra dev ruff format 
 
 ### Step 8 — test: the ordering gate against a throwaway repository
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: platform tooling (`scripts/`)
 **Files**:
 - `scripts/tests/test_check_migration_order.py` — create
@@ -624,7 +626,7 @@ Coverage threshold: none applies (`scripts/` has no coverage gate — `ci.yml:89
 
 ### Step 9 — service: CI job `migration-order-gate`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: platform tooling (`.github/workflows/`)
 **Files**:
 - `.github/workflows/ci.yml` — modify
@@ -716,7 +718,7 @@ python3 -c "import yaml" 2>/dev/null && python3 -c "import yaml; yaml.safe_load(
 
 ### Step 10 — test: the CI wiring of the ordering gate
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: platform tooling (`scripts/`)
 **Files**:
 - `scripts/tests/test_check_migration_order.py` — modify
@@ -758,7 +760,7 @@ Coverage threshold: none applies (`scripts/` has no coverage gate — `ci.yml:89
 
 ### Step 11 — docs: forward-only rule, refuse-all recovery and the gate verdicts
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/patterns/`, `docs/runbooks/`
 **Files**:
 - `docs/patterns/database.md` — modify
@@ -782,7 +784,8 @@ Coverage threshold: none applies (`scripts/` has no coverage gate — `ci.yml:89
   `force 0`: **dirty at a version ≥ 40 means `force <n-1>`, never `force 0`.**"
 - `docs/context-constitution.md:82` — pointer row "... CI `migration-rerun`, `migration-contract-gate`".
 - Ledger text to reconcile: `docs/roadmap/ledger/insights.md:900` (pre-assign ascending migration numbers in
-  merge-order.md); precedent wording `docs/patterns/config-governance.md:513`.
+  merge-order.md); precedent wording `docs/patterns/config-governance.md:634`
+  ("**Migration renumbered `024` → `026`:** `merge-order.md` pre-assigned `024`, but feature 166's ...").
 - The section heading "Contract migration recovery" is kept: the Step 3 guard text and three references
   (`database.md:63`, `:75`, `context-constitution.md:82`) name it.
 
@@ -849,7 +852,7 @@ npx --yes markdownlint-cli2 --config .markdownlint.yaml docs/patterns/database.m
 
 ### Step 12 — docs: record the gaps this feature leaves open
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/`
 **Files**:
 - `docs/context-constitution-findings.md` — modify
@@ -895,7 +898,7 @@ npx --yes markdownlint-cli2 --config .markdownlint.yaml docs/context-constitutio
 
 ### Step 13 — docs: operator-signed changes to two durable business rules (C-16)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/sdd/business-rules/`, `services/xstockstrat-config/acceptance/`
 **Files**:
 - `docs/sdd/business-rules/platform.feature` — modify
@@ -968,3 +971,41 @@ test "$(grep -c "@AC-19 @FR-8 @feature-225" docs/sdd/business-rules/platform.fea
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+### Step 9 / Step 10 — `FORBID_NEW` and run-line indentation (2026-11-26)
+- **Spec said**: Step 9 instruction 3's YAML puts the `FORBID_NEW:` env line and the
+  `python3 scripts/check-migration-order.py "origin/$BASE_REF" $FORBID_NEW` run line at 10 spaces (the
+  step's `env:`/`run:` keys sit at 8, as in every other job in `ci.yml`). Step 10's Instructions expect
+  both lines at 12 spaces, so its whole-line assertions could never pass against the Step 9 file.
+- **Actually done**: Step 9 kept its own convention (both lines at 10 spaces). Step 10's two expected
+  strings are corrected to 10 spaces:
+  `          FORBID_NEW: ${{ ... }}` and
+  `          python3 scripts/check-migration-order.py "origin/$BASE_REF" $FORBID_NEW`.
+  The Step 10 body is not edited (F-09); Step 10 executes against this entry.
+- **Disposition**: operator decision (2026-11-26, "10 spaces"), raised as a Step 9 blocker. The Step 9
+  red run already used the corrected 10-space strings.
+
+### Step 11 — 17 pre-existing markdownlint findings fixed (2026-11-27)
+- **Spec said**: Instructions 9 and 10 edit one passage of `docs/runbooks/config-rollout.md` and one
+  row of `docs/context-constitution.md`. The Verification ends with `markdownlint-cli2` over all four
+  docs, which exited 1 on 17 findings already on lines the step did not touch (config-rollout.md 13,
+  context-constitution.md 4).
+- **Actually done**: scope expanded to fix all 17 in those two files (both already in Step 11's
+  **Files**). config-rollout.md: `text` language on three bare fences (MD040), blank lines around
+  eight fences (MD031) and two lists (MD032). context-constitution.md: the `keys|keyPrefixes` pipe in
+  the `:33` code span escaped as `keys\|keyPrefixes` (MD038 + MD056, the table cell split), and the
+  closing `_..._` footer emphasis changed to `*...*` (MD049, `:92-93`). No wording changed.
+- **Disposition**: operator decision (2026-11-27, "B3 fix the lint" → option A), raised as a Step 11
+  blocker. Verification re-run: `Summary: 0 issues in 0 files`, `exit=0`.
+
+### Step 12 — 3 pre-existing markdownlint findings fixed (2026-11-27)
+- **Spec said**: add three rows to `docs/context-constitution-findings.md`. The Verification ends with
+  `markdownlint-cli2` on that file, which exited 1 on 3 findings already on lines the step did not
+  touch: MD012 (two blank lines at `:83-84`) and MD049 (the closing `_..._` footer at `:109-110`).
+- **Actually done**: scope expanded to fix all 3 in the same file (already in Step 12's **Files**):
+  one blank line deleted and the footer emphasis changed to `*...*`. No wording changed. The
+  `migration-rerun.py` row also cites `~L1079` (a third stale log line beside the docstring, `:735`
+  and `:1067-1068` named by the spec).
+- **Disposition**: operator decision (2026-11-27, option A, by extension of the Step 11 ruling
+  "B3 fix the lint"), raised as a Step 12 blocker. Verification re-run: `Summary: 0 issues in 0
+  files`, `exit=0`.

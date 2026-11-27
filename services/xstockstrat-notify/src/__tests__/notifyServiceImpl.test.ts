@@ -16,8 +16,11 @@
  */
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import * as http2 from 'node:http2';
+import * as grpc from '@grpc/grpc-js';
 
 import { NotifyServiceImpl, rowToAlert } from '../grpc/notifyServiceImpl.js';
+import { createNotifyServiceDefinition } from '../grpc/serviceDefinition.js';
 import { FanoutDispatcher } from '../fanout/fanout.js';
 import { SendgridSender } from '../fanout/sendgridSender.js';
 import { fakeCommsgun } from './fixtures/fakeCommsgun.js';
@@ -27,6 +30,7 @@ import { trace } from '@opentelemetry/api';
 import { node as sdkNode } from '@opentelemetry/sdk-node';
 import { counterValue, install, values } from './fixtures/collectingReader.js';
 import { stubFetch } from './fixtures/stubFetch.js';
+import { withLogs } from './fixtures/withLogs.js';
 
 // ---------------------------------------------------------------------------
 // Harness — the import must succeed, never silently skip (074 guard)
@@ -117,7 +121,7 @@ function fanoutCfg(over: { minSev?: number; minConf?: number; dedup?: number; fr
 function makeAlert(overrides: any = {}) {
   return {
     alertId: 'a1',
-    severity: 2,
+    severity: 'ALERT_SEVERITY_WARNING',
     category: 'trading',
     targetUserId: '',
     acknowledged: false,
@@ -695,8 +699,8 @@ describe('matchesSubscriber', () => {
 
   it('filters by severity when severities array is set', () => {
     const impl = makeImpl();
-    const alert = makeAlert({ severity: 3 });
-    const sub = { userId: '', categories: [], severities: [1, 2], includeAcknowledged: false, call: {} };
+    const alert = makeAlert({ severity: 'ALERT_SEVERITY_ERROR' });
+    const sub = { userId: '', categories: [], severities: ['ALERT_SEVERITY_INFO', 'ALERT_SEVERITY_WARNING'], includeAcknowledged: false, call: {} };
     assert.strictEqual((impl as any).matchesSubscriber(alert, sub), false);
   });
 
@@ -720,6 +724,28 @@ describe('matchesSubscriber', () => {
 // ---------------------------------------------------------------------------
 
 describe('streamAlerts', () => {
+  it('@AC-1: a subscriber filtered to WARNING and CRITICAL receives a CRITICAL alert and not an INFO alert', async () => {
+    const impl = makeImpl();
+    const received: any[] = [];
+    impl.streamAlerts({
+      request: {
+        userId: '',
+        categories: [],
+        severities: ['ALERT_SEVERITY_WARNING', 'ALERT_SEVERITY_CRITICAL'],
+        includeAcknowledged: false,
+      },
+      on() {},
+      write(alert: any) { received.push(alert); },
+    });
+
+    await emitAndFlush(impl, REQ({ severity: 'ALERT_SEVERITY_CRITICAL' }));
+    assert.strictEqual(received.length, 1);
+    assert.strictEqual(received[0].severity, 'ALERT_SEVERITY_CRITICAL');
+
+    await emitAndFlush(impl, REQ({ severity: 'ALERT_SEVERITY_INFO' }));
+    assert.strictEqual(received.length, 1);
+  });
+
   it('registers subscriber and deregisters on cancelled', () => {
     const impl = makeImpl();
 
@@ -771,6 +797,241 @@ describe('StreamAlerts eviction telemetry (feature 294)', () => {
     assert.equal(received['sub-3'].length, 1);
     assert.equal((impl as any).subscribers.size, 2);
   });
+});
+
+// ---------------------------------------------------------------------------
+// StreamAlerts backpressure eviction (feature 316)
+// ---------------------------------------------------------------------------
+
+function emitOnce(impl: any, request: any): Promise<any> {
+  return new Promise((resolve, reject) =>
+    impl.emitAlert({ request }, (err: any, res: any) => (err ? reject(err) : resolve(res))),
+  );
+}
+
+// A StreamAlerts call whose client never drains: write() returns false; emit() dispatches synchronously.
+function stalledCall(impl: any, opts: { grow?: boolean; writableLength?: number; emitThrows?: boolean } = {}) {
+  const listeners: Record<string, Array<(arg?: any) => void>> = {};
+  const emitted: Array<[string, any]> = [];
+  const sizeAtEmit: number[] = [];
+  const call = {
+    request: { userId: 'u-slow', categories: [], severities: [], includeAcknowledged: false },
+    writableLength: opts.writableLength ?? 0,
+    writes: 0,
+    on(event: string, handler: (arg?: any) => void) {
+      (listeners[event] = listeners[event] ?? []).push(handler);
+    },
+    write() {
+      call.writes++;
+      if (opts.grow !== false) call.writableLength++;
+      return false;
+    },
+    emit(event: string, arg: any) {
+      emitted.push([event, arg]);
+      sizeAtEmit.push(impl.subscribers.size);
+      if (opts.emitThrows) throw new Error('teardown failed');
+      for (const handler of listeners[event] ?? []) handler(arg);
+    },
+  };
+  impl.streamAlerts(call);
+  return { call, listeners, emitted, sizeAtEmit };
+}
+
+const isLevel = (level: string) => (r: Record<string | symbol, unknown>) => r[Symbol.for('level')] === level;
+
+describe('StreamAlerts backpressure eviction (feature 316)', () => {
+  it('@AC-2: a subscriber with 1024 queued alerts is evicted on the next matching alert', async () => {
+    const reader = install();
+    const impl = makeImpl();
+    const { call, listeners, emitted, sizeAtEmit } = stalledCall(impl);
+    const evictions = (reason: string) => counterValue(reader, 'notify.stream.evictions', 'reason', reason);
+
+    await withLogs(async () => {
+      for (let i = 0; i < 1024; i++) await emitOnce(impl, REQ());
+    });
+    assert.equal(call.writes, 1024);
+    assert.equal((impl as any).subscribers.size, 1);
+    assert.equal(emitted.length, 0);
+
+    const logs = await withLogs(async () => {
+      await emitOnce(impl, REQ());
+    });
+    assert.equal(call.writes, 1024, 'the evicting alert is not written');
+    assert.equal((impl as any).subscribers.size, 0);
+    assert.equal(await evictions('backpressure'), 1);
+    assert.equal(await evictions('stream_error'), 0);
+    assert.deepEqual(emitted, [['error', { code: 8, details: 'slow consumer evicted' }]]);
+    assert.ok(Number.isInteger(emitted[0][1].code));
+    assert.equal(typeof emitted[0][1].details, 'string');
+    assert.deepEqual(sizeAtEmit, [0], 'the map delete precedes the emit');
+    const warns = logs.filter(isLevel('warn'));
+    assert.equal(warns.length, 1);
+    assert.equal(warns[0].message, 'StreamAlerts subscriber evicted');
+    assert.equal(warns[0].reason, 'backpressure');
+    const emittedRecords = logs.filter((r) => r.message === 'Alert emitted');
+    assert.equal(emittedRecords.length, 1);
+    assert.equal(emittedRecords[0].delivered, 0);
+
+    await withLogs(async () => {
+      await emitOnce(impl, REQ());
+    });
+    assert.equal(call.writes, 1024);
+
+    const cancelLogs = await withLogs(async () => {
+      for (const handler of listeners['cancelled'] ?? []) handler();
+    });
+    assert.equal((impl as any).subscribers.size, 0);
+    assert.equal(await evictions('backpressure'), 1);
+    assert.equal(await evictions('stream_error'), 0);
+    assert.equal(cancelLogs.filter((r) => r.message === 'StreamAlerts subscriber disconnected').length, 0);
+  });
+
+  it('a subscriber whose write returns false but whose queue stays empty is never evicted', async () => {
+    const reader = install();
+    const impl = makeImpl();
+    const { call } = stalledCall(impl, { grow: false });
+    await withLogs(async () => {
+      for (let i = 0; i < 1026; i++) await emitOnce(impl, REQ());
+    });
+    assert.equal(call.writes, 1026);
+    assert.equal((impl as any).subscribers.size, 1);
+    assert.equal(await counterValue(reader, 'notify.stream.evictions', 'reason', 'backpressure'), 0);
+  });
+
+  it('@AC-5: a throwing teardown never fails EmitAlert', async () => {
+    const reader = install();
+    const impl = makeImpl();
+    stalledCall(impl, { writableLength: 1024, emitThrows: true });
+    let res: any;
+    const logs = await withLogs(async () => {
+      res = await emitOnce(impl, REQ());
+    });
+    assert.ok(res.alertId, 'EmitAlert answered with an alertId');
+    assert.equal((impl as any).subscribers.size, 0);
+    assert.equal(await counterValue(reader, 'notify.stream.evictions', 'reason', 'backpressure'), 1);
+    const teardownWarns = logs.filter(isLevel('warn')).filter((r) => r.message === 'StreamAlerts eviction teardown failed');
+    assert.equal(teardownWarns.length, 1);
+  });
+
+  it('a repeated stream error on one subscriber counts stream_error once', async () => {
+    const reader = install();
+    const impl = makeImpl();
+    const { listeners } = stalledCall(impl);
+    for (let i = 0; i < 2; i++) for (const handler of listeners['error'] ?? []) handler(new Error('boom'));
+    assert.equal(await counterValue(reader, 'notify.stream.evictions', 'reason', 'stream_error'), 1);
+    assert.equal((impl as any).subscribers.size, 0);
+  });
+});
+
+async function until(cond: () => boolean, ms: number, what: string): Promise<void> {
+  const deadline = Date.now() + ms;
+  while (!cond()) {
+    if (Date.now() > deadline) throw new Error(`timed out waiting for ${what}`);
+    await new Promise((r) => setTimeout(r, 10));
+  }
+}
+
+describe('StreamAlerts backpressure over real grpc-js (feature 316)', () => {
+  it(
+    '@AC-2: a paused http2 client is evicted at 1024 queued alerts and gets grpc-status 8 after it resumes',
+    { timeout: 20000 },
+    async () => {
+      const reader = install();
+      const impl = makeImpl();
+      const def = createNotifyServiceDefinition();
+      const server = new grpc.Server();
+      server.addService(def, impl as unknown as grpc.UntypedServiceImplementation);
+      let session: http2.ClientHttp2Session | undefined;
+      try {
+        const port = await new Promise<number>((resolve, reject) =>
+          server.bindAsync('127.0.0.1:0', grpc.ServerCredentials.createInsecure(), (err, p) =>
+            err ? reject(err) : resolve(p),
+          ),
+        );
+        session = http2.connect('http://127.0.0.1:' + port);
+        const stream = session.request({
+          ':method': 'POST',
+          ':path': def.streamAlerts.path,
+          'content-type': 'application/grpc',
+          te: 'trailers',
+        });
+        let trailers: http2.IncomingHttpHeaders | undefined;
+        stream.on('trailers', (t) => {
+          trailers = t;
+        });
+        const body: Buffer = def.streamAlerts.requestSerialize({
+          userId: '',
+          categories: [],
+          severities: [],
+          includeAcknowledged: false,
+        });
+        const frame = Buffer.alloc(5 + body.length);
+        frame.writeUInt8(0, 0);
+        frame.writeUInt32BE(body.length, 1);
+        body.copy(frame, 5);
+        // No 'data' listener yet: the client is paused and the h2 window fills.
+        stream.end(frame);
+
+        await until(() => (impl as any).subscribers.size === 1, 5000, 'the subscriber');
+        const [sub] = (impl as any).subscribers.values();
+        const call = sub.call;
+        let writes = 0;
+        let maxQueued = 0;
+        const realWrite = call.write.bind(call);
+        call.write = (msg: any) => {
+          writes++;
+          const ok = realWrite(msg);
+          maxQueued = Math.max(maxQueued, call.writableLength);
+          return ok;
+        };
+
+        await withLogs(async () => {
+          for (let i = 0; i < 3000 && (impl as any).subscribers.size > 0; i++) {
+            await emitOnce(impl, REQ({ body: 'x'.repeat(1024) }));
+            await new Promise((r) => setImmediate(r));
+          }
+        });
+        assert.equal((impl as any).subscribers.size, 0, 'the stalled subscriber was evicted');
+        const writesAtEviction = writes;
+
+        // (f) the queue stays capped while the client is paused
+        assert.ok(maxQueued <= 1024, `highest writableLength ${maxQueued} <= 1024`);
+        assert.ok(call.writableLength <= 1024, `writableLength ${call.writableLength} <= 1024`);
+        await withLogs(async () => {
+          for (let i = 0; i < 10; i++) await emitOnce(impl, REQ());
+        });
+        assert.equal(writes, writesAtEviction, 'no write after eviction');
+        await new Promise((r) => setTimeout(r, 100));
+        assert.equal(trailers, undefined, 'the status is queued behind the window');
+
+        // (g) after resume: every queued alert, then grpc-status 8
+        let frames = 0;
+        let pending = Buffer.alloc(0);
+        stream.on('data', (chunk: Buffer) => {
+          pending = Buffer.concat([pending, chunk]);
+          while (pending.length >= 5 && pending.length >= 5 + pending.readUInt32BE(1)) {
+            pending = pending.subarray(5 + pending.readUInt32BE(1));
+            frames++;
+          }
+        });
+        await new Promise<void>((resolve, reject) => {
+          const timer = setTimeout(() => reject(new Error('no end within 5 s')), 5000);
+          stream.on('end', () => {
+            clearTimeout(timer);
+            resolve();
+          });
+        });
+        assert.equal(frames, writesAtEviction);
+        assert.equal(trailers?.['grpc-status'], '8');
+        assert.equal(trailers?.['grpc-message'], 'slow%20consumer%20evicted');
+        assert.equal(await counterValue(reader, 'notify.stream.evictions', 'reason', 'backpressure'), 1);
+        assert.equal(await counterValue(reader, 'notify.stream.evictions', 'reason', 'stream_error'), 0);
+      } finally {
+        session?.destroy();
+        server.forceShutdown();
+      }
+    },
+  );
 });
 
 describe('fanout span propagation (feature 294, design.md Open Risk)', () => {

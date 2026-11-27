@@ -45,6 +45,24 @@ func (rt rewriteTransport) RoundTrip(req *http.Request) (*http.Response, error) 
 	return http.DefaultTransport.RoundTrip(out)
 }
 
+func TestCallTimeout_F321(t *testing.T) {
+	fixed := func(d time.Duration) func() time.Duration { return func() time.Duration { return d } }
+	for _, tc := range []struct {
+		name string
+		fn   func() time.Duration
+		want time.Duration
+	}{
+		{"nil", nil, 5 * time.Second},
+		{"zero", fixed(0), 5 * time.Second},
+		{"negative", fixed(-time.Second), 5 * time.Second},
+		{"positive", fixed(1234 * time.Millisecond), 1234 * time.Millisecond},
+	} {
+		if got := callTimeout(tc.fn); got != tc.want {
+			t.Errorf("%s: callTimeout = %v, want %v", tc.name, got, tc.want)
+		}
+	}
+}
+
 var testTiming = IBKRTiming{LSTRefreshMargin: time.Minute, HandshakeTimeout: 2 * time.Second, ReauthMinInterval: 30 * time.Second}
 
 // sessionClient builds a vector-configured client whose HTTP traffic reaches h; mod may adjust the config.

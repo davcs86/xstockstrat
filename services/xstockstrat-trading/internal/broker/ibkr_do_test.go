@@ -492,3 +492,85 @@ func TestIBKRSubmitOrder_SessionFailureNoPOST(t *testing.T) {
 		})
 	}
 }
+
+func isTimeoutErr(err error) bool {
+	var netErr net.Error
+	return errors.Is(err, context.DeadlineExceeded) || (errors.As(err, &netErr) && netErr.Timeout())
+}
+
+func ibkrTimingWithHandshake(d time.Duration) func() broker.IBKRTiming {
+	return func() broker.IBKRTiming {
+		return broker.IBKRTiming{LSTRefreshMargin: time.Minute, HandshakeTimeout: d, ReauthMinInterval: 30 * time.Second}
+	}
+}
+
+// @AC-1
+func TestIBKRSignedRequest_BoundedByLiveTimeout_F321_AC1(t *testing.T) {
+	block := make(chan struct{})
+	c, h := lenientIBKRClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/iserver/account/U123/orders") {
+			// Draining the body lets the server see the client hang up.
+			_, _ = io.Copy(io.Discard, r.Body)
+			select {
+			case <-r.Context().Done():
+			case <-block:
+			}
+			return
+		}
+		writeJSON(w, http.StatusOK, ibkrConidReply)
+	}), func(cfg *broker.IBKRConfig) {
+		cfg.Timing = ibkrTimingWithHandshake(2 * time.Second)
+		cfg.Timeout = func() time.Duration { return 200 * time.Millisecond }
+	})
+	t.Cleanup(func() { close(block) }) // runs before the server's Close
+	start := time.Now()
+	_, err := c.SubmitOrder(context.Background(), broker.OrderRequest{Symbol: "AAPL", Side: "buy", OrderType: "market", Qty: 1, TimeInForce: "day", ClientOrderID: "xss-coid-f321"})
+	elapsed := time.Since(start)
+	if !isTimeoutErr(err) {
+		t.Fatalf("err = %v, want a timeout", err)
+	}
+	if elapsed >= 3*time.Second {
+		t.Fatalf("SubmitOrder returned after %v, want under 3s (live broker.timeout_ms 200ms)", elapsed)
+	}
+	if n := h.Count(http.MethodPost, "/iserver/account/U123/orders"); n != 1 {
+		t.Fatalf("order POSTs = %d, want exactly 1", n)
+	}
+}
+
+// @AC-1
+func TestIBKRSignedRequest_TimeoutChangeAppliesWithoutRebuild_F321_AC1(t *testing.T) {
+	var timeoutMs atomic.Int64
+	timeoutMs.Store(5000)
+	c, _ := lenientIBKRClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		select {
+		case <-time.After(300 * time.Millisecond):
+		case <-r.Context().Done():
+			return
+		}
+		writeJSON(w, http.StatusOK, ibkrOrdersJSON)
+	}), func(cfg *broker.IBKRConfig) {
+		cfg.Timing = ibkrTimingWithHandshake(2 * time.Second)
+		cfg.Timeout = func() time.Duration { return time.Duration(timeoutMs.Load()) * time.Millisecond }
+	})
+	if _, err := c.GetOrder(context.Background(), "42"); err != nil {
+		t.Fatalf("GetOrder at 5s: %v", err)
+	}
+	timeoutMs.Store(100)
+	if _, err := c.GetOrder(context.Background(), "42"); !isTimeoutErr(err) {
+		t.Fatalf("GetOrder after the live value dropped to 100ms: err = %v, want a timeout", err)
+	}
+}
+
+// @AC-1 — R-7 guard: the request timeout never bounds the handshake.
+func TestIBKRHandshake_SlowerThanRequestTimeoutStillSucceeds_F321_AC1(t *testing.T) {
+	c, h := lenientIBKRClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, http.StatusOK, ibkrOrdersJSON)
+	}), func(cfg *broker.IBKRConfig) {
+		cfg.Timing = ibkrTimingWithHandshake(2 * time.Second)
+		cfg.Timeout = func() time.Duration { return 100 * time.Millisecond }
+	})
+	h.SetOverride(testdata.IBKRLSTPath, testdata.IBKRAuthOverride{Delay: 300 * time.Millisecond})
+	if _, err := c.GetOrder(context.Background(), "42"); err != nil {
+		t.Fatalf("GetOrder with a 300ms handshake and a 100ms request timeout: %v", err)
+	}
+}

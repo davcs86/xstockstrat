@@ -2,8 +2,12 @@
 read-timeout policy fallbacks."""
 
 import asyncio
+import contextlib
 import math
+import re
 import time
+from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 import grpc
@@ -11,8 +15,8 @@ import pytest
 from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 
-from app import client, tools
-from tests.conftest import ADMIN, _ctx
+from app import auth, client, tools
+from tests.conftest import ADMIN, _ctx, _rpc_error
 
 # Bounds every await that would otherwise hang, so a missing deadline fails rather than hangs.
 _HANG_GUARD_S = 10
@@ -66,6 +70,74 @@ async def test_ac2_hung_analysis_read_fails_fast_with_deadline_error(monkeypatch
         assert "within 0.2s" in str(exc_info.value)
     finally:
         await server.stop(0)
+
+
+@pytest.mark.asyncio
+async def test_ac2_worst_case_at_setconfig_ceiling_stays_under_57s(monkeypatch):
+    """@AC-2: identity answering just inside its deadline, the policy read just inside its bound
+    and a hung analysis read at the SetConfig ceiling together stay within 57 s."""
+    config_impl = (
+        Path(__file__).resolve().parents[3]
+        / "services/xstockstrat-config/src/grpc/configServiceImpl.ts"
+    ).read_text(encoding="utf-8")
+    row = re.search(
+        r"'agent\.opportunities\.read_timeout_seconds':\s*\{\s*minValue:\s*[\d.]+,"
+        r"\s*maxValue:\s*([\d.]+)",
+        config_impl,
+    )
+    assert row, "agent.opportunities.read_timeout_seconds row not found in configServiceImpl.ts"
+    ceiling = float(row.group(1))
+
+    class _Clock:
+        def __init__(self):
+            self.now = 0.0
+
+        def advance(self, seconds):
+            self.now += seconds
+
+    async def _worst_case(read_ceiling: float) -> tuple[float, str]:
+        clock = _Clock()
+
+        class _Identity:
+            def __init__(self, _channel):
+                pass
+
+            async def ValidateToken(self, request, metadata=None, timeout=None):  # noqa: N802
+                clock.advance(timeout - 0.001)
+                return SimpleNamespace(
+                    user_id=ADMIN["user_id"],
+                    email=ADMIN["email"],
+                    roles=ADMIN["roles"],
+                    aud=auth.AGENT_PUBLIC_URL,
+                )
+
+        async def _policy(_key, _default, _cast):
+            clock.advance(tools._POLICY_READ_TIMEOUT_S - 0.001)
+            return read_ceiling
+
+        async def _hung_analysis(*_args, timeout):
+            clock.advance(timeout)
+            raise _rpc_error(grpc.StatusCode.DEADLINE_EXCEEDED)
+
+        monkeypatch.setattr(auth.mtls, "secure_channel", lambda *_: contextlib.nullcontext())
+        monkeypatch.setattr(auth.identity_pb2_grpc, "IdentityServiceStub", _Identity)
+        monkeypatch.setattr(tools, "_agent_policy", _policy)
+        monkeypatch.setattr(client, "list_opportunities", _hung_analysis)
+
+        claims = await auth.validate_bearer_claims("token")
+        assert isinstance(claims, dict) and claims["aud"] == auth.AGENT_PUBLIC_URL
+        with pytest.raises(ToolError) as exc_info:
+            await asyncio.wait_for(_list_opportunities_fn()(_ctx(claims)), _HANG_GUARD_S)
+        return clock.now, str(exc_info.value)
+
+    elapsed, message = await _worst_case(ceiling)
+    assert "deadline exceeded" in message
+    assert f"within {ceiling:g}s" in message
+    assert elapsed <= 57.0, f"worst case {elapsed:g}s at ceiling {ceiling:g} exceeds 57 s"
+
+    # The defect's ceiling: the same composition must overrun, or this test proves nothing.
+    elapsed_at_defect, _ = await _worst_case(55.0)
+    assert elapsed_at_defect > 57.0
 
 
 async def _captured_timeout(monkeypatch, policy) -> float:

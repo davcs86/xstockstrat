@@ -863,3 +863,312 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - **Evidence tree**: the feature branch is 168 commits behind `origin/main-dev`; merge it before Step 1 and
   re-grep every cited `path:line`.
 - The enumeration sign-off is still "unenumerated" until Step 9's pre-deploy run.
+
+## Session 2026-11-26 — sdd-execute sequential (sdd-batch-execute)
+
+**Up-front confirmation (operator-approved record, binding):** mainDev `2b2dec92afa14123ac1d796846632db713bbd9dc`,
+dev `6f320da9aca511f2f909a5cc97576c060732516f`, specHash `c31662ab64f40bcb9ba43b5a3b9f68fb840ea339`,
+directive `conditional`, pending steps 1–9, mismatches on steps 3, 1, 2, 5, 7, 8. The verbatim record is in
+the first body line of the re-spec commit below.
+
+- **Merge**: `origin/main-dev` @ `2b2dec92` merged into the dev branch (`d8501938`); resolver and
+  ledger-guard were clean.
+- **Tooling setup (steps 1–9)**: node ✓ v24.22.3 (`/opt/node24`; the default PATH node is v22) · pnpm ✓
+  9.15.9 · tsc ✓ (config node_modules) · uv ✓ · python ✓ 3.13. Migration and docs steps need nothing extra.
+  Pre-commit hook check: hook=0.
+- **Re-spec** (`respec(fix-mcp-deadline-budget)` commits in `git log --first-parent origin/main-dev..HEAD`):
+  - `518681bf43d563a6af6b9be84c879a33babb7beb`: respec(fix-mcp-deadline-budget): align steps 3,1,2,5,7,8
+    with current codebase.
+  - Step 3: the migration moves from `056` to **`057_mcp_deadline_budget.{up,down}.sql`**, because
+    main-dev now holds feature 366's `056_analysis_live_only_cycle_max_days`. Feature 321 also still claims
+    `056` in flight. Steps 1, 2, 5, 7 and 8 got their line anchors re-pinned to `2b2dec92`. The step headings
+    and the preamble (decision 1, renumber checklist) still say `056`. They were outside the step-body
+    re-spec scope, and the renumber checklist governs.
+- Status: `implementation-ready` → `in-progress`.
+
+```sdd-batch-setup
+{"mainDev":"2b2dec92afa14123ac1d796846632db713bbd9dc","date":"2026-11-26"}
+```
+
+### Step 1 — service: SetConfig ceiling, extract-budget bound and cross-key ordering gate [done]
+- Atomic unit steps 1+2. The `agent.opportunities.read_timeout_seconds` ceiling goes from 55 to 44, and the
+  new `agent.extract.call_budget_seconds` key is bounded to [5,35].
+- Added a two-row `CROSS_KEY_ORDERING` table and a precomputed `CROSS_KEY_RULES_BY_KEY` map. `setConfig`
+  gates global writes only, between the per-key gate and the existence gate:
+  - one sibling `SELECT namespace, key, value_data` read;
+  - strict `>` comparison, code 3 on violation, remedy leads with "raise";
+  - an absent or non-numeric sibling skips the comparison with a key-only WARN;
+  - a read error returns code 13.
+- TDD (unit): RED `.sdd-logs/v-1.log`, `ℹ fail 11`. The @AC-2 case failed with "45 must be rejected, so 44
+  is the largest accepted", and @AC-3 with "marketdata.quotes.batch_timeout_ms = 5000 must be rejected".
+  GREEN `.sdd-logs/v-2.log`, `ℹ pass 419` / `ℹ fail 0`, `exit=0`.
+- Config-wiring step-time check: `exit=0` with no findings.
+- Files modified: `services/xstockstrat-config/src/grpc/configServiceImpl.ts`
+- Deviations: none.
+
+### Step 2 — test: scalar bounds, `@AC-2` ceiling arithmetic and `@AC-3` cross-key ordering [done]
+- Atomic unit steps 1+2. Bounds table changes: the agent row goes to `max: 44` and an
+  `extract.call_budget_seconds` [5,35] row is added. The intVal ceiling case now uses 45 and `[30, 44]`.
+- New `@AC-2` test: it parses `_RPC_TIMEOUT_S` and `_POLICY_READ_TIMEOUT_S` from the agent sources, then
+  checks that 44 is accepted, 45 is rejected, and 10 + 3 + 44 <= 57.
+- New sibling-returning mock (empty by default, reset in `beforeEach`), plus cross-key cases: `@AC-3`,
+  reverse direction, max(batch, mark), the enrich pair both ways, the strict `>` 2500 narrowing, a
+  no-lower-remedy case, accepted writes, per-user skip, absent and unparseable siblings, a read failure
+  (code 13), and zero queries for out-of-bounds and non-admin writes.
+- AC-2 red: the 45 write was accepted → green: passed. AC-3 red: the batch 5000 write was accepted → green:
+  passed.
+- GREEN `.sdd-logs/v-3.log`: `ℹ pass 419` / `ℹ fail 0`, coverage `All files | 92.63` lines. The block
+  shows `exit=1` only because the trailing no-fixtures `grep` matched nothing (Deviation Log).
+- Files modified: `services/xstockstrat-config/src/__tests__/setConfigScalarBounds.test.ts`
+- Deviations: Step 2 Verification exit semantics (Deviation Log, no spec edit).
+
+### Step 3 — migration: config `057_mcp_deadline_budget` (seed + global clamp + notify) and its real-DB assertion [done]
+- Atomic unit steps 3+4. The `057_mcp_deadline_budget.up.sql` migration is one CTE statement with three parts:
+  - it seeds global `agent` / `extract.call_budget_seconds` = `35` (float, default `35`) in staging and
+    production;
+  - it clamps global, non-secret `opportunities.read_timeout_seconds` rows whose value matches the regex and
+    is above 44 down to `44`, with the sentinel and `caller_identity = NULL`;
+  - it sends `pg_notify` over the DISTINCT seed ∪ heal (namespace, environment) pairs.
+- The `.down` deletes only the sentinel `35` seed rows and notifies. It is forward-only for the clamp; by
+  inspection it holds no UPDATE and no clamp-key reference.
+- The `scripts/migration-assertions/config-mcp-deadline-budget.sql` file uses BEGIN … ROLLBACK with a
+  verbatim `PREPARE mdb_clamp` copy, and `:ROW_COUNT` expects clamp 2, replay 0, 40/abc 0 and 50s 0. It checks:
+  - global 55 and 44.5 become 44, with the sentinel and a NULL caller_identity;
+  - one audit row per environment;
+  - a per-user 50 is untouched;
+  - the seed rows exist.
+  It also prints a reported-only NOTICE for per-user rows above 44. The file was not run here; the CI
+  `migration-rerun` job runs it.
+- Temporary `seeded-unread` baseline entry added to `scripts/config-wiring.json`; Step 5 removes it.
+- Stored set: generated on the operator-provisioned scratch Postgres 16.15 (operator go-ahead in the main
+  session on 2026-11-26; this agent did not start or stop any database).
+  - With the two `057` files held aside, the generator reproduced the committed file exactly.
+  - With them, the diff was exactly the two `agent` / `extract.call_budget_seconds` rows plus `inputs_sha256`.
+  - `config-heal-dryrun.py --fresh` left `scripts/config-heal/dryrun-fresh.tsv` unchanged.
+- Verification `.sdd-logs/v-4.log` `exit=0`: `057` is the highest number, the down grep found nothing,
+  `check-config-wiring --final` passed (only the pre-existing `REPORTED:` readers-disagree lines), and
+  `config-wiring.test.mjs` gave `# pass 75` / `# fail 0`.
+- Config-wiring step-time gate (`--declared-from product-spec.md --declared-migration …057….up.sql`): `.sdd-logs/v-5.log`, `exit=0`, no findings.
+- TDD: N/A (migration).
+- Files modified: `services/xstockstrat-config/migrations/057_mcp_deadline_budget.up.sql`,
+  `services/xstockstrat-config/migrations/057_mcp_deadline_budget.down.sql`,
+  `scripts/migration-assertions/config-mcp-deadline-budget.sql`, `scripts/config-wiring-stored.json`,
+  `scripts/config-wiring.json`
+- Deviations: none. The step heading and the task title still say `056`; the files are `057`, per the re-spec.
+
+### Step 4 — test: static test for `*_mcp_deadline_budget` and the PREPARE-copy pin [done]
+- Atomic unit steps 3+4. New `mcpDeadlineBudgetMigration.test.ts` (8 cases) checks:
+  - one statement per direction;
+  - the seed rows (`@AC-1`);
+  - the clamp SET/WHERE and CASE guard (`@AC-2`), plus the guard regex's accept/reject behaviour in JS;
+  - that no other key or cross-hop key is touched;
+  - the notify CTE and the final SELECT;
+  - the down's guards, notify and forward-only shape;
+  - that no migration number appears in the SQL;
+  - the PREPARE-copy pin, and that the assertion file starts with BEGIN; and ends with ROLLBACK;.
+- AC-1/AC-2 red: `.sdd-logs/v-1.log`, all 8 cases failed with `expected exactly one *_mcp_deadline_budget.up.sql, got []` → green: `.sdd-logs/v-3.log`, `# pass 427` / `# fail 0`, coverage `All files | 92.63` lines.
+- Run `.sdd-logs/v-2.log` was an intermediate failure from the test's own bug: a case-insensitive
+  `/UPDATE|INSERT/i` matched `updated_by`. It was fixed to `\b(UPDATE|INSERT)\b` before the green run.
+- Files modified: `services/xstockstrat-config/src/__tests__/mcpDeadlineBudgetMigration.test.ts`
+- Deviations: Step 4 Verification exit semantics (Deviation Log, no spec edit).
+
+## Session 2026-11-27 — sdd-execute sequential (sdd-batch-execute, steps 5+6)
+
+- Operator decision (2026-11-27, blocker on Step 5): **A**. The Steps 5+6 scope grows by one line in
+  `services/xstockstrat-agent/app/main.py`, which sets `logging.getLogger("httpx")` to WARNING. That stops
+  httpx's INFO `HTTP Request: GET <url>` record from leaking the extract URL. Step 6's assertion stays as
+  specced. The extra file is in the Deviation Log, and Step 8 adds the findings row.
+- Tooling: uv ✓, python ✓ 3.13.18 (`uv sync --extra dev` in the agent), ruff ✓ (uv), node ✓ v24 (`/opt/node24`).
+  Pre-commit hook check: hook=0.
+
+### Step 5 — service: whole-call budget for `extract_email_content` and `extract_website_content` [done]
+- Atomic unit steps 5+6. Added `import httpx`, `_EXTRACT_CALL_BUDGET_DEFAULT_S = 35.0` and
+  `_extract_call_budget_s()` next to `_POLICY_READ_TIMEOUT_S`. The helper reads the budget through
+  `_agent_policy`; a non-finite or `<= 0` value falls back to 35.
+- `extract_email_content`:
+  - one `asyncio.timeout` scope around the URL loop, entered after `_get_source` and the attachments;
+  - a per-URL catch of `httpx.TimeoutException` (counted as deadline) and `httpx.TransportError` (counted as
+    transport);
+  - when the scope expires, the URL in flight and all untried URLs count as deadline;
+  - a partial call returns `PARTIAL: N of M URLs not fetched (deadline: a, transport: b)` plus
+    `unfetched_urls`, and logs one count-only WARN;
+  - when every URL is fetched, the result is still exactly `{raw_text}`.
+- `extract_website_content` raises `DEADLINE_EXCEEDED: … within {budget:g}s` or
+  `FETCH_FAILED: <ExceptionClass>`, both `from None`.
+- Both docstrings were updated. The temporary `seeded-unread` wiring entry was deleted. The httpx logger is
+  set to WARNING in `main.py` (operator A).
+- Verification `.sdd-logs/v-4.log`: ruff `All checks passed!` / `80 files already formatted`, and the wiring
+  `--final` check printed only the pre-existing `REPORTED:` lines, `exit=0`.
+- Separate config-wiring gates: step-time (`--declared-from product-spec.md`) `.sdd-logs/v-5.log` `exit=0`
+  with no output; `--final` `.sdd-logs/v-6.log` `exit=0` (2 pre-existing `REPORTED:` lines).
+- Files modified: `services/xstockstrat-agent/app/tools.py`, `services/xstockstrat-agent/app/main.py`,
+  `scripts/config-wiring.json`
+- Deviations: `app/main.py` added (operator A); block exit semantics and the node 24 PATH (Deviation Log).
+
+### Step 6 — test: extract whole-call budget (`@AC-1`) and the affected guards [done]
+- Atomic unit steps 5+6. The new `tests/test_extract_call_budget.py` has 17 cases built on an inline
+  `_Trickle` `httpx.AsyncByteStream` served through respx, with the budget scaled to 0.3 s:
+  - `@AC-1`: 3 trickling URLs → PARTIAL 3 of 3;
+  - partial results keep the texts gathered so far, attachments included;
+  - a ConnectError is counted as transport and a ReadTimeout as deadline;
+  - when every fetch succeeds, the result shape is unchanged;
+  - an egress refusal still aborts the call, and HTTPStatusError still propagates;
+  - a partial call logs one WARN, and no captured record carries the URL or host;
+  - website DEADLINE_EXCEEDED and FETCH_FAILED;
+  - the budget guard (0, -1, nan, inf → 35; 12 is kept);
+  - a real snapshot read through `install_watcher`.
+- The test imports `_make_server`/`_tool_fn`/`_website_source` from `tests.test_tools`, `HANG_GUARD_S` from
+  conftest, and `install_watcher` from `tests.test_config_watcher`.
+- `test_tools.py`: `policy_reads` gains `"extract.call_budget_seconds": 35.0`.
+- `test_tool_deadlines.py`: adds `auth + _RPC_TIMEOUT_S + _EXTRACT_CALL_BUDGET_DEFAULT_S <= 57`, plus the same
+  sum using the `configServiceImpl.ts` ceiling (parsed; the test fails if the row is missing).
+- AC-1 RED (`.sdd-logs/v-2.log`, `16 failed, 832 passed`):
+  - the AC-1 case hit the hang guard (`TimeoutError`);
+  - ConnectError propagated;
+  - the helper cases raised `AttributeError: module 'app.tools' has no attribute '_extract_call_budget_s'`;
+  - `test_tools.py:2472` failed on the policy_reads equality;
+  - the log showed the leaking `INFO httpx … HTTP Request: GET https://news.example.test/a`.
+- GREEN (`.sdd-logs/v-3.log`): `848 passed`, `Required test coverage of 40% reached. Total coverage: 88.62%`.
+  Run `v-1` was a ruff-format failure on the new file, which was fixed by `ruff format`.
+- Files modified: `services/xstockstrat-agent/tests/test_extract_call_budget.py`,
+  `services/xstockstrat-agent/tests/test_tools.py`, `services/xstockstrat-agent/tests/test_tool_deadlines.py`
+- Deviations: see the Step 5 entry.
+
+## Session 2026-11-27 — sdd-execute sequential (sdd-batch-execute, step 7)
+
+- Tooling: uv ✓, python ✓ 3.13.18 (`uv sync --extra dev` in the agent), ruff ✓ (uv). Pre-commit hook
+  check: hook=0. Discovery: every Step 7 symbol was confirmed at `origin/feature/fix-mcp-deadline-budget`
+  @ `cc1bb49c`. The anchors have drifted: the ceiling row is at `configServiceImpl.ts:153` (`maxValue: 44`),
+  the `list_opportunities` legs are at `tools.py:1977-1989`, and `_POLICY_READ_TIMEOUT_S` is at `tools.py:2895`.
+
+### Step 7 — test: `@AC-2` `list_opportunities` worst case at the SetConfig ceiling [done]
+- Added `test_ac2_worst_case_at_setconfig_ceiling_stays_under_57s`. It parses the ceiling from
+  `configServiceImpl.ts`, then composes three faked legs on an injected `_Clock`:
+  - auth: the identity stub fake advances the clock by `timeout - 0.001` and returns claims bound to
+    `AGENT_PUBLIC_URL`;
+  - policy: the `_agent_policy` fake advances by `_POLICY_READ_TIMEOUT_S - 0.001` and returns the ceiling;
+  - analysis: the `client.list_opportunities` fake advances by the `timeout` it was given and raises
+    `_rpc_error(DEADLINE_EXCEEDED)`.
+- The test asserts `deadline exceeded` and `within 44s` in the `ToolError`, and `clock.now <= 57.0`. It also
+  runs the same composition at the defect's ceiling 55 and asserts the result is `> 57`.
+- AC-2 red (working-tree mutation of the row to `maxValue: 55`, never committed), `.sdd-logs/v-2.log`:
+  `AssertionError: worst case 67.998s at ceiling 55 exceeds 57 s`, `1 failed, 848 passed`.
+- The mutation was restored with `git checkout -- services/xstockstrat-config/src/grpc/configServiceImpl.ts`.
+  Afterwards a root `git status --short` showed only the test file.
+- Green, `.sdd-logs/v-3.log`:
+  - ruff: `All checks passed!` / `80 files already formatted`;
+  - pytest: `849 passed`;
+  - coverage: `Required test coverage of 40% reached. Total coverage: 88.62%`.
+- Run `v-1` was a ruff E501 on the new test, fixed before the RED run.
+- Worst case at ceiling 44: 56.998 s (≤ 57), so the fallback to 43 does not apply.
+- Config-key wiring gate: not applicable. This test step touches no config key and no migration.
+- Files modified: `services/xstockstrat-agent/tests/test_list_opportunities_deadline.py`
+- Deviations: the Verification block's `git status` line is vacuous after its `cd`, and the block's exit
+  semantics hide the earlier exits (Deviation Log, no spec edit).
+
+## Session 2026-11-27 — sdd-execute sequential (sdd-batch-execute, step 8)
+
+- Tooling: uv ✓ (`uv sync --extra dev` in the agent), node ✓ v24 (`/opt/node24`). Pre-commit hook check: hook=0.
+  Discovery: every Step 8 anchor was re-read at `origin/feature/fix-mcp-deadline-budget` @ `2fe0271b`. Drift:
+  the feature-227 row is at `config-governance.md:489` (spec `:455`), and the `list_opportunities` bound line is
+  at `mcp-tools.md:1299` (spec `:1279`).
+
+### Step 8 — docs: key tables, tool contract, rollout runbook, findings [done]
+- Docs now describe the shipped behaviour:
+  - the new key row and the `[30,44]` bound, in the agent CLAUDE.md and in `config-governance.md` (the
+    feature-314 entry and its sentinel row);
+  - the cross-key rule, in the portfolio CLAUDE.md;
+  - the `PARTIAL` / `DEADLINE_EXCEEDED` / `FETCH_FAILED` shapes and the 35 s cap, in `mcp-tools.md`;
+  - the cross-key write order and the migration rollout (queries, old-image window, "unenumerated" fallback),
+    in `config-rollout.md`;
+  - the enforcement and the agent chains, in PLAT-13.
+- Findings:
+  - the root and portfolio cross-key rows moved to § Resolved;
+  - the config cross-key row is `◐ PARTIAL`, because its retention-floor example is still unchecked;
+  - new config doc-drift row: the `041` stored description still says `[30,55]`;
+  - new root § Resolved row for the `httpx` INFO URL log (the Steps 5+6 follow-up).
+- TDD: N/A (docs). Verification `.sdd-logs/v-1.log` `exit=0`: the `[30,55]` grep printed nothing, and the parity
+  suites gave `45 passed`. `--doc-check` alone, `.sdd-logs/v-2.log`: `exit=0`, no output. Config-wiring step-time
+  gate, `.sdd-logs/v-3.log`: `exit=0`, no output. The other `mcp-tools.md` suites, `.sdd-logs/v-4.log`:
+  `191 passed`.
+- Files modified: `services/xstockstrat-agent/CLAUDE.md`, `services/xstockstrat-portfolio/CLAUDE.md`,
+  `docs/patterns/config-governance.md`, `docs/runbooks/mcp-tools.md`, `docs/runbooks/config-rollout.md`,
+  `docs/context-constitution.md`, `docs/context-constitution-findings.md`,
+  `services/xstockstrat-config/docs/context-constitution-findings.md`,
+  `services/xstockstrat-portfolio/docs/context-constitution-findings.md`
+- Deviations: the placement of the `httpx` row, the partial config row, and the node PATH (Deviation Log).
+
+## Session 2026-11-27 — sdd-execute sequential (sdd-batch-execute, step 9)
+
+- Operator decision (2026-11-27, blocker on Step 9): **B**. Step 9 is deferred: it is operator-run after the
+  integration PR deploys. This agent has no read path to the databases, and the feature is not deployed yet.
+  Production readings are waived (standing ruling: production is out of scope).
+- Tooling: node ✓ v24 (`/opt/node24`; the default PATH node is v22). Pre-commit hook check: hook=0.
+- Config-key wiring gate `node scripts/check-config-wiring.mjs --final` (F-09), `.sdd-logs/v-1.log`, `exit=0`.
+  It printed only the two pre-existing `REPORTED:` lines:
+  `services/xstockstrat-analysis/app/engine/fundsignal_loop.py:marketdata/fundamentals.provider:readers-disagree`
+  and `services/xstockstrat-trading/internal/service/trading.go:platform/trading_state:readers-disagree`.
+- Status: `in-progress` → `code-completed`. Steps 1–8 are done and Step 9 is skipped; Step 9 does not block
+  `code-completed` (implementation-spec.md § Step Dependencies).
+
+### Step 9 — docs: enumeration and read-back per environment (operator-run) [skipped]
+- Not run here. Operator decision B moves it to the operator after the integration PR deploys. The enumeration
+  sign-off stays **"unenumerated"**; the outstanding checks are in the Open Threads below.
+- TDD: N/A (docs, operator-run).
+- Files modified: `docs/roadmap/features/314-fix-mcp-deadline-budget/context.md`
+- Deviations: Step 9 deferred to the operator (Deviation Log).
+
+### Open Threads
+
+- **Operator-run Step 9 (outstanding; sign-off "unenumerated" until done).** Run through
+  `docs/runbooks/operator-db-access.md` and the queries in implementation-spec.md Step 9, then record the
+  readings here:
+  1. Pre-deploy enumeration on **staging**: global `agent` / `opportunities.read_timeout_seconds` rows above 44,
+     global rows with `matches_numeric = false` (fix by `SetConfig` before deploy), per-user rows above 44
+     (reported only), and inverted cross-hop pairs (fix by ordered `SetConfig` once the new config image is live,
+     never SQL).
+  2. Post-rollout query, after the dev app runs the new config image: every global row matches the regex and is
+     ≤ 44. Lower any 45–55 row written through the old image with `SetConfig`.
+  3. Read-back on the agent MCP: `get_config(namespace="agent")` lists `extract.call_budget_seconds` = `35.0`
+     (float) and `opportunities.read_timeout_seconds` ≤ 44; `list_config_keys(namespace="agent")` shows the new
+     key once.
+  4. Dev smoke test: `list_opportunities` and one `extract_website_content` both answer. Record any latency that
+     suggests an unmodelled term in the 57 s worst case (spec decision 9; the fallback to 43 is an operator call).
+- **Production readings: WAIVED** (standing ruling: production is out of scope).
+
+## Session 2026-11-27 — sdd-execute
+
+**Steps this session**: [9]
+**Progress**: 8 done, 1 skipped / 9 total
+**Stopped at**: all complete (Step 9 skipped by operator decision B)
+**Next**: integration PR → `main-dev`
+
+## Session 2026-11-27 — operator rulings recorded by the orchestrator (verbatim)
+
+Rulings from the operator's answers this session (2026-11-27). Production is out of scope (standing ruling).
+
+1. **Step 9 / ALL-DONE tail.** Question: "how should I get 314 through the workflow's preflight rejecting Step 9
+   `skipped`?" → operator answered "Finish by hand (Recommended)". The spec stays truthful: Step 9 is `skipped`
+   with its Deviation Log entry and the operator Open Thread; the enumeration sign-off stays "unenumerated";
+   production readings are waived.
+2. **C-16 @AC-2 text.** Operator answered "Verbatim: 'ceiling' / 60 s". @AC-2 is promoted exactly as written in
+   this branch's `acceptance.feature` ("its SetConfig ceiling", "under 60 s"); the tightened 44 / 57 s wording is
+   not used and the branch's `acceptance.feature` is not edited.
+3. **Defect reports.** Operator answered "Resolve all three (Recommended)".
+
+Orchestrator assumptions (also stated in the integration PR body): acceptance extension (the design's EXTEND
+cases) is not done — only AC-1..3 are promoted, follow-on noted; the three in-place C-16 CHANGE edits are applied
+because the operator did not skip them; the stale `merge-order.md` row 274 text is left alone; the
+`implementation-spec.md` header **Status** is left unchanged.
+
+### ALL-DONE tail — config-key wiring gate (F-09)
+
+After merging `origin/main-dev` (merge commit `c21b4819`, no conflicts; migration `057_mcp_deadline_budget` is
+still the highest config migration; per the orchestrator, feature 321 also carries
+`057_trading_broker_paper_per_environment` — whichever merges second renumbers to 058 and regenerates `scripts/config-wiring-stored.json`):
+`node scripts/check-config-wiring.mjs --final` → `exit=0`, output:
+
+```text
+REPORTED: services/xstockstrat-analysis/app/engine/fundsignal_loop.py:marketdata/fundamentals.provider:readers-disagree
+REPORTED: services/xstockstrat-trading/internal/service/trading.go:platform/trading_state:readers-disagree
+```

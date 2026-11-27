@@ -105,7 +105,8 @@ Every anticipated refusal reaches the caller as `isError=true` text `Error execu
 - **Passed through:** `FAILED_PRECONDITION`, `PERMISSION_DENIED`, `INVALID_ARGUMENT`, `ALREADY_EXISTS`,
   `OUT_OF_RANGE`, `UNAUTHENTICATED`, `RESOURCE_EXHAUSTED`, `ABORTED`, and a server-set `DEADLINE_EXCEEDED`.
 - **`NOT_FOUND`:** the tool's own literal followed by the server's hint.
-- **`UNAVAILABLE`:** only `fundamentals availability unknown — grade unchanged` (`manage_strategy` score) and
+- **`UNAVAILABLE`:** only `fundamentals availability unknown — grade unchanged` and
+  `formula version unavailable — grade unchanged` (`manage_strategy` score) and
   `positions not published; re-confirm to retry` (`manage_offline_account`) pass through.
 - **Everything else** (other `UNAVAILABLE`, `CANCELLED`, `INTERNAL`, `UNKNOWN`, unlisted codes) collapses to a fixed hint:
   `upstream unavailable; retry shortly`, `upstream call cancelled; …` or `upstream error, details withheld; report it`.
@@ -213,6 +214,24 @@ Extracts raw text from email attachments (PDF or plain text) or gated URLs for a
 
 All attachments and URLs are concatenated with double newlines.
 
+The URL fetches share one whole-call budget, `agent` / `extract.call_budget_seconds` (default `35` s,
+bounds `[5,35]`, feature 314), which starts after the source lookup and the attachments. A URL that times out,
+fails in transport, or is not reached before the budget expires is skipped, and the call returns a partial
+result instead of the plain shape above:
+
+```json
+{
+  "raw_text": "<every text gathered, attachments included>",
+  "error": "PARTIAL: N of M URLs not fetched (deadline: a, transport: b)",
+  "unfetched_urls": ["<the given URLs that were not fetched, in input order>"]
+}
+```
+
+`deadline` counts per-request timeouts plus the URLs cut off by the budget; `transport` counts the other
+transport failures. The 35 s budget is a new cap: a fetch that used to finish slowly after 35 s (a per-request
+connect 10 s + read 30 s allowed up to 40 s) is now cut off. An egress refusal or an HTTP error status still
+fails the whole call (rows below).
+
 **Errors**
 
 | Condition | Error |
@@ -251,6 +270,8 @@ Fetches a registered website source and returns the **whole response body** as `
 | Source has no `url` in `config_json` | `ToolError: Source '<slug>' has no url in config_json` |
 | Source requires credentials (`has_credentials=true`) | `ToolError: secure per-source credential resolution is not supported yet …` (feature 093) |
 | The `config_json.url` (or a redirect from it) targets a non-public address, a DNS-rebinding host, or a non-http(s) scheme, or the response exceeds the configured size/redirect limits | `ToolError: content fetch refused by egress policy` (SSRF hardening, feature 207 — deliberately generic; no internal host/IP/port is leaked back to the model) |
+| The fetch does not finish within the whole-call budget `agent` / `extract.call_budget_seconds` (default `35` s, feature 314) | `ToolError: DEADLINE_EXCEEDED: content fetch did not complete within Ns` (the URL is never echoed) |
+| A transport failure, a per-request connect/read timeout included | `ToolError: FETCH_FAILED: <ExceptionClass>` (feature 314 — names only the exception class, never the URL) |
 
 ---
 
@@ -266,7 +287,7 @@ Ingests a trading signal into `xstockstrat-ingest`. If `conviction` meets or exc
 | `symbol` | `string` | Yes | Ticker symbol, e.g. `"NVDA"` |
 | `direction` | `string` | Yes | One of `"buy"`, `"sell"`, `"hold"`, `"watchlist"` |
 | `valid_from` | `string` | Yes | ISO 8601 datetime, e.g. `"2026-05-01T00:00:00Z"` |
-| `conviction` | `float` | No | Signal confidence, `0.0`–`1.0`. Omit if unknown — ingest stores an absent (or `0.0`) value as unset (NULL) and reads it back as `0.0` meaning "unknown confidence" (invariant INGEST-4). **No source default is applied.** An out-of-range value (`< 0.0` or `> 1.0`) or NaN is rejected `INVALID_ARGUMENT` at the ingest boundary (not `INTERNAL`). |
+| `conviction` | `float` | No | Signal confidence, `0.0`–`1.0`. Omit if unknown — ingest stores an omitted value as NULL ("not given"; invariant INGEST-4). An explicit `0.0` is stored as `0` and scored as zero confidence. **No source default is applied.** An out-of-range value (`< 0.0` or `> 1.0`) or NaN is rejected `INVALID_ARGUMENT` at the ingest boundary (not `INTERNAL`). |
 | `valid_until` | `string` | No | ISO 8601 datetime — signal expiry |
 | `headline` | `string` | No | Short summary for display |
 | `raw_url` | `string` | No | Source URL for attribution |
@@ -616,7 +637,9 @@ gate.
 | `score` on a strategy that is missing or not yours | `strategy not found or not owned` (PERMISSION_DENIED); no grade is written |
 | `score` with no eligible evidence | `no eligible evidence — run a backtest` (NOT_FOUND); the stale grade is cleared |
 | `score` where every evidence symbol was excluded by the fundamentals guard | `no eligible evidence — all evidence symbols excluded (fundamentals unavailable: …)` (NOT_FOUND); the stale grade is cleared |
+| `score` when a referenced formula is not readable and no evidence exists for a readable version | `no eligible evidence — formula <ids> is not readable and no evidence was recorded for a readable version; …` (NOT_FOUND); the stale grade is cleared |
 | `score` while fundamentals availability is unknown | `UNAVAILABLE: fundamentals availability unknown — grade unchanged` (passed through verbatim) |
+| `score` while a referenced formula's version cannot be read (fundamentals gate off) | `UNAVAILABLE: formula version unavailable — grade unchanged` (passed through verbatim) |
 | `score` while an analysis store is down | `UNAVAILABLE: upstream unavailable; outcome unknown, verify before retrying` (the store-down detail is logged on the agent) |
 | `score` exceeds the 45 s budget | `DEADLINE_EXCEEDED: upstream did not respond within 45s (deadline exceeded); outcome unknown, verify before retrying` |
 
@@ -893,8 +916,8 @@ rejected `PERMISSION_DENIED`.
 | `config_json` | `object` | No | Source configuration (on `update`, changed only if supplied) |
 | `extractor_module` | `string` | No | Extractor module name, for a non-mediated source only (on `update`, changed only if supplied). A `mediated_*` source takes none: ingest stores `app.extractors.noop` itself, whatever is sent |
 | `extraction_instructions` | `string` | No | (`mediated_*` only) prose telling the consuming agent what to extract from the source and how to map it to `ingest_signal`; at most 16,000 characters. **Required non-empty** when registering a `mediated_*` source, and on an `update` that changes `source_type` to a mediated type. On `update` it is applied only when supplied — omit it to preserve the stored text; `""` or whitespace is rejected on a mediated source |
-| `credentials_ref` | `string` | No | Reference to stored credentials — forwarded, **never echoed**. On `update`, omit to preserve the stored ref; pass `""` to clear it |
-| `bearer_token` | `string` | No | The MCP bearer for a `mcp_client` source (feature 166). Supplied on `register`; written FIRST to the caller's own encrypted per-user config secret under an opaque key (`ingest.mcp_credential.<uuid>`, `is_secret=true`), then the source is registered with `credentials_ref` pointing at it. Stored encrypted at rest and **never returned** |
+| `credentials_ref` | `string` | No | Reference to stored credentials — forwarded, **never echoed**. On `update`, omit to preserve the stored ref; pass `""` to clear it. A `mcp_credential.*` secret that no source of yours references for longer than the sweep's grace window (24h by default) is deleted by the operator orphan sweep, so attach a staged credential within that window |
+| `bearer_token` | `string` | No | The MCP bearer for a `mcp_client` source (feature 166). Supplied on `register`; written FIRST to the caller's own encrypted per-user config secret under an opaque key (`ingest.mcp_credential.<uuid>`, `is_secret=true`), then the source is registered with `credentials_ref` pointing at it. Stored encrypted at rest and **never returned**. A bearer left behind by a failed `register` is reclaimed by the orphan sweep ([config-rollout.md](config-rollout.md#operator-sweep-orphaned-mcp_credential-secrets-feature-328)) |
 
 > **`mcp_client` source type (feature 166).** A server-side MCP query source. Its `config_json`
 > carries `mcp_endpoint` (the Streamable-HTTP MCP URL) and `mcp_tool` (the tool name), plus optional
@@ -1176,7 +1199,10 @@ Use before `manage_formula(operation="register", …)` to validate behavior.
 
 **Return** — the full sandbox result: `success`, `output` (the result dict; **non-finite values such
 as `NaN`/`Infinity` are returned as `null`** so the projection never fails), `stdout`, `stderr`,
-`error`, `exit_reason`, `parameter_errors`, `execution_ms` (int64 as a JSON string).
+`error`, `exit_reason`, `parameter_errors`, `execution_ms` and `memory_used_bytes` (int64 as JSON
+strings). `memory_used_bytes` is the peak resident memory of the sandbox process in bytes, including
+the interpreter and the imported modules, so it is not usage of the memory cap; `"0"` means not
+measured (timeout, kill, abort or `os._exit`; most `memory_exceeded` runs report `"0"`).
 
 ---
 
@@ -1240,6 +1266,9 @@ Every opportunity also carries `formula_unreadable` (feature 289):
   `ListOpportunities` `available_sources` facet).
 - It is mutually exclusive with `data_unavailable` and `fundamentals_unavailable`.
 
+An `"evaluation_failed"` provenance marker (feature 308) means the strategy's evaluation failed for
+that symbol; `data_unavailable` stays false.
+
 The live-market enrichment is **omit-not-fabricate**:
 
 - `live_price`, `change_pct`, `target_price`, `stop_price` — present **only** when the backend has a
@@ -1276,7 +1305,7 @@ client-side, carried on no wire field.
 
 **Errors** — a backend `AioRpcError` surfaces as a `ToolError` `<CODE>: <message>`.
 A hung analysis read fails after the `agent.opportunities.read_timeout_seconds` deadline (default
-`40`s, bounds `[30,55]`) with `DEADLINE_EXCEEDED: upstream did not respond within Ns (deadline exceeded); retry shortly`.
+`40`s, bounds `[30,44]` so the worst case stays under the MCP client's 60 s timeout — feature 314) with `DEADLINE_EXCEEDED: upstream did not respond within Ns (deadline exceeded); retry shortly`.
 A saturated opportunities store returns `UNAVAILABLE: upstream unavailable; retry shortly` (the backend's own text is withheld and logged).
 
 ---

@@ -226,7 +226,9 @@ def _fundsignal_stubs():
     indicators = RecordingStub(
         {
             "GetFormula": SimpleNamespace(author="system"),
-            "ExecuteFormula": SimpleNamespace(success=True, output={"composite": 0.7}),
+            "ExecuteFormula": SimpleNamespace(
+                success=True, output={"composite": 0.7}, exit_reason=0
+            ),
         }
     )
     return ingest, indicators

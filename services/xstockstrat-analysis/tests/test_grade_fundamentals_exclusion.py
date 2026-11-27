@@ -22,6 +22,7 @@ from app.handlers.servicer import (
     _EXCLUDED_TRAILER_KEY,
     _EXCLUDED_TRAILER_MAX_BYTES,
     _INTERACTIVE_DERIVATION_CONCURRENCY,
+    _definition_fingerprint,
     _GradeInputsUnknown,
 )
 from app.services.fundamentals_guard import Availability
@@ -496,14 +497,22 @@ async def test_ac12_paged_history_is_drained_not_excluded():
 
 # ── feature 289: a refused GetFormula is "not a fundamentals formula" (gate ON) ─────────────────
 
+_BLEND_COMPOSITE = _definition_fingerprint(json_format.MessageToDict(_blend())) + ".x"
+
 
 @pytest.mark.asyncio
 async def test_ac23_refused_formula_score_strategy_succeeds_with_empty_trailer():
     svc = _blend_svc([_cell("AAPL", trades=3), _cell("SCHD")])
     svc._indicators.GetFormula = AsyncMock(side_effect=_rpc_error(grpc.StatusCode.NOT_FOUND))
+    svc._backtest_run_symbols_repo.latest_formula_fingerprint = AsyncMock(
+        return_value=_BLEND_COMPOSITE
+    )
     resp, ctx = await _score(svc)
     assert resp.evidence_symbols == 2
     ctx.set_trailing_metadata.assert_called_once_with(((_EXCLUDED_TRAILER_KEY, "[]"),))
+    svc._backtest_run_symbols_repo.fetch_all_for_fingerprint.assert_awaited_with(
+        "u1", _SID, _BLEND_COMPOSITE
+    )
 
 
 @pytest.mark.asyncio
@@ -521,6 +530,9 @@ async def test_ac23_formula_outage_score_strategy_still_aborts_unavailable():
 async def test_boot_pass_refusal_for_one_owner_never_poisons_another(pairs):
     svc = _blend_svc([_cell("AAPL", trades=3), _cell("SCHD")])
     svc._scores_repo.list_unscored_pairs = AsyncMock(return_value=[(u, _SID) for u in pairs])
+    svc._backtest_run_symbols_repo.latest_formula_fingerprint = AsyncMock(
+        return_value=_BLEND_COMPOSITE
+    )
     readable = indicators_pb2.FormulaDefinition(
         formula_id="fscore", name="fscore", fundamental_inputs=_FSCORE_INPUTS
     )

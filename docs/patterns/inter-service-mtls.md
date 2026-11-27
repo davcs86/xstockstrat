@@ -57,7 +57,9 @@ A server may also authorize a caller by the **verified peer certificate's DNS SA
 
 - config `GetSecret` ← `xstockstrat-ingest`, for the `ingest` caller's `mcp_credential.*` keys
   (`peerSan` in `services/xstockstrat-config/src/grpc/authz.ts`, `SECRET_CALLER_ALLOWLIST`). The
-  `x-internal-caller` header is still required as well.
+  `x-internal-caller` header is still required as well. Unreferenced `mcp_credential.*` rows are
+  reclaimed by the operator orphan sweep (runbook `docs/runbooks/config-rollout.md`), which changes
+  no grant.
 - config `GetSecret` ← `xstockstrat-notify`, for the `notify` caller's exact key `commsgun.app_key`
   (feature 338, the same `SECRET_CALLER_ALLOWLIST`). The `x-internal-caller` header is still required as well.
 - identity `ListAdminUserIds` ← `xstockstrat-notify` (feature 242,

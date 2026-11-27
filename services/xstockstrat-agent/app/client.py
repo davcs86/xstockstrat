@@ -255,6 +255,7 @@ async def ingest_signal(
     )
     if conviction is not None:
         signal.conviction = conviction
+        signal.conviction_provided = True
     if valid_until is not None:
         signal.valid_until.CopyFrom(_iso_to_timestamp(valid_until))
     if headline is not None:

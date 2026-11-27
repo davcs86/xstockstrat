@@ -42,6 +42,8 @@ LIST_CORRELATION_INSTRUCTIONS = (
 )
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
+# httpx's INFO "HTTP Request: GET <url>" record would log extract URLs (FR-6 @feature-207).
+logging.getLogger("httpx").setLevel(logging.WARNING)
 log = logging.getLogger(__name__)
 
 # Match these exactly, never as a prefix: handle_mcp is mounted at root, so a prefix match would

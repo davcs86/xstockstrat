@@ -32,7 +32,7 @@ from google.protobuf.message import DecodeError
 
 from app import telemetry
 from app.config.watcher import int_positive
-from app.identity import owner_metadata
+from app.identity import is_real_owner, owner_metadata
 from app.repositories.order_snapshots import OrderSnapshotsRepository
 from app.repositories.pnl_pattern_samples import PnLPatternSamplesRepository
 from app.repositories.pnl_positions import PnLPositionsRepository
@@ -385,7 +385,9 @@ class PnLPatternConsumer:
                     timeout=_ATTEMPT_DB_TIMEOUT_SECONDS,
                 )
                 # Open the position window on the first order event (no-op if already open).
-                if event_type in ("created", "filled", "partially_filled") and user_id:
+                if event_type in ("created", "filled", "partially_filled") and is_real_owner(
+                    user_id
+                ):
                     await self._positions.open(
                         conn,
                         position_id=position_id,
@@ -536,14 +538,14 @@ class PnLPatternConsumer:
         ind_timeout = int_positive(self._cfg, "snapshot.indicator_timeout_ms", 500) / 1000.0
         sig_timeout = int_positive(self._cfg, "snapshot.signal_timeout_ms", 500) / 1000.0
         degraded = False
-        meta = owner_metadata(owner) if owner else ()
+        meta = owner_metadata(owner) if is_real_owner(owner) else ()
         bar, closes = None, []
         try:
             bar, closes = await self._composer.ohlcv_and_closes(symbol, meta)
         except Exception as e:  # noqa: BLE001
             log.warning("snapshot ohlcv compose failed for %s: %s", symbol, e)
             degraded = True
-        if not owner:
+        if not is_real_owner(owner):
             log.warning("snapshot for %s has no owner — indicators/signals skipped", symbol)
             return bar, closes, {}, [], True
         try:

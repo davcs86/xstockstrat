@@ -297,7 +297,7 @@ export type ExternalSignal = Message<"xstockstrat.ingest.v1.ExternalSignal"> & {
      */
     direction: string;
     /**
-     * 0.0 – 1.0 confidence (0.0 if not provided by source)
+     * 0.0 – 1.0 confidence; a 0.0 with conviction_provided unset means "not given"
      *
      * @generated from field: double conviction = 4;
      */
@@ -336,6 +336,13 @@ export type ExternalSignal = Message<"xstockstrat.ingest.v1.ExternalSignal"> & {
      * @generated from field: string user_id = 11;
      */
     userId: string;
+    /**
+     * True when the sender set conviction, including an explicit 0.0. Readers treat
+     * `conviction_provided || conviction != 0.0` as "given".
+     *
+     * @generated from field: bool conviction_provided = 12;
+     */
+    convictionProvided: boolean;
 };
 /**
  * Describes the message xstockstrat.ingest.v1.ExternalSignal.
@@ -368,6 +375,7 @@ export type IngestSignalResponse = Message<"xstockstrat.ingest.v1.IngestSignalRe
      * True when this submission matched an existing signal within the dedup window
      * (ingest.signals.dedup_window_hours) on (source, symbol, direction, conviction,
      * valid_until); signal_id is then the EXISTING signal's id, not a newly-inserted one.
+     * An explicit 0.0 conviction and an omitted conviction are different dedup values.
      *
      * @generated from field: bool deduplicated = 2;
      */

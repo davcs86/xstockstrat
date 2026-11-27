@@ -31,10 +31,10 @@ from gen.ingest.v1 import ingest_pb2
 from gen.marketdata.v1 import marketdata_pb2
 from google.protobuf.json_format import MessageToDict
 from google.protobuf.struct_pb2 import Struct
-from opentelemetry import trace
 
 from app.config.watcher import int_positive
 from app.services import scoring
+from app.services.isolation import isolated, log_isolation_tally
 
 log = logging.getLogger(__name__)
 
@@ -147,18 +147,7 @@ class ScreenerEngine:
             )
 
         # design.md item 3: one summary line per scan (ERROR when every symbol failed) + span facts.
-        if failures:
-            emit = log.error if len(failures) == len(per_symbol) else log.warning
-            emit(
-                "screener: %d/%d scanned symbols failed evaluation; sample=%s",
-                len(failures),
-                len(per_symbol),
-                [f"{s}:{type(e).__name__}" for s, e in failures][:10],
-                exc_info=failures[0][1],
-            )
-            span = trace.get_current_span()
-            span.set_attribute("screener.degraded_count", len(failures))
-            span.record_exception(failures[0][1])
+        log_isolation_tally(log, "screener", failures, len(per_symbol))
 
         # feature 176 FR-4: the pure-CPU rank tail (min-max normalize + build + sort) runs off the
         # event loop. A score_unavailable result sorts after every genuinely-scored one.
@@ -232,12 +221,10 @@ class ScreenerEngine:
         }
 
     async def _eval_symbol_isolated(self, symbol, *args):
-        try:
-            return (await self._eval_symbol(symbol, *args)), None
-        # `except Exception` (not BaseException): CancelledError from the scan deadline must
-        # propagate (FR-2).
-        except Exception as e:
+        row, e = await isolated(self._eval_symbol(symbol, *args))
+        if e is not None:
             return {**self._seed_row(symbol), "eval_failed": True}, e
+        return row, None
 
     async def _eval_symbol(
         self, symbol, request, criteria, fundamentals, fundamentals_available, propagation_meta

@@ -58,6 +58,10 @@ type MarketDataService struct {
 	// per interval, so a weekend (newest bar legitimately old) doesn't refetch on every poll.
 	staleMu        sync.Mutex
 	lastStaleCheck map[string]time.Time
+	// lastEmptyFetch holds the time of the last confirmed-empty implicit miss per (symbol|timeframe);
+	// only noteMissResult writes it.
+	missMu         sync.Mutex
+	lastEmptyFetch map[string]time.Time
 	// departedBarsWrite admits at most one departed-client GetBars cache write at a time;
 	// the zero value is usable, so test literals need no setup.
 	departedBarsWrite atomic.Bool
@@ -251,6 +255,7 @@ func NewMarketDataService(
 		quoteSubs:        make(map[string]chan *marketdatav1.Quote),
 		warmSymbols:      make(map[string]struct{}),
 		lastStaleCheck:   make(map[string]time.Time),
+		lastEmptyFetch:   make(map[string]time.Time),
 		fundamentals:     fundamentals,
 		fundProvider:     provider,
 		fundCfg:          cfgWatcher,
@@ -360,14 +365,7 @@ func (s *MarketDataService) GetBars(ctx context.Context, req *marketdatav1.GetBa
 			}
 		}
 		if refetch && liveFetchAllowed(snap, req.Symbol) {
-			// Keep stale-but-present bars if the refetch yields nothing (e.g. a weekend) rather
-			// than blanking a chart that has data.
-			if fresh, freshToken := s.fetchAndCacheBars(ctx, req.Symbol, canonicalTf, readStart, end, pageSize, startImplicit); len(fresh) > 0 {
-				bars, nextToken = fresh, freshToken
-			} else if len(bars) == 0 {
-				slog.WarnContext(ctx, "GetBars: no bars stored and live fetch returned none",
-					"symbol", req.Symbol, "timeframe", canonicalTf, "start", start, "end", end)
-			}
+			bars, nextToken = s.liveRefetch(ctx, req.Symbol, canonicalTf, start, readStart, end, pageSize, startImplicit, bars, nextToken, time.Now())
 		}
 	}
 
@@ -413,47 +411,57 @@ func (s *MarketDataService) cacheLiveBars(ctx context.Context, live []*marketdat
 	return false, s.barsStore.InsertBars(wctx, live)
 }
 
+// warnUnlessDone logs WARN on a live ctx and Debug with ctx_done=true on a done one. It keys on ctx
+// state, never on the error text: a context.Canceled from a live ctx is a genuine failure.
+func warnUnlessDone(ctx context.Context, msg string, args ...any) {
+	if ctx.Err() != nil {
+		slog.DebugContext(ctx, msg, append(args, "ctx_done", true)...)
+		return
+	}
+	slog.WarnContext(ctx, msg, args...)
+}
+
 // fetchAndCacheBars persists the fetched bars even if the client leaves (bounded by barsCacheWriteGrace
 // after departure); on write/re-read failure it logs and returns the live page, never an error (MARKETDATA-3).
-func (s *MarketDataService) fetchAndCacheBars(ctx context.Context, symbol, tf string, start, end time.Time, pageSize int, recent bool) ([]*marketdatav1.Bar, string) {
+func (s *MarketDataService) fetchAndCacheBars(ctx context.Context, symbol, tf string, start, end time.Time, pageSize int, recent bool) barsFetch {
 	src, err := s.registry.Get("")
 	if err != nil {
 		slog.WarnContext(ctx, "GetBars: resolve source failed", "symbol", symbol, "error", err)
-		return nil, ""
+		return barsFetch{}
 	}
 	live, err := src.GetBars(ctx, symbol, tf, start, end)
 	if err != nil {
-		slog.WarnContext(ctx, "GetBars: live fetch failed", "symbol", symbol, "timeframe", tf, "error", err)
-		return nil, ""
+		warnUnlessDone(ctx, "GetBars: live fetch failed", "symbol", symbol, "timeframe", tf, "error", err)
+		return barsFetch{}
 	}
 	if len(live) == 0 {
-		return nil, ""
+		return barsFetch{confirmedEmpty: ctx.Err() == nil}
 	}
 	skipped, err := s.cacheLiveBars(ctx, live)
 	if skipped {
-		return truncateBars(live, pageSize, recent), ""
+		return barsFetch{bars: truncateBars(live, pageSize, recent)}
 	}
 	if err != nil {
 		slog.WarnContext(ctx, "GetBars: cache insert failed", "symbol", symbol, "error", err)
-		return truncateBars(live, pageSize, recent), ""
+		return barsFetch{bars: truncateBars(live, pageSize, recent)}
 	}
 	if ctx.Err() != nil {
-		return truncateBars(live, pageSize, recent), ""
+		return barsFetch{bars: truncateBars(live, pageSize, recent)}
 	}
 	if recent {
 		bars, err := s.repo.QueryRecentBars(ctx, symbol, tf, start, end, pageSize)
 		if err != nil {
-			slog.WarnContext(ctx, "GetBars: re-read after cache failed", "symbol", symbol, "error", err)
-			return truncateBars(live, pageSize, recent), ""
+			warnUnlessDone(ctx, "GetBars: re-read after cache failed", "symbol", symbol, "error", err)
+			return barsFetch{bars: truncateBars(live, pageSize, recent)}
 		}
-		return bars, ""
+		return barsFetch{bars: bars}
 	}
 	bars, nextToken, err := s.repo.QueryBars(ctx, symbol, tf, start, end, pageSize, "")
 	if err != nil {
-		slog.WarnContext(ctx, "GetBars: re-read after cache failed", "symbol", symbol, "error", err)
-		return truncateBars(live, pageSize, recent), ""
+		warnUnlessDone(ctx, "GetBars: re-read after cache failed", "symbol", symbol, "error", err)
+		return barsFetch{bars: truncateBars(live, pageSize, recent)}
 	}
-	return bars, nextToken
+	return barsFetch{bars: bars, token: nextToken}
 }
 
 // truncateBars returns at most pageSize bars from a freshly-fetched (ascending) live slice — the
@@ -658,7 +666,7 @@ func (s *MarketDataService) GetLatestQuote(ctx context.Context, symbol string) (
 		return nil, liveErr
 	}
 	if err := s.cacheQuote(ctx, live, since); err != nil {
-		slog.WarnContext(ctx, "GetLatestQuote: cache insert failed", "symbol", symbol, "error", err)
+		warnUnlessDone(ctx, "GetLatestQuote: cache insert failed", "symbol", symbol, "error", err)
 	}
 	return live, nil
 }
@@ -1432,6 +1440,9 @@ func (s *MarketDataService) ingestRecentBars(ctx, fetchCtx context.Context) {
 // caller can size each timeframe's window independently (see minIngestLookback). Only the vendor fetches use
 // fetchCtx; a symbol not fetched before it expired is an error for the cycle, never "no bars" (291 @AC-5).
 func (s *MarketDataService) ingestRecentBarsForTimeframe(ctx, fetchCtx context.Context, src source.DataSourceClient, symbols []string, tf string, start, end time.Time) {
+	if ctx.Err() != nil {
+		return
+	}
 	began := time.Now()
 	d := resolveBarIngestBackoff(s.budgetCfg)
 	plan := s.planBarRequest(symbols, tf, end, d)
@@ -1454,11 +1465,11 @@ func (s *MarketDataService) ingestRecentBarsForTimeframe(ctx, fetchCtx context.C
 				}
 				out.got[sym] = true
 				if err := s.barsStore.InsertBars(ctx, bars); err != nil {
-					slog.WarnContext(ctx, "bar ingest: insert failed", "symbol", sym, "timeframe", tf, "error", err)
+					warnUnlessDone(ctx, "bar ingest: insert failed", "symbol", sym, "timeframe", tf, "error", err)
 				}
 			}
 		} else {
-			slog.WarnContext(ctx, "bar ingest: multi-bar fetch failed, falling back to per-symbol", "timeframe", tf, "error", err)
+			warnUnlessDone(ctx, "bar ingest: multi-bar fetch failed, falling back to per-symbol", "timeframe", tf, "error", err)
 		}
 	}
 	if !fetched {
@@ -1470,7 +1481,7 @@ func (s *MarketDataService) ingestRecentBarsForTimeframe(ctx, fetchCtx context.C
 			}
 			if err != nil {
 				out.errored[sym] = true
-				slog.WarnContext(ctx, "bar ingest: live fetch failed", "symbol", sym, "timeframe", tf, "error", err)
+				warnUnlessDone(ctx, "bar ingest: live fetch failed", "symbol", sym, "timeframe", tf, "error", err)
 				continue
 			}
 			if len(bars) == 0 {
@@ -1478,9 +1489,12 @@ func (s *MarketDataService) ingestRecentBarsForTimeframe(ctx, fetchCtx context.C
 			}
 			out.got[sym] = true
 			if err := s.barsStore.InsertBars(ctx, bars); err != nil {
-				slog.WarnContext(ctx, "bar ingest: insert failed", "symbol", sym, "timeframe", tf, "error", err)
+				warnUnlessDone(ctx, "bar ingest: insert failed", "symbol", sym, "timeframe", tf, "error", err)
 			}
 		}
+	}
+	if ctx.Err() != nil {
+		return
 	}
 	res := s.applyBarCycle(tf, symbols, plan, out, start, end, d)
 	reportIngestCycle(ctx, tf, res, len(symbols), d, start, end, began)

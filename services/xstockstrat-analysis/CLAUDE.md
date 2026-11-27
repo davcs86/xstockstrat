@@ -256,8 +256,8 @@ second watcher.
 | `fundsignal.max_symbols_per_run` | int | `200` | Cap on symbols scanned per cycle — **applied only when FMP is the active fundamentals provider** (feature 154; the cap is purely an FMP daily-budget guard). Under FMP it uses a stateless rotating offset so no user's late-alphabet tickers are permanently starved; under a non-FMP provider the whole union is scored (full coverage across cycles via the existing deferred-resume). |
 | `fundsignal.daily_call_budget` | int | `200` | Max cached `GetFundamentalsMulti` chunk calls per cycle; ≤ `marketdata.fmp.daily_request_cap` (250) |
 | `fundsignal.source_slug` | string | `fundamentals` | Slug of the registered `derived` signal source the producer emits under |
-| `fundsignal.scoring_formula_id` | string | `""` | Optional 063 scoring formula id; empty → built-in deterministic default score |
-| `fundsignal.buy_quantile` | float | `0.80` | Cross-sectional score quantile ≥ → `buy` |
+| `fundsignal.scoring_formula_id` | string | `""` | Optional 063 scoring formula id; empty → built-in deterministic default score. Scale contract: a system scoring composite is in [0,1], 0.5 neutral; not clamped |
+| `fundsignal.buy_quantile` | float | `0.80` | Cross-sectional score quantile ≥ → `buy`; small or collapsed cross-sections follow the degenerate rule (the **Direction** bullet in **`fundsignal.md`**, in this service's `docs/` folder) |
 | `fundsignal.sell_quantile` | float | `0.20` | Cross-sectional score quantile ≤ → `sell` |
 | `fundsignal.min_conviction_to_emit` | float | `0.0` | Drop symbols whose score is below this before emitting |
 | `fundsignal.valid_days` | int | `90` | Emitted signal validity window (`valid_until` = run date + this) |

@@ -18,8 +18,10 @@ import pytest
 from app.engine import mcp_client_loop as loop
 from app.repositories.signal_sources import derive_health_status
 from tests._helpers import rpc_error, transaction_conn
+from tests.conftest import _ctx
 from tests.test_ingest_servicer import make_servicer
 from tests.test_mcp_client import _FakeSecretStub, _watcher_with
+from tests.test_signal_ownership import _fresh_ingest_svc, _signal_req
 
 
 class _FakeResult:
@@ -193,8 +195,8 @@ async def test_second_identical_cycle_deduplicates(monkeypatch):
     results = []
     orig = svc._ingest_external_signal
 
-    async def spy(signal, propagation_meta=None, owner=None):
-        r = await orig(signal, propagation_meta, owner=owner)
+    async def spy(signal, propagation_meta=None, owner=None, **kw):
+        r = await orig(signal, propagation_meta, owner=owner, **kw)
         results.append(r)
         return r
 
@@ -210,6 +212,76 @@ async def test_second_identical_cycle_deduplicates(monkeypatch):
 
     assert results[0][1] is False  # first cycle: a fresh ingest
     assert results[1][1] is True  # second identical cycle: deduplicated
+
+
+async def test_feature313_ac1_loop_signal_event_is_owner_stamped(monkeypatch):
+    monkeypatch.setattr(
+        loop, "list_all_sources", AsyncMock(return_value=[_mcp_source(user_id="user-a")])
+    )
+    db, _conn = transaction_conn(
+        db_fetchrow_side_effect=[{"slug": "acme-mcp"}],
+        conn_fetchrow_side_effect=[{"id": 42}, {"signal_id": 42}],
+    )
+    svc = make_servicer(db=db)
+    svc._db = db
+    mcp = _FakeMcpClient(result=_FakeResult([_item()]))
+
+    await loop.run_one_cycle(svc, _FakeCfgWatcher(), mcp)
+
+    # AC-1 Then 2 is covered by ledger @AC-11 @feature-021 plus ledgerServiceImpl.test.ts:675-709
+    # (owner precedence) and the WHERE user_id = $1 predicate at ledgerServiceImpl.ts:404, not here
+    call = svc._ledger.AppendEvent.call_args
+    assert call.args[0].event_type == "ingest.signal.ingested"
+    assert call.args[0].user_id == "user-a"
+    assert "x-user-id" not in dict(call.kwargs["metadata"])
+
+    # Incidental hardening on the RPC path; traces to no scenario.
+    rpc_svc, _db, _rpc_conn = _fresh_ingest_svc(11)
+    await rpc_svc.IngestSignal(_signal_req("motley-fool"), _ctx("0", user_id="alice"))
+    assert rpc_svc._ledger.AppendEvent.call_args.args[0].user_id == "alice"
+
+
+async def test_feature313_ac3_cycle_signals_share_a_per_source_correlation_id(monkeypatch):
+    sources = [
+        _mcp_source(slug="alpha-mcp", endpoint="https://alpha.example/mcp", user_id="user-a"),
+        _mcp_source(slug="beta-mcp", endpoint="https://beta.example/mcp", user_id="user-a"),
+    ]
+    monkeypatch.setattr(loop, "list_all_sources", AsyncMock(return_value=sources))
+    db, _conn = transaction_conn(
+        db_fetchrow_side_effect=[{"slug": s["slug"]} for s in sources for _ in range(2)],
+        conn_fetchrow_side_effect=[
+            row for n in range(1, 5) for row in ({"id": n}, {"signal_id": n})
+        ],
+    )
+    svc = make_servicer(db=db)
+    svc._db = db
+    mcp = _FakeMcpClient(result=_FakeResult([_item("AAPL"), _item("MSFT")]))
+
+    await loop.run_one_cycle(svc, _FakeCfgWatcher(), mcp)
+
+    calls = [
+        c
+        for c in svc._ledger.AppendEvent.call_args_list
+        if c.args[0].event_type == "ingest.signal.ingested"
+    ]
+    assert len(calls) == 4
+    ids_by_source = {}
+    for c in calls:
+        req, meta = c.args[0], c.kwargs["metadata"]
+        ids_by_source.setdefault(req.payload["source"], set()).add(req.correlation_id)
+        assert "x-user-id" not in dict(meta)
+        assert ("x-trace-id", req.correlation_id) in meta
+        assert [k for k, _ in meta].count("x-trace-id") == 1
+    assert set(ids_by_source) == {"alpha-mcp", "beta-mcp"}
+    for ids in ids_by_source.values():
+        assert len(ids) == 1
+        assert "" not in ids
+    assert ids_by_source["alpha-mcp"] != ids_by_source["beta-mcp"]
+
+    # The RPC path's inbound x-trace-id is never stored as correlation_id (R-9).
+    rpc_svc, _db, _rpc_conn = _fresh_ingest_svc(11)
+    await rpc_svc.IngestSignal(_signal_req("motley-fool"), _ctx("0", user_id="alice"))
+    assert rpc_svc._ledger.AppendEvent.call_args.args[0].correlation_id == ""
 
 
 async def test_source_failure_records_health_and_continues(monkeypatch):
@@ -354,6 +426,17 @@ async def _run_cycle_with(monkeypatch, result, *, source=None, ingest=None):
     servicer._ingest_external_signal = ingest or AsyncMock(return_value=(1, False))
     await loop.run_one_cycle(servicer, _FakeCfgWatcher(), _FakeMcpClient(result=result))
     return servicer._ingest_external_signal, errors
+
+
+async def test_explicit_zero_conviction_marks_presence(monkeypatch):
+    # @AC-5 @feature-309: an mcp_client item's explicit 0.0 is built as a provided 0.0.
+    ingest, errors = await _run_cycle_with(monkeypatch, _FakeResult([_item(conviction=0.0)]))
+
+    ingest.assert_awaited_once()
+    signal = ingest.await_args.args[0]
+    assert signal.conviction == 0.0
+    assert signal.conviction_provided is True
+    assert errors == []
 
 
 async def test_ac5_signals_key_selected_alongside_other_list(monkeypatch):

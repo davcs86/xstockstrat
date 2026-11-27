@@ -100,7 +100,7 @@ D-17 supersedes D-2's "only via `propagation_meta`" clause (operator ruling on D
 
 1. Docs and context.md: the AC-1 and AC-2 rewordings with the C-16 sign-off; FR-1 loop-only; FR-2 per D-10;
    FR-3 reworded to "persisted as correlation_id"; the D-12 Problem Statement drift fix (recon.md:28); the
-   operator's 2026-11-20 rulings on D-2 and D-9; the consumer-surface note above.
+   operator's 2026-11-20 rulings on D-2 and D-9; the consumer-surface note above. <!-- Superseded 2026-11-26 by operator ruling: AC-1 stays as confirmed (PRESERVE); only AC-2 is reworded. -->
 2. Analysis AC-2, RED then GREEN.
 3. Ingest D-1 / AC-1.
 4. Ingest FR-3 / AC-3, as a separate final step.
@@ -141,7 +141,7 @@ D-17 supersedes D-2's "only via `propagation_meta`" clause (operator ruling on D
 - `C-11` — honored by: the full design debate ran (5 rounds) before any code; assumptions and rulings are in debate.md and context.md.
 - `C-14` — honored by: the consumer surface is named (the `/trader` ledger export, D-7) with the `correlation_id` column note; analysis is internal-only.
 - `C-15` — honored by: FR-1/FR-2/FR-3 are added to the product spec and every scenario is tagged `@FR-N` (R-5); Thens are observable outcomes only.
-- `C-16` — honored by: the `@AC-1` and `@AC-2` rewordings carry the operator sign-off of 2026-11-20; every other touched rule is a PRESERVE (below).
+- `C-16` — honored by: the `@AC-1` and `@AC-2` rewordings carry the operator sign-off of 2026-11-20; every other touched rule is a PRESERVE (below). <!-- Superseded 2026-11-26 by operator ruling: AC-1 stays as confirmed (PRESERVE); only AC-2 is reworded. -->
 - `C-18` — honored by: one `is_real_owner()` predicate (R-2), one `trace_id` keyword for both channels (R-11), no restated metric-label rule (R-6), no dead strip branch.
 - `F-09` — honored by: FR-3/AC-3 is a separate final step, so no Deviation-Log step swap is needed (D-16).
 - `P-02` — honored by: the orchestrator mediated every proposer/adversary exchange through the synthesized state.
@@ -153,7 +153,7 @@ Floor breaches: none.
 
 ## Business Rules Touched (C-16)
 
-- CHANGE `@AC-1` "mcp_client loop signal events are owner-stamped in the ledger" (this feature's `acceptance.feature`) — second Then reworded to the `AppendEventRequest.user_id` assertion plus no `x-user-id` metadata; export visibility becomes a cited PRESERVE of `@AC-11 @feature-021` (D-8); signed off by operator @ 2026-11-20 (context.md, "C-16 sign-off for this feature's @AC-1 and @AC-2").
+- CHANGE `@AC-1` "mcp_client loop signal events are owner-stamped in the ledger" (this feature's `acceptance.feature`) — second Then reworded to the `AppendEventRequest.user_id` assertion plus no `x-user-id` metadata; export visibility becomes a cited PRESERVE of `@AC-11 @feature-021` (D-8); signed off by operator @ 2026-11-20 (context.md, "C-16 sign-off for this feature's @AC-1 and @AC-2"). <!-- Superseded 2026-11-26 by operator ruling: AC-1 stays as confirmed (PRESERVE); only AC-2 is reworded. -->
 - CHANGE `@AC-2` "A system-owned order event yields a partial P&L snapshot" (this feature's `acceptance.feature`) — "Then _compose does not raise" replaced by "Then the event is processed on its first attempt with no retry backoff", with the degraded-snapshot, no-window outcome (D-8, D-15); signed off by operator @ 2026-11-20 (context.md, same ruling).
 - EXTEND `@AC-3` (new to this feature, `@FR-3`) — new case added: per-source, per-cycle shared `correlation_id` on `ingest.signal.ingested` ledger events. Net-new, so it needs C-15 traceability, not sign-off.
 - PRESERVE `@AC-11 @feature-021` and `@AC-8 @feature-021` (`services/xstockstrat-ledger/acceptance/ledger-event-export.feature`) — not regressed by: no ledger change; export stays scoped to `user_id = caller` and the row shape is unchanged.

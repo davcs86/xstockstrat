@@ -24,7 +24,11 @@ import {
   EnumBadge,
   opportunityChipLabel,
 } from '@/lib/opportunityShared';
-import { READINESS_CUE } from '@/lib/readinessCue';
+import {
+  EVALUATION_FAILED_CUE,
+  EVALUATION_FAILED_PROVENANCE,
+  READINESS_CUE,
+} from '@/lib/readinessCue';
 import { useWatchlists } from '@/hooks/useWatchlists';
 import { useOpportunities, useStrategyAnalytics } from '@/hooks/useOpportunities';
 import { useOhlcBars } from '@/hooks/useOhlcBars';
@@ -1019,6 +1023,7 @@ function OpportunitySection({
   if (!opportunity) {
     return <CardNotice>No current opportunity for {symbol}.</CardNotice>;
   }
+  const evalFailed = opportunity.provenance.includes(EVALUATION_FAILED_PROVENANCE);
   // conviction is a deterministic ordinal, NOT a probability — shown as a scaled number alongside
   // the authoritative "N/M conditions", never re-labeled as a % confidence.
   const conviction = Math.round(opportunity.conviction * 100);
@@ -1042,11 +1047,16 @@ function OpportunitySection({
             />
           ) : opportunity.formulaUnreadable && !opportunity.provenance.includes('position') ? (
             <EnumBadge render={READINESS_CUE.unreadable} testId="detail-formula-unreadable" />
+          ) : evalFailed && !opportunity.provenance.includes('position') ? (
+            <EnumBadge render={EVALUATION_FAILED_CUE} testId="detail-evaluation-failed" />
           ) : (
             <div className="flex items-center gap-2">
               <EnumBadge render={OPPORTUNITY_ACTION[opportunity.action]} />
               {opportunity.formulaUnreadable && (
                 <EnumBadge render={READINESS_CUE.unreadable} testId="detail-formula-unreadable" />
+              )}
+              {evalFailed && (
+                <EnumBadge render={EVALUATION_FAILED_CUE} testId="detail-evaluation-failed" />
               )}
             </div>
           )}

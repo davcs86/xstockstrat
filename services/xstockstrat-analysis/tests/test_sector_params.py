@@ -180,7 +180,7 @@ async def test_k_distinct_variants_computed_once_each():
 def _scalar_resp(**scalars):
     out = Struct()
     out.update(scalars)
-    return SimpleNamespace(success=True, output=out, error="")
+    return SimpleNamespace(success=True, output=out, error="", exit_reason=0)
 
 
 @pytest.mark.asyncio

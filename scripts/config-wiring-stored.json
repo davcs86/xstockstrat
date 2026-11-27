@@ -1,6 +1,30 @@
 {
     "rows": [
         {
+            "key": "extract.call_budget_seconds",
+            "file": "057_mcp_deadline_budget.up.sql",
+            "global": true,
+            "is_secret": false,
+            "namespace": "agent",
+            "value_type": "float",
+            "description": "Whole-call budget (seconds) for the URL fetches of one extract_email_content / extract_website_content call. Identity auth (10 s) + the source lookup (10 s) + this value must stay at or below 57 s, 3 s under the MCP client's 60 s timeout. Read live; a non-finite or <= 0 value reads as 35. SetConfig-bounded [5,35].",
+            "environment": "production",
+            "default_value": "35",
+            "consuming_service": "xstockstrat-agent"
+        },
+        {
+            "key": "extract.call_budget_seconds",
+            "file": "057_mcp_deadline_budget.up.sql",
+            "global": true,
+            "is_secret": false,
+            "namespace": "agent",
+            "value_type": "float",
+            "description": "Whole-call budget (seconds) for the URL fetches of one extract_email_content / extract_website_content call. Identity auth (10 s) + the source lookup (10 s) + this value must stay at or below 57 s, 3 s under the MCP client's 60 s timeout. Read live; a non-finite or <= 0 value reads as 35. SetConfig-bounded [5,35].",
+            "environment": "staging",
+            "default_value": "35",
+            "consuming_service": "xstockstrat-agent"
+        },
+        {
             "key": "extract.connect_timeout_seconds",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
@@ -2737,6 +2761,30 @@
             "consuming_service": "xstockstrat-marketdata"
         },
         {
+            "key": "bars.miss_backoff_ms",
+            "file": "058_marketdata_bars_miss_backoff.up.sql",
+            "global": true,
+            "is_secret": false,
+            "namespace": "marketdata",
+            "value_type": "int",
+            "description": "Marketdata GetBars miss window: milliseconds a servable symbol with no stored bars is not live-fetched again by GetBars after a live fetch returned none. Read live on each miss. A value of 0 or less disables the back-off, so every miss fetches and warns. Explicit-range reads always fetch.",
+            "environment": "production",
+            "default_value": "1800000",
+            "consuming_service": "xstockstrat-marketdata"
+        },
+        {
+            "key": "bars.miss_backoff_ms",
+            "file": "058_marketdata_bars_miss_backoff.up.sql",
+            "global": true,
+            "is_secret": false,
+            "namespace": "marketdata",
+            "value_type": "int",
+            "description": "Marketdata GetBars miss window: milliseconds a servable symbol with no stored bars is not live-fetched again by GetBars after a live fetch returned none. Read live on each miss. A value of 0 or less disables the back-off, so every miss fetches and warns. Explicit-range reads always fetch.",
+            "environment": "staging",
+            "default_value": "1800000",
+            "consuming_service": "xstockstrat-marketdata"
+        },
+        {
             "key": "classification.enabled",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
@@ -4532,6 +4580,30 @@
             "namespace": "trading",
             "value_type": "bool",
             "description": "Kill switch for adaptive Alpaca broker pacing in trading. When true the Alpaca client paces requests from the X-RateLimit-Limit, X-RateLimit-Remaining and X-RateLimit-Reset response headers and retries an HTTP 429 within a budget derived from broker.timeout_ms and order_intent.stale_multiplier. When false every broker call is one unpaced attempt, as before feature 347. Read live on every Alpaca request. IBKR is not affected.",
+            "environment": "staging",
+            "default_value": "true",
+            "consuming_service": "xstockstrat-trading"
+        },
+        {
+            "key": "broker.paper",
+            "file": "059_trading_broker_paper_per_environment.up.sql",
+            "global": true,
+            "is_secret": false,
+            "namespace": "trading",
+            "value_type": "bool",
+            "description": "Paper or live for this deployment: true stamps new orders and registers new broker accounts as paper, false as live. Seeded per environment (staging true, production false); with no row trading resolves paper unless APPLICATION_ENV is production. Read live. Accounts already registered keep routing by their own stored mode, so changing this value does not re-route them.",
+            "environment": "production",
+            "default_value": "false",
+            "consuming_service": "xstockstrat-trading"
+        },
+        {
+            "key": "broker.paper",
+            "file": "059_trading_broker_paper_per_environment.up.sql",
+            "global": true,
+            "is_secret": false,
+            "namespace": "trading",
+            "value_type": "bool",
+            "description": "Paper or live for this deployment: true stamps new orders and registers new broker accounts as paper, false as live. Seeded per environment (staging true, production false); with no row trading resolves paper unless APPLICATION_ENV is production. Read live. Accounts already registered keep routing by their own stored mode, so changing this value does not re-route them.",
             "environment": "staging",
             "default_value": "true",
             "consuming_service": "xstockstrat-trading"
@@ -5161,5 +5233,5 @@
             "consuming_service": "xstockstrat-ui"
         }
     ],
-    "inputs_sha256": "171dc776a579da4384dc040ff3dcc5bc31dbab5aa998b6649fa59c21f3f551de"
+    "inputs_sha256": "29f47190323e82129ef0b18ded64eeb2bea5e628bea0745fceda482cf28c363c"
 }
