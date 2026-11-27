@@ -96,8 +96,8 @@ Names and seams the design leaves open. Each is this spec's choice and is open t
   requires the emitted tick records to cover every `telemetry.Loop` member (Steps 15 and 16).
 - **S-10. Seams the design leaves to the build.** Named in their steps and listed here so none is
   a silent choice: `lane()` and the `lane_held` parameters on repository methods (how the control
-  lane is passed); `ClaimedJob.db` (the handler's `job.db()` entry point); `start_listening` (the
-  `cfg.on_change` registration); `set_pipeline_ready_stats(at=)` (the gauge snapshot setter);
+  lane is passed); `ClaimedJob.db` (the handler's `job.db()` entry point); `start_listening` and
+  `JobGraphSettings.on_change` (the `cfg.on_change` registration); `set_pipeline_ready_stats(at=)` (the gauge snapshot setter);
   and `heartbeat()` taking no `conn=`, because it never runs inside a caller's transaction.
 - **S-11. Step 1 lists eight files.** The design requires the seed, bounds, stored set and docs
   rows in one commit (D-25, C-10), so the step cannot be split below the usual five-file guide.
@@ -128,7 +128,10 @@ Names and seams the design leaves open. Each is this spec's choice and is open t
 - Step 9 requires Step 2 (it extends `app/engine/job_graph.py`). Step 10 [test] covers Step 9.
 - Step 11 requires Steps 5, 7 and 9. Step 12 [test] covers Step 11.
 - Step 13 requires Steps 7 and 11. Step 14 [test] covers Step 13.
-- Step 15 requires Steps 7, 11 and 13 (it adds record calls to them). Step 16 [test] covers Step 15.
+- **Steps 15+16 land together.** Trigger: Step 15 adds `Loop.PIPELINE_WORKER`, which turns
+  `tests/test_analysis_tick_telemetry.py:164-166` (`{loop in records} == {m.value for m in
+  telemetry.Loop}`) red until Step 16's driver emits a pipeline tick. Step 15 requires Steps 7,
+  11 and 13 (it adds record calls to them).
 - **Steps 17+18 land together.** Trigger: Step 17 adds three `spawn(` calls to `app/main.py`, which
   turns `tests/test_supervision.py:143-148` red (`source.count("spawn(") == len(_BOOT_TASK_NAMES)`);
   Step 18 repairs it. Step 17 requires Steps 5, 7, 11, 13 and 15.
@@ -308,6 +311,9 @@ config, stored-set and wiring commands.
      stored value and the value used. It logs again only when the stored value differs from the
      last one warned about for that key.
    - No caching: every call reads the watcher (PLAT-6, FR-9).
+   - `on_change(self, callback)` delegates to `self._cfg.on_change(callback)`
+     (`app/config/watch_core.py:92`). It is not a config read, so it needs no wiring or
+     read-classification entry.
 2. The config-key contract for this reader (C-05). Namespace `analysis`, live mechanism: the
    service's `WatchConfig` watcher, read at each use. Seed migration: config `060` (Step 1).
 
@@ -530,7 +536,7 @@ grep -rn "pipeline_job" services/xstockstrat-analysis/migrations/ | grep -v "031
 6. Leave `budgeted_read`, `BudgetedConn`, `is_transient_db_error` and the constants untouched.
    Comments: at most two lines each, constraints only.
 
-**Verification**:
+**Verification** (behaviour is gated by Step 6's tests; this step's gate is lint, import and the guard greps, and Step 6 must be green before Step 9 starts):
 ```bash
 cd services/xstockstrat-analysis
 ruff check . && ruff format --check .
@@ -676,23 +682,27 @@ uv run --extra dev pytest tests/test_bounded_txn_real_pg.py -q -rs | grep -c SKI
      `ParkRace` before inserting edges; insert edges `ON CONFLICT (parent_id, child_id) DO
      NOTHING`; set the parent `waiting`, clear its lease and refund the attempt (`attempts - 1`).
    - `settle_batch(*, conn=None)` → `(woken, blocked, full)`. One `UPDATE … WHERE j.job_id IN
-     (SELECT job_id … ORDER BY job_id LIMIT 500 FOR NO KEY UPDATE SKIP LOCKED) RETURNING`, the
+     (SELECT job_id … ORDER BY job_id LIMIT $BATCH_SIZE FOR NO KEY UPDATE SKIP LOCKED) RETURNING`, the
      settleable predicate inside the subquery before `LIMIT`, the outer update adding no predicate.
      All children succeeded → `ready`, `wait_round + 1`, `next_attempt_at = now()`. Any child in
      `failed`, `dead` or `blocked` → `blocked` with `dependency_failed`, `dependency_dead` or the
-     child's own verdict, decided by the lowest such `job_id`. `full` is true when 500 rows were
-     chosen.
+     child's own verdict, decided by the lowest such `job_id`. `full` is true when `BATCH_SIZE` rows
+     were chosen.
    - `list_by_run(run_id, *, conn=None)` → `job_id, kind, subject, epoch, lane, state` ordered by
      `job_id`.
    - `ready_stats(*, conn=None)` → per lane, the count of rows with `state = 'ready' AND
      next_attempt_at <= now()` and `now() − min(next_attempt_at)` in seconds.
-4. Module-level `async def prune_batch(conn, *, state, older_than_days, cutoff=None)` (S-2) →
-   `(candidates, deleted, cutoff)`. `conn` is required: a handler's `job.db()` handle. Two
-   statements in the caller's transaction, as design.md § Repository and SQL, Prune: the unordered
-   candidate `SELECT j.job_id … WHERE j.state = $state AND j.finished_at < $cutoff AND NOT EXISTS
-   (unfinished-parent sublink) FOR UPDATE OF j SKIP LOCKED LIMIT 500`, then `DELETE … WHERE job_id
-   = ANY($ids)` repeating the guard. With `cutoff=None` it first reads `now() − make_interval(days
-   => $older_than_days)` on the database clock and returns it.
+4. Module-level `BATCH_SIZE = 500`: the one named constant behind the settle and prune `LIMIT`
+   and both `full` flags (design.md fixed constants: settle batch 500, prune batch 500).
+   Module-level `async def prune_batch(*, conn, state, older_than_days, cutoff=None)` (S-2) →
+   `(candidates, deleted, cutoff, full)`. `conn` is keyword-only and required: a handler's
+   `job.db()` handle, passed as `conn=` so the call satisfies the handler contract's "a call
+   passing `conn=`" rule (Step 12). Two statements in the caller's transaction, as design.md
+   § Repository and SQL, Prune: the unordered candidate `SELECT j.job_id … WHERE j.state = $state
+   AND j.finished_at < $cutoff AND NOT EXISTS (unfinished-parent sublink) FOR UPDATE OF j SKIP
+   LOCKED LIMIT $BATCH_SIZE`, then `DELETE … WHERE job_id = ANY($ids)` repeating the guard. With
+   `cutoff=None` it first reads `now() − make_interval(days => $older_than_days)` on the database
+   clock and returns it. `full` is true when `candidates == BATCH_SIZE`.
 5. `class ParkRace(Exception)` in this module. Every candidate select locks only the outer
    `pipeline_jobs` alias; any predicate over another table is an `EXISTS` / `NOT EXISTS` subquery.
 6. Lane values come from the caller as integers 10 and 20 (the `Lane` enum is Step 9); this module
@@ -701,7 +711,7 @@ uv run --extra dev pytest tests/test_bounded_txn_real_pg.py -q -rs | grep -c SKI
    clock for a database decision: lease expiry, next-attempt time, cutoffs and ready age use
    `now()` (D-2).
 
-**Verification**:
+**Verification** (behaviour is gated by Step 8's tests; this step's gate is lint, import and the guard greps, and Step 9 is not marked `done` until Step 8 is green):
 ```bash
 cd services/xstockstrat-analysis
 ruff check . && ruff format --check .
@@ -770,10 +780,10 @@ grep -c "SKIP LOCKED" app/repositories/pipeline_jobs.py   # claim, reap, settle,
    - `@AC-11`: three rows under `run-2026-11-27` and one under `run-2026-11-26` →
      `list_by_run("run-2026-11-27")` returns three, each with its state.
    - `@AC-12`: one `succeeded`, `failed`, `dead` and `blocked` row each finished 8 days ago;
-     `prune_batch(state="succeeded", older_than_days=7)` deletes the first; the others survive a
-     `prune_batch` at 30 days.
-   - `@AC-18`: `dead` rows finished 31 and 29 days ago; `prune_batch(state="dead",
-     older_than_days=30)` deletes only the first.
+     `prune_batch(conn=conn, state="succeeded", older_than_days=7)` on a connection from the test
+     pool deletes the first; the others survive a `prune_batch` at 30 days.
+   - `@AC-18`: `dead` rows finished 31 and 29 days ago; `prune_batch(conn=conn,
+     state="dead", older_than_days=30)` deletes only the first.
    - `@AC-13`: four `ready` `watchlist` rows, the oldest `next_attempt_at` 120 s ago →
      `ready_stats()` gives depth 4 and age at least 120 for that lane; a row whose
      `next_attempt_at` is in the future is not counted.
@@ -874,7 +884,7 @@ grep -cE "^async def test_ac[0-9]+_" tests/test_pipeline_jobs_real_pg.py   # >= 
     functions giving the epoch (the UTC date as `YYYY-MM-DD`) and `run_id`
     (`retention_prune:<UTC date>`) for a date.
 
-**Verification**:
+**Verification** (behaviour is gated by Step 10's tests; this step's gate is lint, import and the existing settings and classification tests):
 ```bash
 cd services/xstockstrat-analysis
 ruff check . && ruff format --check .
@@ -926,7 +936,7 @@ cd services/xstockstrat-analysis
 uv run --extra dev pytest tests/test_job_graph_core.py -q
 uv run --extra dev pytest --cov=app --cov-fail-under=40
 ruff check . && ruff format --check .
-grep -n "def .*fixture\|from .conftest\|conftest" tests/test_job_graph_core.py ; echo "C-13: single-consumer inline literals; no fixture expected"
+! grep -n "def .*fixture" tests/test_job_graph_core.py   # C-13: single-consumer inline literals; no local fixture
 ```
 
 ---
@@ -965,9 +975,9 @@ grep -n "def .*fixture\|from .conftest\|conftest" tests/test_job_graph_core.py ;
      next delay in seconds (`claim_tick`, `maintenance_tick`, `heartbeat_tick`) and three
      `run_*_forever` coroutines that drive them through `run_supervised`.
    - The constructor calls `registry.validate()` and builds the `ResizableLimiter` over
-     `settings.worker_concurrency`; `start_listening()` registers `limiter.wake` with
-     `config_watcher.on_change` (kept out of the constructor so a test can build a worker without a
-     watcher hook).
+     `settings.worker_concurrency`; `start_listening()` calls
+     `settings.on_change(self._limiter.wake)` (kept out of the constructor so a test can build a
+     worker over `snapshot_watcher`, which has no callback list; tests do not call it).
 2. **Claim tick.** As the design's Claim loop bullet: block on the limiter while full; take free
    slots by repeated `acquire()` while `in_use < limit`; read `worker_enabled` after the limiter
    returns and again after the control lane is taken, immediately before the claim; when false,
@@ -1026,7 +1036,7 @@ grep -n "def .*fixture\|from .conftest\|conftest" tests/test_job_graph_core.py ;
     `asyncio.timeout`, `wait_for` or cancellation is delivered inside an open transaction.
 12. Per-subject serialization is not added (product-spec § Design Constraints).
 
-**Verification**:
+**Verification** (behaviour is gated by Step 12's tests; this step's gate is lint, import and the guard greps, and Step 13 is not marked `done` until Step 12 is green):
 ```bash
 cd services/xstockstrat-analysis
 ruff check . && ruff format --check .
@@ -1100,8 +1110,10 @@ python3 ../../scripts/check-watcher-copies.py ../..
    - `@AC-9`: the child handler returns `Verdict("no_vendor_data")` → the parent ends `blocked`
      with that verdict and its handler ran once.
    - a runner that waited for an in-flight heartbeat batch records no false loss (S-7).
-   - a handler raising `PermanentJobError` ends `failed`; one raising `RuntimeError` is `ready`
-     again with a `next_attempt_at` at least 5 s ahead.
+   - a handler raising `PermanentJobError` ends `failed` (`@AC-6`); one raising `RuntimeError` is
+     `ready` again with a `next_attempt_at` at least 5 s ahead (`@AC-5`).
+   - a job inserted with `attempts=4` whose handler raises `RuntimeError` ends `dead`
+     (`error_class` `transient`) after one claim and is never claimed again (`@AC-7`).
 4. `tests/test_job_handler_contract.py`: a checker function that parses a module's source and
    returns its violations, applied to every file under `app/jobs/`. It rejects each item of
    design.md § Handler database contract: `asyncpg` imports, any `.acquire(` call, the names
@@ -1114,8 +1126,7 @@ python3 ../../scripts/check-watcher-copies.py ../..
    and one compliant source passes.
 5. Design gate tests that need the engine (`real_pg`, `tests/test_job_graph_worker_real_pg.py`):
    - 1 200 settleable parents are all woken by ONE maintenance tick of a real worker (three settle
-     batches inside the tick), each with the lowest-id verdict;
-   - a runner that waited for an in-flight heartbeat batch records no false loss (S-7).
+     batches inside the tick), each with the lowest-id verdict.
 6. RED: `@AC-17`'s "second job still ready with attempt count 0" and the contract checker's
    bare-`except:` case.
 
@@ -1143,7 +1154,7 @@ grep -c "asyncio.sleep(" tests/test_job_graph_worker.py   # 0: virtual time only
 
 **Codebase Evidence**:
 - `app/jobs/__init__.py` (`build_registry`) and the handler contract: Step 11 and Step 12.
-- `prune_batch(conn, *, state, older_than_days, cutoff=None)`: Step 7 (S-2).
+- `prune_batch(*, conn, state, older_than_days, cutoff=None)` returning `(candidates, deleted, cutoff, full)`: Step 7 (S-2).
 - Prune identity constants and `Lane`: Step 9. `JobGraphSettings.retention_days`: Step 2.
 - design.md § Retention prune: the handler's rules; FR-7 in product-spec.md.
 
@@ -1158,11 +1169,13 @@ grep -c "asyncio.sleep(" tests/test_job_graph_worker.py   # 0: virtual time only
 2. The handler reads `retention_days` once at entry. It runs four DELETE loops in this order:
    `failed`, `dead`, `blocked` (each `older_than_days = max(30, retention_days)`), then `succeeded`
    (`older_than_days = retention_days`), so a succeeded backlog cannot starve the terminal states.
-3. Each batch runs in its own `async with job.db(30) as conn` block and awaits only
-   `prune_batch(conn, …)` inside it. The first batch of a loop passes `cutoff=None` and reuses the
-   returned cutoff for the rest of that loop. A loop ends when a batch reports fewer than 500
-   candidates.
-4. Before starting each batch, if 600 s have passed since entry (injected `monotonic`), stop and
+3. Module constants `PRUNE_BLOCK_BUDGET_S = 30` and `PRUNE_SELF_STOP_S = 600` (design.md fixed
+   constants: prune block budget, prune self-stop). Each batch runs in its own
+   `async with job.db(PRUNE_BLOCK_BUDGET_S) as conn` block and awaits only
+   `prune_batch(conn=conn, …)` inside it. The first batch of a loop passes `cutoff=None` and reuses
+   the returned cutoff for the rest of that loop. A loop ends when a batch's `full` flag is false;
+   the handler never names the batch size.
+4. Before starting each batch, if `PRUNE_SELF_STOP_S` have passed since entry (injected `monotonic`), stop and
    return `Succeeded`; the rest waits for the next day's job. Otherwise return `Succeeded` when the
    four loops end.
 5. No `try`/`except` in the handler: an error is classified by the engine (transient unless
@@ -1270,8 +1283,9 @@ grep -n "pipeline_pg\|insert_pipeline_job\|from tests.conftest\|conftest" tests/
      return keeps today's single attribute-less observation and `None` still reports nothing.
    - Gauges `analysis.pipeline.ready_depth` and `analysis.pipeline.oldest_ready_age` (unit `s`),
      both labelled by `KEY_LANE`, reading one module-level snapshot;
-     `set_pipeline_ready_stats(stats, *, at)` stores it and the gauges report nothing when it is
-     older than 45 s; `register_pipeline_gauges()` registers both.
+     `set_pipeline_ready_stats(stats, *, at)` stores it with `at`, a `time.monotonic()` reading,
+     and the gauges report nothing when `time.monotonic() - at` exceeds 45 s (tests pass
+     `at=time.monotonic() - 46`); `register_pipeline_gauges()` registers both.
 2. `app/engine/job_graph.py`, record calls only:
    - the claim loop writes `log_tick_ok(log, Loop.PIPELINE_WORKER, …)` at most once per 60 s: no
      state after a claim that returned jobs, `idle` after an empty claim, `disabled` when disabled,
@@ -1291,7 +1305,7 @@ grep -n "pipeline_pg\|insert_pipeline_job\|from tests.conftest\|conftest" tests/
 5. No alert, dashboard or `packages/otel/produced-signals.tsv` row ships (design.md § Telemetry;
    that registry lists only signals an alert or dashboard queries).
 
-**Verification**:
+**Verification** (this step's own checks; the combined gate for the Steps 15+16 unit is Step 16's Verification, which runs `tests/test_analysis_tick_telemetry.py`):
 ```bash
 cd services/xstockstrat-analysis
 ruff check . && ruff format --check .
@@ -1316,6 +1330,7 @@ cd ../.. && python3 scripts/check-otel-produced-signals.py
 
 **Codebase Evidence**:
 - `tests/test_analysis_tick_telemetry.py:164-166` asserts the set of `loop` values in the emitted tick records equals every `telemetry.Loop` member, so adding `Loop.PIPELINE_WORKER` (Step 15) turns it red until its driver emits a pipeline tick. Steps 15 and 16 therefore land in one commit.
+- `host.provider` pattern: `tests/test_telemetry.py:244-272` (`test_live_loop_cycle_duration_datapoint_keys_gain_only_host_provider`) uses `otel_reset`, `_start_body_receiver`, `_enable` and `_flush_all` and parses the OTLP request body; the in-memory `metric_reader` does not pass through `_with_host_provider` (`app/telemetry.py:49-66`). Import its helpers from `tests.test_telemetry`.
 - `ALLOWED_KEYS` is derived from the module's `KEY_*` names (`tests/test_telemetry_allowlist.py:16`); `MIN_INSTRUMENTS` at `:34-42`; `_drive()` at `:46-56`; `_keys_by_instrument` at `:59-68`.
 - In-memory reader fixture: `metric_reader` in `tests/test_telemetry.py:154-163`, re-exported the way `tests/test_telemetry_allowlist.py:10-13` does.
 - Gauge tests to extend: `tests/test_telemetry_instruments.py:86-106` (`test_gauge_rebinds_on_provider_change`, `test_gauge_reports_nothing_when_observe_returns_none`).
@@ -1353,8 +1368,11 @@ cd ../.. && python3 scripts/check-otel-produced-signals.py
    - the claim loop's tick record: no state after a claim with jobs, `idle` after an empty claim,
      `disabled` when disabled, at most one record per 60 s of virtual time;
    - `analysis.pipeline.db.duration` carries only `step`, `phase` and (on `total`) `outcome`;
-   - the durable `@AC-3 @feature-337` case: collected through the exporter wrapper, a point of
-     each new instrument carries `host.provider`.
+   - the durable `@AC-3 @feature-337` case, following `tests/test_telemetry.py:244-272`: run
+     `init_telemetry()` under `HOST_PROVIDER=homelab`, record one point of each new counter and
+     of the histogram, call `set_pipeline_ready_stats` for the gauges, flush, parse the OTLP
+     request, and assert `host.provider` is a key of every data point of the five instruments.
+     Gauge points are read from `m.gauge.data_points`.
 
 **Verification**:
 ```bash
@@ -1384,6 +1402,7 @@ grep -n "metric_reader\|pipeline_pg\|from tests.conftest\|conftest" tests/test_p
 - Source pins on this file: `tests/test_supervision.py:143-148` (`source.count("create_task(") == 1`, `source.count("spawn(") == len(_BOOT_TASK_NAMES)`); `tests/test_owner_header_guard.py:114-116` (no `interceptors=` other than `server_interceptors()`); `tests/test_telemetry.py:429-433` (no `os._exit` / `sys.exit`); `tests/test_strategy_templates.py:671`.
 - Deploy files need no change: no new env var or port. `DB_PGBOUNCER` is already set for analysis and `DB_POOL_MAX` is deliberately unset (`.do/app.yaml:330-332`).
 - F-06: pooled client connections are not backend slots (`docs/patterns/database.md:175-180`); the control pool adds client connections to PgBouncer only.
+- Symbols this step consumes from earlier steps: `control_pool_reset` (Step 5, `app/repositories/read_budget.py`); `PipelineJobsRepository` (Step 7); `JobGraphSettings` (Step 2), `JobGraphWorker` and `build_registry` (Step 11); `register_pipeline_gauges` (Step 15).
 
 **Lands with**: `Step 18`
 
@@ -1396,12 +1415,14 @@ grep -n "metric_reader\|pipeline_pg\|from tests.conftest\|conftest" tests/test_p
    the `statement_cache_size` rule of `:59-61` (one copy of the rule; keep the two-line PgBouncer
    comment with it). Build the service pool through it with the same `min_size=1` and
    `max_size=int(os.environ.get("DB_POOL_MAX", "2"))`.
-2. When `DATABASE_URL` is set, also build the control pool through it: `min_size=0`, `max_size=2`,
-   `reset=control_pool_reset`. The size is a literal: it is fixed and not env-overridable (design.md
-   § Bounded database access). If Step 6 recorded a fallback (`min_size=1`, or no `reset`), use
-   that.
+2. Add `async def _create_pools(dsn) -> tuple[pool, control_pool]` in `app/main.py`: the service
+   pool as in item 1, and the control pool through `_create_pool` with `min_size=0`, `max_size=2`,
+   `reset=control_pool_reset`. The size is a literal: it is fixed and not env-overridable
+   (design.md § Bounded database access: "built by a shared helper in `main.py`"). `serve()` calls
+   `_create_pools` when `DATABASE_URL` is set, so Step 18 can test pool construction without
+   running `serve()`. If Step 6 recorded a fallback (`min_size=1`, or no `reset`), use that.
 3. After `init_telemetry()` (`:41`) call `register_pipeline_gauges()`.
-4. Inside the `if db_pool is not None:` block, after `:229`: build `JobGraphSettings(cfg_watcher)`,
+4. Inside the `if db_pool is not None:` block, after the last existing `spawn(` (`:228`): build `JobGraphSettings(cfg_watcher)`,
    `PipelineJobsRepository(control_pool)`, `build_registry(settings)` and
    `JobGraphWorker(repo, db_pool, settings, registry)`; call `worker.start_listening()`; then
    three `spawn(…, forever=True)` calls named `pipeline-claim`, `pipeline-maintenance` and
@@ -1443,6 +1464,8 @@ grep -n "metric_reader\|pipeline_pg\|from tests.conftest\|conftest" tests/test_p
    - `_create_pool` passes `statement_cache_size=0` when `DB_PGBOUNCER` is `true` or `1` and `100`
      otherwise (`monkeypatch` `asyncpg.create_pool` with an `AsyncMock` and the env var). RED: this
      assertion (`_create_pool` does not exist today).
+   - the remaining pool assertions call `_create_pools(dsn)` directly with `asyncpg.create_pool`
+     monkeypatched to an `AsyncMock`; none runs `serve()`.
    - the control pool is requested with `min_size=0`, `max_size=2` and
      `reset=control_pool_reset`, and its `max_size` does not follow `DB_POOL_MAX` (set
      `DB_POOL_MAX=7`: the service pool asks for 7, the control pool still for 2);
@@ -1503,7 +1526,9 @@ git status --short -- ../../docker-compose.yml ../../.do ../../deploy/homelab/co
    - amend `:74-75` so it no longer says the service has one pool: run-history persistence reuses
      the service pool, and the pipeline job graph has its own fixed control pool of 2;
    - add a short `### Pipeline job graph (feature 367)` section after § Shared durable scheduler:
-     what it is, that it is disjoint from `DurableSchedule` and `analysis.job_schedule`, that its
+     what it is, its two plain tables `analysis.pipeline_jobs` and `analysis.pipeline_job_deps`
+     (the service `CLAUDE.md` is authoritative for plain tables, `docs/patterns/database.md:16-18`),
+     that it is disjoint from `DurableSchedule` and `analysis.job_schedule`, that its
      only production kind is `pipeline.retention_prune`, the handler contract in one sentence
      (`job.db()` is a handler's only database access; `tests/test_job_handler_contract.py` enforces
      it), and "Detail → this service's `docs/` folder (**`pipeline-jobs.md`**)". Leave `:95` as it

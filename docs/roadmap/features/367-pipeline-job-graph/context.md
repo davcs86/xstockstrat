@@ -328,3 +328,26 @@ Carried from design.md § Open Risks; each needs an owner at `/sdd-spec` or late
   `merge-order.md` (the file's existing form for config-seed-number overlaps), naming merge-time
   renumbering as the accepted remedy and adding `scripts/config-wiring-stored.json`. No other
   collision; the rest is rebase-only.
+
+## Session 2026-11-27 — sdd-review impl-spec (advisory, round 2: criteria)
+
+- Result: 1 failure, 8 warnings, 6 notes (advisory). No Floor breach. Every round-1 fix verified
+  in the text; the pin search found no existing test the spec had missed.
+- Unresolved ✗ / ⚠ carried into execution:
+  - F1 Steps 15+16 had no Step Dependencies line — [x] added.
+  - W1 batch-size, prune block budget and prune self-stop constants unnamed — [x] `BATCH_SIZE`,
+    `PRUNE_BLOCK_BUDGET_S`, `PRUNE_SELF_STOP_S`; `prune_batch` returns `full`.
+  - W2 `start_listening()` had no watcher source — [x] `JobGraphSettings.on_change`.
+  - W3 Step 18's pool assertions could not run — [x] `_create_pools(dsn)` helper in `main.py`.
+  - W4 `@AC-7` not driven through the worker — [x] test added to Step 12.
+  - W5 duplicate test bullet in Step 12 — [x] removed.
+  - W6 `host.provider` assertion had no method — [x] precedent and steps cited in Step 16.
+  - W7 `prune_batch(conn, …)` positional conflicted with the handler contract — [x] `conn` is
+    keyword-only everywhere.
+  - W8 service steps' Verification does not exercise behaviour — [x] each names its gating test step.
+  - N1–N5 — [x] applied (Step 15 gate, staleness clock, Step 17 symbol list, a grep that could not
+    fail, table names in the analysis `CLAUDE.md` section).
+  - N6 stored-set regeneration needs a database route at execute confirmation — [ ] unaddressed:
+    an execute-time choice, not a spec defect.
+  - N6 config-service lint and tests not run in this sandbox (`node_modules` absent) —
+    [ ] unaddressed: run at execute.
