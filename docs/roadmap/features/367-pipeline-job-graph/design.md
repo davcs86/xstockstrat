@@ -1,7 +1,7 @@
 # Design: pipeline-job-graph
 
 **Created**: 2026-11-27
-**Rounds**: 11 (full; round cap lifted by the operator; termination: pending operator approval)
+**Rounds**: 11, round 12 in progress (full; round cap lifted by the operator; termination: pending operator approval)
 **Approved by**: pending
 **Grounded in**: recon.md
 **Debate register**: debate.md
@@ -379,14 +379,15 @@ UPDATE analysis.pipeline_jobs
 ```
 
 For a `blocked` job (a parent, or a job blocked by its own handler's verdict, whose edge delete
-then removes nothing), in one transaction; the lock holds the row in `blocked` until commit. If
+then removes nothing), in one transaction; the lock holds the row in `blocked` until commit
+without blocking a concurrent park that names it as a child. If
 the `SELECT` returns no row, `ROLLBACK` and stop. If the transaction fails, for example on a
 deadlock with the daily prune, run it again; every statement is guarded, so a re-run is safe:
 
 ```sql
 BEGIN;
 SELECT job_id FROM analysis.pipeline_jobs
- WHERE job_id = <id> AND state = 'blocked' FOR UPDATE;
+ WHERE job_id = <id> AND state = 'blocked' FOR NO KEY UPDATE;
 DELETE FROM analysis.pipeline_job_deps
  WHERE parent_id = <id>
    AND EXISTS (SELECT 1 FROM analysis.pipeline_jobs WHERE job_id = <id> AND state = 'blocked');
@@ -488,7 +489,8 @@ Step 3's real-Postgres tests gate step 4:
   and leaves the parent `waiting` with every edge present. A park started after the DELETE waits
   on the unique check and inserts the child afresh;
 - a `blocked`-parent recovery run a second time, after the parent was re-claimed and parked
-  again, deletes no edge and updates no row;
+  again, deletes no edge and updates no row; a park naming a `blocked` row as a child is not
+  blocked by an open recovery transaction on it;
 - a 10 000-child park plus its settle finishes within 5 s;
 - 1 200 settleable parents are woken in one tick with the lowest-id verdict;
 - each prune candidate select uses the `(state, finished_at)` index, and the claim select the

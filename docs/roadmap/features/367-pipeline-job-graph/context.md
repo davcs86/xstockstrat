@@ -197,3 +197,9 @@
   succeeded" assumption was confirmed true in every case.
 - No Floor breach, no C-16 regression, no register violation. FR-1..FR-9, `@AC-1`..`@AC-18` PASS.
   Both sides rate a further full round as low value.
+
+## Session 2026-11-27 — sdd-design gate after round 11
+
+- **OPERATOR REOPEN P-7 (D-59 recovery lock): "weaker lock"** — the recovery locks its row
+  `FOR NO KEY UPDATE` (D-60).
+- **OPERATOR (design gate): "Run round 12"** — round 12 started. Not approved.
