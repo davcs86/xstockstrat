@@ -722,3 +722,23 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Config-key wiring gate: does not apply, because no config key is declared.
 - Files modified: `docs/reports/2026-11-20-notify-streamalerts-acknowledgealert-body-user-id-defect.md`, `docs/reports/2026-11-20-notify-streamalerts-acknowledgealert-body-user-id-defect.status`, `docs/reports/2026-11-20-trading-broker-accounts-ownerless-rows-cleanup-defect.md`, `docs/reports/2026-11-20-trading-broker-accounts-ownerless-rows-cleanup-defect.status`
 - Deviations: none
+
+## Session 2026-11-27 — O-11 count, homelab staging, supplied by the operator (verbatim)
+
+Operator ran the Step 20 / A6 read-only query on the homelab staging database and pasted the result:
+
+```
+SELECT count(*) FROM trading.broker_accounts WHERE user_id = '' AND is_active;
+ count
+-------
+     0
+(1 row)
+
+SELECT id, display_name, broker_type, is_paper, created_at
+FROM trading.broker_accounts WHERE user_id = '' AND is_active ORDER BY created_at;
+ id | display_name | broker_type | is_paper | created_at
+----+--------------+-------------+----------+------------
+(0 rows)
+```
+
+Homelab staging: 0 active owner-less `trading.broker_accounts` rows (2026-11-27). Outstanding for Step 20: the same count on DO staging. Production is out of scope (standing ruling; never launched), so no production count will be supplied.
