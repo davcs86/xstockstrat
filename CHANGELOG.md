@@ -3,6 +3,40 @@
 All production promotions from `main-dev` to `main` are recorded here.
 Each entry corresponds to one `main-dev → main` PR merge.
 
+## 2026-11-27
+
+### Features
+- fix-analysis-per-symbol-isolation: One failing symbol or candidate aborts a whole xstockstrat-analysis per-symbol fan-out (opportunities compute, `EvaluateReadiness`, readiness kick / materializer / opportunity heal), losing every healthy sibling's rows instead of degrading only the failing one.
+- fix-fundsignal-scoring-correctness: The fundamentals signal producer and its consumers mis-score signals: absent metrics score as wire zeros on the formula path, a lone scored symbol is always `buy`, an explicit conviction 0.0 is read back as 0.5, and fabricated 0.5 signals stored before feature 246 stay active.
+- fix-sandbox-result-contract: The indicators sandbox's result contract is unreliable: `exit_reason` is inferred from forgeable stderr substrings, `memory_used_bytes` is always 0, and a formula that never assigns `result` reports success with `{}`.
+- fix-position-fold-correctness: The portfolio live position fold is wrong three ways: it re-applies the whole `order.filled` history on every restart (and double-applies across overlapping processes), it folds every sell as a buy, and it never sees bracket-leg exit fills because trading emits no ledger event for them.
+- fix-read-path-owner-trust: Read and consume paths take ownership from somewhere other than the trusted `x-user-id` header (PLAT-11): trading `ListOrders`/`StreamOrderUpdates` and notify `ListAlerts` trust a body user id (empty = all users), and portfolio files identity-less events under placeholder owners that trading's `RegisterBrokerAccount` can produce.
+- fix-system-identity-paths: Server-initiated and system-owned paths lose owner attribution: ingest's `mcp_client` poll loop writes `ingest.signal.ingested` ledger events with a NULL owner, and analysis's P&L snapshot `_compose` raises for a `system` owner instead of degrading.
+- fix-mcp-deadline-budget: Deadline budgets are not enforced end to end: `extract_*` tools and `list_opportunities` can outrun the MCP client's 60 s timeout, and `SetConfig` bounds each timeout key independently so cross-hop ordering (PLAT-13) can be inverted by two individually valid writes.
+- fix-alert-event-targeting: Per-account risk signals lose their owner: trading's per-account halt and reconciliation CRITICAL alerts carry no `TargetUserId` (owner gets no Web Push after feature 242), and portfolio records concentration breaches as `portfolio.risk.drawdown_breach` ledger events with no user/account/symbol attribution.
+- fix-notify-stream-contract: notify's `StreamAlerts` fan-out has two contract gaps: the subscriber severity filter is typed `number[]` while string enums arrive at runtime (tested only with numbers), and `call.write()` backpressure is ignored, so a stalled client buffers every alert in notify's memory without bound.
+- fix-marketdata-miss-path-noise: Repeated WARN noise masks real failures: cancel-caused WARN sites feature 290 left in marketdata and portfolio, and `GetBars` live-refetching (plus a WARN) on every call for symbols that have no stored bars and return none.
+- fix-migration-tooling-safety: Migration tooling has two unguarded hazards: `db-migrate.sh` dirty-state recovery (`force 0` + `up`) replays non-idempotent up-files below the feature-225 contract floor, and a late-merging lower-numbered migration is silently skipped by golang-migrate on persistent databases with no CI ordering gate.
+- fix-auth-trust-hardening: Three auth edges trust input they should verify: config's `SetConfig` internal-caller grant trusts the `x-internal-caller` header with no mTLS peer SAN, identity's `RevokeToken` acts on an unverified JWT decode, and the agent's OAuth DCR fails open (registration enabled, empty redirect allowlist) when config stalls.
+- fix-trading-config-plumbing: Four xstockstrat-trading config/persistence plumbing gaps: IBKR ignores `trading.broker.timeout_ms`, int-documented keys are read with `GetFloat` (silently zeroed), `requires_approval` is always persisted `false`, and `trading.broker.paper` has an environment-derived default no catalog seed can express.
+- fix-orphaned-code: Ten orphaned modules, scripts, dependencies and code paths across nine services were reported as having no runtime caller; one (portfolio `r.pool` stragglers) nil-panics under pgxmock and blocks unit testing.
+- fix-analysis-evidence-dry: Two analysis single-source-of-truth gaps: the evidence-eligibility fingerprint ignores the content of referenced custom formulas (stale evidence keeps feeding the grade), and the boot entry-backfill re-types the live-enabled gate SQL instead of using `LIVE_ENABLED_PREDICATE_SQL`.
+- fix-agent-bearer-secret-orphan: A signal-source bearer token is written as a per-user encrypted config secret before the ingest register call; when that call fails, nothing deletes the secret, so every failed retry leaves another unreferenced `mcp_credential.<uuid>` ciphertext row (agent `manage_signal_source` / `instantiate_template`, and the config-ui hook).
+- fix-gapsonly-backfill-is: GAPS_ONLY backfill derives gaps only from a symbol's earliest/latest bar, so an interior hole (e.g.
+- fix-a-filtered-listopportunities: A ListOpportunities read whose filters match no rows takes the no-rows branch and kicks a full background recompute even though the user's queue holds unexpired rows.
+- opportunity-live-only-rotation: Replace the opportunity compute's live-only truncation (only the top `opportunity.max_live_only_symbols_per_compute` non-held signal symbols get live-strategy rows) with a rotation across compute passes, so every live-covered signal symbol gets its strategy rows within a bounded number of passes while per-compute cost stays capped.
+
+### Proto Changes
+- common/v1/common.proto
+- ingest/v1/ingest.proto
+- notify/v1/notify.proto
+- trading/v1/trading.proto
+
+### Summary
+27 commits, 1 feature merges since last promotion.
+
+---
+
 ## 2026-11-25
 
 ### Summary
