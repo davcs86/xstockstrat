@@ -25,6 +25,24 @@ Registered in `app/main.py` `build_http_app`:
 | `/` (GET/POST) | **Streamable HTTP** MCP endpoint (Claude.ai remote connector) |
 | `/sse` + `/messages` | **Removed** (feature 079) — return `404 text/plain` naming the replacement URL, *before* the auth gate |
 
+## `oidc` mode (feature 345)
+
+In `identity` / `auth.mode` `oidc` the agent is a resource server for the issuer in `agent` / `oidc.issuer`
+(`app/main.py#_handle_oidc` → `app/sso_auth.py#authenticate`); the table above applies in `local` and `both`.
+
+- **Legacy routes**: `/.well-known/oauth-authorization-server` and the four `/oauth/*` routes stay registered but answer
+  `404 text/plain` (`_legacy_only`); an identity-minted token gets `401`.
+- **PRM by mode**: `local`/`both` → today's document; `oidc` → `{resource: AGENT_PUBLIC_URL, authorization_servers:
+  [<issuer>], scopes_supported}`, or `503 text/plain no-store` while the issuer is invalid or empty
+  (`app/oauth_metadata.py`). The UI's `/.well-known/oauth-protected-resource/agent` copy follows the same rule.
+- **Token checks**: header `kid`, an RS/PS/ES `alg`, `typ` `at+jwt`, `iss` == the issuer, then the signature on a key
+  from a JWKS fetched within `_JWKS_MAX_AGE_S` (3600 s, no stale grace), `aud` == `AGENT_PUBLIC_URL` (string or
+  one-element list), unexpired `exp`, non-empty `sub`; then `ResolveExternalIdentity` (60 s success-only cache), all
+  inside one `client.rpc_timeout_s()` budget.
+- **Statuses**: `401` + `WWW-Authenticate` pointer for a missing or invalid token (`wrong_audience`, `invalid_token`);
+  `403 text/plain` `not linked` / `account inactive`; `503` without `WWW-Authenticate` for `jwks_unavailable`,
+  `identity_unavailable`, an invalid issuer, or an unexpected Resolve refusal.
+
 ## `aud` binding and discovery path insertion
 
 The MCP endpoint (root Streamable HTTP) requires an **`aud`-bound JWT** (`aud` ==

@@ -1,5 +1,5 @@
 import { test, expect, type APIResponse } from '@playwright/test';
-import { REFRESH_STALL_TOKEN, signExpiredTestJwt } from './helpers/auth';
+import { addAuthCookie, REFRESH_STALL_TOKEN, signExpiredTestJwt } from './helpers/auth';
 import { REFRESH_TIMEOUT_MS } from '../src/lib/deadlines';
 
 /**
@@ -326,5 +326,40 @@ test.describe('Unified auth — POST /api/auth/logout', () => {
     expect(cookieValues.some((v) => v.includes('access_token=;') || v.includes('Max-Age=0'))).toBe(
       true,
     );
+  });
+});
+
+// Feature 345, default state only (no SSO mode row → local); the SSO modes live in e2e/sso/.
+test.describe('local mode is unchanged by SSO (feature 345)', () => {
+  test('@AC-41 no SSO button; password login lands on /trader', async ({ page }) => {
+    await page.goto('/auth/login');
+    await expect(page.getByRole('button', { name: 'Sign in with SSO' })).toHaveCount(0);
+    await page.getByPlaceholder('Email').fill('test@example.com');
+    await page.getByPlaceholder('Password').fill('test-password');
+    await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+    await expect(page).toHaveURL(/\/trader/);
+  });
+
+  test('@AC-42 /accounts/authorized-apps lists the grant with revoke', async ({ page }) => {
+    await addAuthCookie(page);
+    await page.goto('/accounts/authorized-apps');
+    await expect(page.getByRole('button', { name: 'Actions for Claude.ai (E2E)' })).toBeVisible();
+  });
+
+  test('@AC-57 a cross-origin logout POST with cookies → 403', async ({ page }) => {
+    await addAuthCookie(page);
+    const res = await page.request.post('/api/auth/logout', {
+      headers: { origin: 'https://dashboard.example.test' },
+    });
+    expect(res.status()).toBe(403);
+    const cookies = await page.context().cookies();
+    expect(cookies.find((c) => c.name === 'access_token')?.value).toBeTruthy();
+  });
+
+  test('@AC-63 Sign out → /auth/login', async ({ page }) => {
+    await addAuthCookie(page);
+    await page.goto('/trader');
+    await page.getByRole('button', { name: 'Sign out' }).click();
+    await expect(page).toHaveURL(/\/auth\/login$/);
   });
 });

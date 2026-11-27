@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import * as grpc from '@grpc/grpc-js';
 import type { Pool } from 'pg';
 import { listAdminUserIds } from '../grpc/adminDirectory';
+import { callWith } from './fixtures/sanCall';
 
 interface FakePool {
   pool: Pool;
@@ -20,13 +21,6 @@ function fakePool(result: Array<{ user_id: string }> | Error): FakePool {
     },
   } as unknown as Pool;
   return { pool, queries };
-}
-
-function callWith(san?: string, md: Record<string, string> = {}, noAuthContext = false) {
-  const metadata = new grpc.Metadata();
-  for (const [k, v] of Object.entries(md)) metadata.set(k, v);
-  if (noAuthContext) return { metadata };
-  return { getAuthContext: () => ({ sslPeerCertificate: { subjectaltname: san } }), metadata };
 }
 
 interface Outcome {

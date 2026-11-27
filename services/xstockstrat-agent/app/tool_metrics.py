@@ -35,7 +35,7 @@ _first_call_seen: set[str] = set()
 
 def record_auth_rejected(reason: str) -> None:
     """reason: missing_bearer | wrong_audience | identity_unavailable | invalid_token |
-    internal_error."""
+    internal_error | jwks_unavailable | account_refused."""
     telemetry.AUTH_REJECTED.add(1, {telemetry.KEY_REASON: reason})
 
 

@@ -209,6 +209,32 @@ export interface ListAdminUserIdsRequest {
 export interface ListAdminUserIdsResponse {
     userIds: string[];
 }
+export interface ResolveExternalIdentityRequest {
+    issuer: string;
+    subject: string;
+}
+export interface ResolveExternalIdentityResponse {
+    userId: string;
+    roles: Role[];
+    isActive: boolean;
+}
+export interface IssueSessionForUserRequest {
+    userId: string;
+}
+export interface LinkExternalIdentityRequest {
+    userId: string;
+    issuer: string;
+    subject: string;
+    password: string;
+}
+export interface LinkExternalIdentityResponse {
+}
+export interface GetExternalIdentityLinksRequest {
+    userId: string;
+}
+export interface GetExternalIdentityLinksResponse {
+    issuers: string[];
+}
 export declare const AuthenticateUserRequest: MessageFns<AuthenticateUserRequest>;
 export declare const AuthTokenResponse: MessageFns<AuthTokenResponse>;
 export declare const TokenClaims: MessageFns<TokenClaims>;
@@ -251,6 +277,13 @@ export declare const SetUserActiveRequest: MessageFns<SetUserActiveRequest>;
 export declare const SetUserActiveResponse: MessageFns<SetUserActiveResponse>;
 export declare const ListAdminUserIdsRequest: MessageFns<ListAdminUserIdsRequest>;
 export declare const ListAdminUserIdsResponse: MessageFns<ListAdminUserIdsResponse>;
+export declare const ResolveExternalIdentityRequest: MessageFns<ResolveExternalIdentityRequest>;
+export declare const ResolveExternalIdentityResponse: MessageFns<ResolveExternalIdentityResponse>;
+export declare const IssueSessionForUserRequest: MessageFns<IssueSessionForUserRequest>;
+export declare const LinkExternalIdentityRequest: MessageFns<LinkExternalIdentityRequest>;
+export declare const LinkExternalIdentityResponse: MessageFns<LinkExternalIdentityResponse>;
+export declare const GetExternalIdentityLinksRequest: MessageFns<GetExternalIdentityLinksRequest>;
+export declare const GetExternalIdentityLinksResponse: MessageFns<GetExternalIdentityLinksResponse>;
 export type IdentityServiceService = typeof IdentityServiceService;
 export declare const IdentityServiceService: {
     readonly authenticateUser: {
@@ -472,6 +505,58 @@ export declare const IdentityServiceService: {
         readonly responseSerialize: (value: ListAdminUserIdsResponse) => Buffer;
         readonly responseDeserialize: (value: Buffer) => ListAdminUserIdsResponse;
     };
+    /**
+     * Maps an OIDC (issuer, subject) to its linked user (feature 345). Authorized by mTLS peer SAN
+     * xstockstrat-ui or xstockstrat-agent only; every request header is ignored.
+     */
+    readonly resolveExternalIdentity: {
+        readonly path: "/xstockstrat.identity.v1.IdentityService/ResolveExternalIdentity";
+        readonly requestStream: false;
+        readonly responseStream: false;
+        readonly requestSerialize: (value: ResolveExternalIdentityRequest) => Buffer;
+        readonly requestDeserialize: (value: Buffer) => ResolveExternalIdentityRequest;
+        readonly responseSerialize: (value: ResolveExternalIdentityResponse) => Buffer;
+        readonly responseDeserialize: (value: Buffer) => ResolveExternalIdentityResponse;
+    };
+    /**
+     * Mints a session for an SSO-resolved user (feature 345). Authorized by mTLS peer SAN
+     * xstockstrat-ui only; every request header is ignored.
+     */
+    readonly issueSessionForUser: {
+        readonly path: "/xstockstrat.identity.v1.IdentityService/IssueSessionForUser";
+        readonly requestStream: false;
+        readonly responseStream: false;
+        readonly requestSerialize: (value: IssueSessionForUserRequest) => Buffer;
+        readonly requestDeserialize: (value: Buffer) => IssueSessionForUserRequest;
+        readonly responseSerialize: (value: AuthTokenResponse) => Buffer;
+        readonly responseDeserialize: (value: Buffer) => AuthTokenResponse;
+    };
+    /**
+     * Links an OIDC identity after a password re-check (feature 345). Authorized by mTLS peer SAN
+     * xstockstrat-ui only; every request header is ignored.
+     */
+    readonly linkExternalIdentity: {
+        readonly path: "/xstockstrat.identity.v1.IdentityService/LinkExternalIdentity";
+        readonly requestStream: false;
+        readonly responseStream: false;
+        readonly requestSerialize: (value: LinkExternalIdentityRequest) => Buffer;
+        readonly requestDeserialize: (value: Buffer) => LinkExternalIdentityRequest;
+        readonly responseSerialize: (value: LinkExternalIdentityResponse) => Buffer;
+        readonly responseDeserialize: (value: Buffer) => LinkExternalIdentityResponse;
+    };
+    /**
+     * Lists the issuers a user is linked to (feature 345). Authorized by mTLS peer SAN
+     * xstockstrat-ui only; every request header is ignored.
+     */
+    readonly getExternalIdentityLinks: {
+        readonly path: "/xstockstrat.identity.v1.IdentityService/GetExternalIdentityLinks";
+        readonly requestStream: false;
+        readonly responseStream: false;
+        readonly requestSerialize: (value: GetExternalIdentityLinksRequest) => Buffer;
+        readonly requestDeserialize: (value: Buffer) => GetExternalIdentityLinksRequest;
+        readonly responseSerialize: (value: GetExternalIdentityLinksResponse) => Buffer;
+        readonly responseDeserialize: (value: Buffer) => GetExternalIdentityLinksResponse;
+    };
 };
 export interface IdentityServiceServer extends UntypedServiceImplementation {
     authenticateUser: handleUnaryCall<AuthenticateUserRequest, AuthTokenResponse>;
@@ -517,6 +602,26 @@ export interface IdentityServiceServer extends UntypedServiceImplementation {
      * xstockstrat-notify only; every request header is ignored.
      */
     listAdminUserIds: handleUnaryCall<ListAdminUserIdsRequest, ListAdminUserIdsResponse>;
+    /**
+     * Maps an OIDC (issuer, subject) to its linked user (feature 345). Authorized by mTLS peer SAN
+     * xstockstrat-ui or xstockstrat-agent only; every request header is ignored.
+     */
+    resolveExternalIdentity: handleUnaryCall<ResolveExternalIdentityRequest, ResolveExternalIdentityResponse>;
+    /**
+     * Mints a session for an SSO-resolved user (feature 345). Authorized by mTLS peer SAN
+     * xstockstrat-ui only; every request header is ignored.
+     */
+    issueSessionForUser: handleUnaryCall<IssueSessionForUserRequest, AuthTokenResponse>;
+    /**
+     * Links an OIDC identity after a password re-check (feature 345). Authorized by mTLS peer SAN
+     * xstockstrat-ui only; every request header is ignored.
+     */
+    linkExternalIdentity: handleUnaryCall<LinkExternalIdentityRequest, LinkExternalIdentityResponse>;
+    /**
+     * Lists the issuers a user is linked to (feature 345). Authorized by mTLS peer SAN
+     * xstockstrat-ui only; every request header is ignored.
+     */
+    getExternalIdentityLinks: handleUnaryCall<GetExternalIdentityLinksRequest, GetExternalIdentityLinksResponse>;
 }
 export interface IdentityServiceClient extends Client {
     authenticateUser(request: AuthenticateUserRequest, callback: (error: ServiceError | null, response: AuthTokenResponse) => void): ClientUnaryCall;
@@ -606,6 +711,34 @@ export interface IdentityServiceClient extends Client {
     listAdminUserIds(request: ListAdminUserIdsRequest, callback: (error: ServiceError | null, response: ListAdminUserIdsResponse) => void): ClientUnaryCall;
     listAdminUserIds(request: ListAdminUserIdsRequest, metadata: Metadata, callback: (error: ServiceError | null, response: ListAdminUserIdsResponse) => void): ClientUnaryCall;
     listAdminUserIds(request: ListAdminUserIdsRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: ListAdminUserIdsResponse) => void): ClientUnaryCall;
+    /**
+     * Maps an OIDC (issuer, subject) to its linked user (feature 345). Authorized by mTLS peer SAN
+     * xstockstrat-ui or xstockstrat-agent only; every request header is ignored.
+     */
+    resolveExternalIdentity(request: ResolveExternalIdentityRequest, callback: (error: ServiceError | null, response: ResolveExternalIdentityResponse) => void): ClientUnaryCall;
+    resolveExternalIdentity(request: ResolveExternalIdentityRequest, metadata: Metadata, callback: (error: ServiceError | null, response: ResolveExternalIdentityResponse) => void): ClientUnaryCall;
+    resolveExternalIdentity(request: ResolveExternalIdentityRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: ResolveExternalIdentityResponse) => void): ClientUnaryCall;
+    /**
+     * Mints a session for an SSO-resolved user (feature 345). Authorized by mTLS peer SAN
+     * xstockstrat-ui only; every request header is ignored.
+     */
+    issueSessionForUser(request: IssueSessionForUserRequest, callback: (error: ServiceError | null, response: AuthTokenResponse) => void): ClientUnaryCall;
+    issueSessionForUser(request: IssueSessionForUserRequest, metadata: Metadata, callback: (error: ServiceError | null, response: AuthTokenResponse) => void): ClientUnaryCall;
+    issueSessionForUser(request: IssueSessionForUserRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: AuthTokenResponse) => void): ClientUnaryCall;
+    /**
+     * Links an OIDC identity after a password re-check (feature 345). Authorized by mTLS peer SAN
+     * xstockstrat-ui only; every request header is ignored.
+     */
+    linkExternalIdentity(request: LinkExternalIdentityRequest, callback: (error: ServiceError | null, response: LinkExternalIdentityResponse) => void): ClientUnaryCall;
+    linkExternalIdentity(request: LinkExternalIdentityRequest, metadata: Metadata, callback: (error: ServiceError | null, response: LinkExternalIdentityResponse) => void): ClientUnaryCall;
+    linkExternalIdentity(request: LinkExternalIdentityRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: LinkExternalIdentityResponse) => void): ClientUnaryCall;
+    /**
+     * Lists the issuers a user is linked to (feature 345). Authorized by mTLS peer SAN
+     * xstockstrat-ui only; every request header is ignored.
+     */
+    getExternalIdentityLinks(request: GetExternalIdentityLinksRequest, callback: (error: ServiceError | null, response: GetExternalIdentityLinksResponse) => void): ClientUnaryCall;
+    getExternalIdentityLinks(request: GetExternalIdentityLinksRequest, metadata: Metadata, callback: (error: ServiceError | null, response: GetExternalIdentityLinksResponse) => void): ClientUnaryCall;
+    getExternalIdentityLinks(request: GetExternalIdentityLinksRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: GetExternalIdentityLinksResponse) => void): ClientUnaryCall;
 }
 export declare const IdentityServiceClient: {
     new (address: string, credentials: ChannelCredentials, options?: Partial<ClientOptions>): IdentityServiceClient;

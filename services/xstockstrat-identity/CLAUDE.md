@@ -19,7 +19,18 @@ Backend pattern — see `docs/patterns/docker-build.md` for the base stage, prot
 ## Ports
 
 gRPC-only on `50058` (every `IdentityService` method; see `identity.proto`). `ListAdminUserIds` is SAN-gated to
-`xstockstrat-notify` (IDENTITY-12).
+`xstockstrat-notify` (IDENTITY-12). The four external-identity RPCs (feature 345) are SAN-gated too:
+`ResolveExternalIdentity` ← `xstockstrat-ui`, `xstockstrat-agent`; `IssueSessionForUser`, `LinkExternalIdentity`,
+`GetExternalIdentityLinks` ← `xstockstrat-ui` (`src/grpc/externalIdentity.ts`).
+
+### SSO (feature 345)
+
+`identity` / `auth.mode` (`local` | `both` | `oidc`) is the deployment's login mode: `oidc` refuses `AuthenticateUser`
+with `PERMISSION_DENIED` "password login disabled", and `LinkExternalIdentity` works only in `both`. The UI's web
+client is configured by the `ui/oidc.*` keys and the agent's MCP issuer by `agent/oidc.issuer`; identity reads
+neither and never talks to the issuer. Identity owns the links (`identity.external_identities`): Link SSO
+(`/accounts/sso`, password-confirmed) writes one, `ResolveExternalIdentity` maps `(issuer, subject)` to the user,
+and `IssueSessionForUser` mints the web session. Lifecycle → `docs/runbooks/authelia-sso-cutover.md`.
 
 ### OAuth 2.1 backend (feature 049 Part B)
 
@@ -51,6 +62,8 @@ on `RefreshOAuthToken` revokes the presented token and inserts a new one). TTLs 
   consumes API keys anymore.
 - `006_user_metadata` — adds `phone`, `display_name`, `metadata` JSONB (≤ 8 KiB) and
   `metadata_updated_at` to `identity.users` for the profile-metadata RPCs.
+- `007_external_identities` (feature 345) — `identity.external_identities` (SSO links): PK `(issuer, subject)`,
+  `UNIQUE (issuer, user_id)`.
 
 See `migrations/*.up.sql` for exact columns/constraints/indexes.
 
@@ -62,13 +75,14 @@ Namespace: `identity`
 |---|---|---|---|
 | `jwt.access_ttl_seconds` | int | `900` | Access token TTL (15 min) |
 | `jwt.refresh_ttl_seconds` | int | `2592000` | Refresh token TTL (30 days) |
+| `auth.mode` | string | `local` | `local` \| `both` \| `oidc` (feature 345). Read globally from the watcher snapshot at login, at Link, and on every watcher update; any other value reads `local` with WARN `auth_mode_invalid` once per value (`src/authMode.ts`). Set with `manage-users.py set-auth-mode`. |
 
 > The JWT signing key's env-only sourcing (never config) is IDENTITY-1 in `docs/context-constitution.md`.
 
 ## Observability (feature 294-signal-map-instrumentation)
 
 - No `loop tick ok` (no tick loops).
-- Instruments: `identity.login.failures{reason}`, `identity.token.validate_failures{reason missing_token|secret_missing|expired|invalid|other}`, `identity.oauth.exchange_failures{reason}`, `identity.refresh.rejections{kind first_party|oauth}`, `identity.revoke.unverifiable` (label-free; not a forgery signal on its own — a `JWT_SECRET` rotation makes legitimate logouts of pre-rotation tokens increment it), `identity.audit.failures{event_type}` and `identity.audit.append.duration` (the six `user.*` audit types, else `other`).
+- Instruments: `identity.login.failures{reason}`, `identity.token.validate_failures{reason missing_token|secret_missing|expired|invalid|other}`, `identity.oauth.exchange_failures{reason}`, `identity.refresh.rejections{kind first_party|oauth}`, `identity.revoke.unverifiable` (label-free; not a forgery signal on its own — a `JWT_SECRET` rotation makes legitimate logouts of pre-rotation tokens increment it), `identity.audit.failures{event_type}` and `identity.audit.append.duration` (the six `user.*` audit types and `identity.external.linked`, else `other`), `identity.link.failures{reason}` (feature 345). `identity.login.failures` gains reason `password_login_disabled` (`oidc`).
 - Load-bearing log: ERROR `ValidateToken: JWT secret missing`, once per process. No token, email or hash is ever logged or labelled.
 
 ## Environment Variables

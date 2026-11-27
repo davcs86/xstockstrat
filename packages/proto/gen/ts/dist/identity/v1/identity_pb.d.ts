@@ -791,6 +791,123 @@ export type ListAdminUserIdsResponse = Message<"xstockstrat.identity.v1.ListAdmi
  */
 export declare const ListAdminUserIdsResponseSchema: GenMessage<ListAdminUserIdsResponse>;
 /**
+ * @generated from message xstockstrat.identity.v1.ResolveExternalIdentityRequest
+ */
+export type ResolveExternalIdentityRequest = Message<"xstockstrat.identity.v1.ResolveExternalIdentityRequest"> & {
+    /**
+     * @generated from field: string issuer = 1;
+     */
+    issuer: string;
+    /**
+     * @generated from field: string subject = 2;
+     */
+    subject: string;
+};
+/**
+ * Describes the message xstockstrat.identity.v1.ResolveExternalIdentityRequest.
+ * Use `create(ResolveExternalIdentityRequestSchema)` to create a new message.
+ */
+export declare const ResolveExternalIdentityRequestSchema: GenMessage<ResolveExternalIdentityRequest>;
+/**
+ * @generated from message xstockstrat.identity.v1.ResolveExternalIdentityResponse
+ */
+export type ResolveExternalIdentityResponse = Message<"xstockstrat.identity.v1.ResolveExternalIdentityResponse"> & {
+    /**
+     * @generated from field: string user_id = 1;
+     */
+    userId: string;
+    /**
+     * @generated from field: repeated xstockstrat.identity.v1.Role roles = 2;
+     */
+    roles: Role[];
+    /**
+     * @generated from field: bool is_active = 3;
+     */
+    isActive: boolean;
+};
+/**
+ * Describes the message xstockstrat.identity.v1.ResolveExternalIdentityResponse.
+ * Use `create(ResolveExternalIdentityResponseSchema)` to create a new message.
+ */
+export declare const ResolveExternalIdentityResponseSchema: GenMessage<ResolveExternalIdentityResponse>;
+/**
+ * @generated from message xstockstrat.identity.v1.IssueSessionForUserRequest
+ */
+export type IssueSessionForUserRequest = Message<"xstockstrat.identity.v1.IssueSessionForUserRequest"> & {
+    /**
+     * @generated from field: string user_id = 1;
+     */
+    userId: string;
+};
+/**
+ * Describes the message xstockstrat.identity.v1.IssueSessionForUserRequest.
+ * Use `create(IssueSessionForUserRequestSchema)` to create a new message.
+ */
+export declare const IssueSessionForUserRequestSchema: GenMessage<IssueSessionForUserRequest>;
+/**
+ * @generated from message xstockstrat.identity.v1.LinkExternalIdentityRequest
+ */
+export type LinkExternalIdentityRequest = Message<"xstockstrat.identity.v1.LinkExternalIdentityRequest"> & {
+    /**
+     * @generated from field: string user_id = 1;
+     */
+    userId: string;
+    /**
+     * @generated from field: string issuer = 2;
+     */
+    issuer: string;
+    /**
+     * @generated from field: string subject = 3;
+     */
+    subject: string;
+    /**
+     * @generated from field: string password = 4;
+     */
+    password: string;
+};
+/**
+ * Describes the message xstockstrat.identity.v1.LinkExternalIdentityRequest.
+ * Use `create(LinkExternalIdentityRequestSchema)` to create a new message.
+ */
+export declare const LinkExternalIdentityRequestSchema: GenMessage<LinkExternalIdentityRequest>;
+/**
+ * @generated from message xstockstrat.identity.v1.LinkExternalIdentityResponse
+ */
+export type LinkExternalIdentityResponse = Message<"xstockstrat.identity.v1.LinkExternalIdentityResponse"> & {};
+/**
+ * Describes the message xstockstrat.identity.v1.LinkExternalIdentityResponse.
+ * Use `create(LinkExternalIdentityResponseSchema)` to create a new message.
+ */
+export declare const LinkExternalIdentityResponseSchema: GenMessage<LinkExternalIdentityResponse>;
+/**
+ * @generated from message xstockstrat.identity.v1.GetExternalIdentityLinksRequest
+ */
+export type GetExternalIdentityLinksRequest = Message<"xstockstrat.identity.v1.GetExternalIdentityLinksRequest"> & {
+    /**
+     * @generated from field: string user_id = 1;
+     */
+    userId: string;
+};
+/**
+ * Describes the message xstockstrat.identity.v1.GetExternalIdentityLinksRequest.
+ * Use `create(GetExternalIdentityLinksRequestSchema)` to create a new message.
+ */
+export declare const GetExternalIdentityLinksRequestSchema: GenMessage<GetExternalIdentityLinksRequest>;
+/**
+ * @generated from message xstockstrat.identity.v1.GetExternalIdentityLinksResponse
+ */
+export type GetExternalIdentityLinksResponse = Message<"xstockstrat.identity.v1.GetExternalIdentityLinksResponse"> & {
+    /**
+     * @generated from field: repeated string issuers = 1;
+     */
+    issuers: string[];
+};
+/**
+ * Describes the message xstockstrat.identity.v1.GetExternalIdentityLinksResponse.
+ * Use `create(GetExternalIdentityLinksResponseSchema)` to create a new message.
+ */
+export declare const GetExternalIdentityLinksResponseSchema: GenMessage<GetExternalIdentityLinksResponse>;
+/**
  * ── User management (admin-gated, feature 043) ───────────────────────────────
  * Closed role set (C-04). Mirrors the viewer/trader/admin roles the platform already uses;
  * TokenClaims.roles stays a free-string list (JWT claim shape, unchanged).
@@ -1015,5 +1132,49 @@ export declare const IdentityService: GenService<{
         methodKind: "unary";
         input: typeof ListAdminUserIdsRequestSchema;
         output: typeof ListAdminUserIdsResponseSchema;
+    };
+    /**
+     * Maps an OIDC (issuer, subject) to its linked user (feature 345). Authorized by mTLS peer SAN
+     * xstockstrat-ui or xstockstrat-agent only; every request header is ignored.
+     *
+     * @generated from rpc xstockstrat.identity.v1.IdentityService.ResolveExternalIdentity
+     */
+    resolveExternalIdentity: {
+        methodKind: "unary";
+        input: typeof ResolveExternalIdentityRequestSchema;
+        output: typeof ResolveExternalIdentityResponseSchema;
+    };
+    /**
+     * Mints a session for an SSO-resolved user (feature 345). Authorized by mTLS peer SAN
+     * xstockstrat-ui only; every request header is ignored.
+     *
+     * @generated from rpc xstockstrat.identity.v1.IdentityService.IssueSessionForUser
+     */
+    issueSessionForUser: {
+        methodKind: "unary";
+        input: typeof IssueSessionForUserRequestSchema;
+        output: typeof AuthTokenResponseSchema;
+    };
+    /**
+     * Links an OIDC identity after a password re-check (feature 345). Authorized by mTLS peer SAN
+     * xstockstrat-ui only; every request header is ignored.
+     *
+     * @generated from rpc xstockstrat.identity.v1.IdentityService.LinkExternalIdentity
+     */
+    linkExternalIdentity: {
+        methodKind: "unary";
+        input: typeof LinkExternalIdentityRequestSchema;
+        output: typeof LinkExternalIdentityResponseSchema;
+    };
+    /**
+     * Lists the issuers a user is linked to (feature 345). Authorized by mTLS peer SAN
+     * xstockstrat-ui only; every request header is ignored.
+     *
+     * @generated from rpc xstockstrat.identity.v1.IdentityService.GetExternalIdentityLinks
+     */
+    getExternalIdentityLinks: {
+        methodKind: "unary";
+        input: typeof GetExternalIdentityLinksRequestSchema;
+        output: typeof GetExternalIdentityLinksResponseSchema;
     };
 }>;

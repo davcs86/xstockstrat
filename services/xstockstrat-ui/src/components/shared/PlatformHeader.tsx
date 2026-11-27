@@ -11,11 +11,13 @@ import { CopilotRail } from '../copilot/CopilotRail';
 import { BottomTabBar } from '../mobile/BottomTabBar';
 import { NAV_GROUPS, HOME_HREF, type SubNavItem, type NavItem, type NavGroup } from './navGroups';
 import { AlertStream } from './AlertStream';
+import { SignOutButton } from './SignOutButton';
 import {
   SidebarProvider,
   Sidebar,
   SidebarHeader,
   SidebarContent,
+  SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
   SidebarGroupLabel,
@@ -94,6 +96,7 @@ export const PLATFORM_SUBNAV: Record<PlatformSegment, SubNavItem[]> = {
     { label: 'Profile', href: '/accounts/profile', match: 'exact' },
     { label: 'Notifications', href: '/accounts/notifications', match: 'prefix' },
     { label: 'Authorized Apps', href: '/accounts/authorized-apps', match: 'exact' },
+    { label: 'Single Sign-On', href: '/accounts/sso', match: 'exact' },
     { label: 'MCP Tools', href: '/accounts/mcp-tools', match: 'exact' },
   ],
 };
@@ -206,7 +209,7 @@ function PlatformHeaderInner({ actions }: PlatformHeaderProps) {
           className="flex items-center gap-2 text-primary font-semibold shrink-0"
         >
           <Lightning className="h-5 w-5" weight="fill" />
-          <span className="hidden sm:inline text-sm">xstockstrat</span>
+          <span className="hidden lg:inline text-sm">xstockstrat</span>
         </Link>
 
         <Separator orientation="vertical" className="h-6 hidden sm:block" />
@@ -249,6 +252,7 @@ function PlatformHeaderInner({ actions }: PlatformHeaderProps) {
           {actions}
           <AlertStream />
           <CopilotToggle />
+          <SignOutButton />
           {/* Override SidebarProvider's default `flex min-h-svh w-full` page-root sizing — here it's
               scoped to just the Row 1 trigger+panel, not the page. */}
           {/* sm:hidden must wrap the whole subtree: Sidebar's desktop branch renders off-screen (negative
@@ -318,6 +322,9 @@ function PlatformHeaderInner({ actions }: PlatformHeaderProps) {
                     ))}
                   </SidebarContent>
                 </nav>
+                <SidebarFooter>
+                  <SignOutButton variant="menu" />
+                </SidebarFooter>
               </Sidebar>
             </SidebarProvider>
           </div>

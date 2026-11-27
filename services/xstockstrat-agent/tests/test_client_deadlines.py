@@ -58,6 +58,7 @@ _TIMEOUT_ALLOW_LIST = {
     ("list_opportunities", "ListOpportunities"): "timeout",  # feature 227 policy deadline
     ("get_config_value", "GetConfig"): "_CONFIG_READ_TIMEOUT_S",  # feature 247
     ("execute_formula", "ExecuteFormula"): "deadline_s",  # feature 295 derived deadline
+    ("resolve_external_identity", "ResolveExternalIdentity"): "timeout_s",  # feature 345 budget
 }
 _MIN_STUB_CALLS = 74
 
@@ -164,3 +165,34 @@ def test_ac10_every_unary_stub_call_carries_a_deadline():
     assert not missing, f"stub calls without timeout: {missing}"
     assert not wrong, f"stub calls with an unexpected timeout: {wrong}"
     assert long_rpcs == _LONG_RPCS
+
+
+async def test_resolve_external_identity_passes_timeout_and_trace_id():
+    """Feature 345: the pre-auth resolve carries the remaining budget and only x-trace-id."""
+    from gen.identity.v1 import identity_pb2  # noqa: PLC0415
+
+    reply = identity_pb2.ResolveExternalIdentityResponse(
+        user_id="u-1", roles=[identity_pb2.ROLE_TRADER], is_active=True
+    )
+    rpc = AsyncMock(return_value=reply)
+    channel = MagicMock()
+    channel.unary_unary.return_value = rpc
+    with patch("app.client.mtls.secure_channel") as mock_channel:
+        mock_channel.return_value.__aenter__ = AsyncMock(return_value=channel)
+        mock_channel.return_value.__aexit__ = AsyncMock(return_value=False)
+        got = await client.resolve_external_identity(
+            "https://auth.example.test", "sub-1", trace_id="trace-345", timeout_s=4.5
+        )
+
+    assert mock_channel.call_args.args == (client.IDENTITY_ENDPOINT, "xstockstrat-identity")
+    kwargs = rpc.call_args.kwargs
+    assert kwargs["timeout"] == 4.5
+    assert kwargs["metadata"] == [("x-trace-id", "trace-345")]
+    request = rpc.call_args.args[0]
+    assert (request.issuer, request.subject) == ("https://auth.example.test", "sub-1")
+    assert got == {"user_id": "u-1", "roles": ["trader"], "is_active": True}
+
+
+def test_rpc_timeout_s_reads_the_constant(monkeypatch):
+    monkeypatch.setattr(client, _RPC, 0.25)
+    assert client.rpc_timeout_s() == 0.25

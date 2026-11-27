@@ -520,6 +520,9 @@ services:
       # probes its OAuth discovery endpoint (feature 051). Use the compose service name so the UI
       # can reach the agent over the compose network.
       AGENT_PUBLIC_URL: http://xstockstrat-agent:9000
+      # Must equal the browser's origin exactly (no path, no trailing slash): the Origin checks compare
+      # against it. Local compose SSO is unsupported (D-91); this only serves the every-mode logout check.
+      APP_URL: http://localhost:3000
       # Feature 165 — the /accounts push toggle needs the VAPID PUBLIC key (only). The private key
       # stays notify-only. Empty ⇒ the enable control reports push not configured.
       VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}

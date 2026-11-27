@@ -1,5 +1,6 @@
 import { metrics } from '@opentelemetry/api';
 import type { Counter, Histogram, Meter } from '@opentelemetry/api';
+import type { LinkErrorCode, SsoErrorCode } from './ssoErrors';
 
 // Matches scripts/testdata/rpc-status-vectors.json bucket bounds (shared by all runtimes).
 const BUCKETS_MS = [0, 5, 10, 25, 50, 75, 100, 250, 500, 750, 1000, 2500, 5000, 7500, 10000];
@@ -16,8 +17,31 @@ export type AuthEvent =
   | 'refresh_rejected'
   | 'refresh_error'
   | 'logout'
-  | 'jwt_rejected';
+  | 'jwt_rejected'
+  | 'sso_login_ok'
+  | 'sso_login_failed'
+  | 'sso_login_error'
+  | 'sso_link_failed'
+  | 'login_disabled';
 export type JwtRejectReason = 'no_secret' | 'expired' | 'invalid';
+export const LOGOUT_REASONS = [
+  'verified',
+  'unverified',
+  'expired_too_old',
+  'cross_origin',
+] as const;
+export type LogoutReason = (typeof LOGOUT_REASONS)[number];
+
+// Events with a closed reason set must pass one; every other event takes none (D-72, D-113).
+type AuthEventReasons = {
+  jwt_rejected: JwtRejectReason;
+  logout: LogoutReason;
+  sso_login_failed: SsoErrorCode;
+  sso_link_failed: LinkErrorCode;
+};
+type ReasonArgs<E extends AuthEvent> = E extends keyof AuthEventReasons
+  ? [reason: AuthEventReasons[E]]
+  : [];
 type BffOutcome = 'ok' | 'client_error' | 'server_error';
 
 // API 1.9 has no proxy MeterProvider, so bind on use and rebind if the global provider changes.
@@ -44,7 +68,7 @@ const authEvents = rebinding<Counter>((meter) => meter.createCounter('ui.auth.ev
 const bffRequests = rebinding<Counter>((meter) => meter.createCounter('ui.bff.requests'));
 
 /** Counts one auth event. Never carries a user id, email or token. */
-export function recordAuthEvent(event: AuthEvent, reason?: JwtRejectReason): void {
+export function recordAuthEvent<E extends AuthEvent>(event: E, ...[reason]: ReasonArgs<E>): void {
   authEvents().add(1, reason ? { event, reason } : { event });
 }
 

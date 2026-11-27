@@ -304,6 +304,10 @@ xstockstrat-ingest → xstockstrat-marketdata (raw data push)
 xstockstrat-indicators → xstockstrat-ledger (audit.admin_read)
 xstockstrat-analysis → xstockstrat-ingest (QuerySignals for signal-weighted backtests)
 xstockstrat-ui → xstockstrat-agent (gRPC ListTools, internal tool catalog)
+xstockstrat-ui → xstockstrat-identity (ResolveExternalIdentity, IssueSessionForUser, LinkExternalIdentity, GetExternalIdentityLinks)
+xstockstrat-agent → xstockstrat-identity (ResolveExternalIdentity)
+xstockstrat-ui → xstockstrat-config (GetSecret, ui OIDC client secret)
+xstockstrat-ui, xstockstrat-agent → external HTTPS (the OIDC issuer: discovery, JWKS, token)
 ```
 
 ---

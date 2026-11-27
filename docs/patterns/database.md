@@ -20,6 +20,9 @@ tables (e.g. `marketdata.ohlcv_remediation_003`, a one-shot audit table added by
 the portfolio `backfill-signal-expiry` subcommand reads `ingest.newsletter_signals` read-only (cross-schema).
 The only migration-time cross-schema read is analysis `029_seed_fundamentals_blend_strategy`, which reads
 `identity.users` once to find its owner (feature 335, operator-mandated) — it is why identity must migrate before analysis.
+New migrations resolve the seed owner by `SEED_USER_ID`, never by `admin@localhost` (IDENTITY-15).
+`identity.external_identities` (identity migration `007`, feature 345) is a plain table: the SSO links, PK
+`(issuer, subject)` and `UNIQUE (issuer, user_id)`.
 `notify.webhook_deliveries` (notify migration `004`, feature 334) is a plain table: the outbound webhook delivery queue.
 
 The `marketdata.ohlcv` chunk interval was widened from 1 day to **30 days** by feature 153's

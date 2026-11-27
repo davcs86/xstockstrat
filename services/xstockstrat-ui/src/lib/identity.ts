@@ -41,7 +41,7 @@ export async function refreshSession(
 
 export async function revokeToken(token: string): Promise<void> {
   try {
-    await identityClient.revokeToken({ token });
+    await identityClient.revokeToken({ token }, { timeoutMs: REFRESH_TIMEOUT_MS });
   } catch {
     // best-effort revocation
   }

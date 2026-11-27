@@ -19,28 +19,32 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	IdentityService_AuthenticateUser_FullMethodName        = "/xstockstrat.identity.v1.IdentityService/AuthenticateUser"
-	IdentityService_ValidateToken_FullMethodName           = "/xstockstrat.identity.v1.IdentityService/ValidateToken"
-	IdentityService_RefreshToken_FullMethodName            = "/xstockstrat.identity.v1.IdentityService/RefreshToken"
-	IdentityService_RevokeToken_FullMethodName             = "/xstockstrat.identity.v1.IdentityService/RevokeToken"
-	IdentityService_RegisterOAuthClient_FullMethodName     = "/xstockstrat.identity.v1.IdentityService/RegisterOAuthClient"
-	IdentityService_GetOAuthClient_FullMethodName          = "/xstockstrat.identity.v1.IdentityService/GetOAuthClient"
-	IdentityService_IssueAuthCode_FullMethodName           = "/xstockstrat.identity.v1.IdentityService/IssueAuthCode"
-	IdentityService_ExchangeAuthCode_FullMethodName        = "/xstockstrat.identity.v1.IdentityService/ExchangeAuthCode"
-	IdentityService_RefreshOAuthToken_FullMethodName       = "/xstockstrat.identity.v1.IdentityService/RefreshOAuthToken"
-	IdentityService_ListAuthorizedApps_FullMethodName      = "/xstockstrat.identity.v1.IdentityService/ListAuthorizedApps"
-	IdentityService_RevokeAuthorizedApp_FullMethodName     = "/xstockstrat.identity.v1.IdentityService/RevokeAuthorizedApp"
-	IdentityService_GetUserMetadata_FullMethodName         = "/xstockstrat.identity.v1.IdentityService/GetUserMetadata"
-	IdentityService_UpdateUserMetadata_FullMethodName      = "/xstockstrat.identity.v1.IdentityService/UpdateUserMetadata"
-	IdentityService_AdminGetUserMetadata_FullMethodName    = "/xstockstrat.identity.v1.IdentityService/AdminGetUserMetadata"
-	IdentityService_AdminUpdateUserMetadata_FullMethodName = "/xstockstrat.identity.v1.IdentityService/AdminUpdateUserMetadata"
-	IdentityService_CreateUser_FullMethodName              = "/xstockstrat.identity.v1.IdentityService/CreateUser"
-	IdentityService_ListUsers_FullMethodName               = "/xstockstrat.identity.v1.IdentityService/ListUsers"
-	IdentityService_GetUser_FullMethodName                 = "/xstockstrat.identity.v1.IdentityService/GetUser"
-	IdentityService_UpdatePassword_FullMethodName          = "/xstockstrat.identity.v1.IdentityService/UpdatePassword"
-	IdentityService_SetUserRoles_FullMethodName            = "/xstockstrat.identity.v1.IdentityService/SetUserRoles"
-	IdentityService_SetUserActive_FullMethodName           = "/xstockstrat.identity.v1.IdentityService/SetUserActive"
-	IdentityService_ListAdminUserIds_FullMethodName        = "/xstockstrat.identity.v1.IdentityService/ListAdminUserIds"
+	IdentityService_AuthenticateUser_FullMethodName         = "/xstockstrat.identity.v1.IdentityService/AuthenticateUser"
+	IdentityService_ValidateToken_FullMethodName            = "/xstockstrat.identity.v1.IdentityService/ValidateToken"
+	IdentityService_RefreshToken_FullMethodName             = "/xstockstrat.identity.v1.IdentityService/RefreshToken"
+	IdentityService_RevokeToken_FullMethodName              = "/xstockstrat.identity.v1.IdentityService/RevokeToken"
+	IdentityService_RegisterOAuthClient_FullMethodName      = "/xstockstrat.identity.v1.IdentityService/RegisterOAuthClient"
+	IdentityService_GetOAuthClient_FullMethodName           = "/xstockstrat.identity.v1.IdentityService/GetOAuthClient"
+	IdentityService_IssueAuthCode_FullMethodName            = "/xstockstrat.identity.v1.IdentityService/IssueAuthCode"
+	IdentityService_ExchangeAuthCode_FullMethodName         = "/xstockstrat.identity.v1.IdentityService/ExchangeAuthCode"
+	IdentityService_RefreshOAuthToken_FullMethodName        = "/xstockstrat.identity.v1.IdentityService/RefreshOAuthToken"
+	IdentityService_ListAuthorizedApps_FullMethodName       = "/xstockstrat.identity.v1.IdentityService/ListAuthorizedApps"
+	IdentityService_RevokeAuthorizedApp_FullMethodName      = "/xstockstrat.identity.v1.IdentityService/RevokeAuthorizedApp"
+	IdentityService_GetUserMetadata_FullMethodName          = "/xstockstrat.identity.v1.IdentityService/GetUserMetadata"
+	IdentityService_UpdateUserMetadata_FullMethodName       = "/xstockstrat.identity.v1.IdentityService/UpdateUserMetadata"
+	IdentityService_AdminGetUserMetadata_FullMethodName     = "/xstockstrat.identity.v1.IdentityService/AdminGetUserMetadata"
+	IdentityService_AdminUpdateUserMetadata_FullMethodName  = "/xstockstrat.identity.v1.IdentityService/AdminUpdateUserMetadata"
+	IdentityService_CreateUser_FullMethodName               = "/xstockstrat.identity.v1.IdentityService/CreateUser"
+	IdentityService_ListUsers_FullMethodName                = "/xstockstrat.identity.v1.IdentityService/ListUsers"
+	IdentityService_GetUser_FullMethodName                  = "/xstockstrat.identity.v1.IdentityService/GetUser"
+	IdentityService_UpdatePassword_FullMethodName           = "/xstockstrat.identity.v1.IdentityService/UpdatePassword"
+	IdentityService_SetUserRoles_FullMethodName             = "/xstockstrat.identity.v1.IdentityService/SetUserRoles"
+	IdentityService_SetUserActive_FullMethodName            = "/xstockstrat.identity.v1.IdentityService/SetUserActive"
+	IdentityService_ListAdminUserIds_FullMethodName         = "/xstockstrat.identity.v1.IdentityService/ListAdminUserIds"
+	IdentityService_ResolveExternalIdentity_FullMethodName  = "/xstockstrat.identity.v1.IdentityService/ResolveExternalIdentity"
+	IdentityService_IssueSessionForUser_FullMethodName      = "/xstockstrat.identity.v1.IdentityService/IssueSessionForUser"
+	IdentityService_LinkExternalIdentity_FullMethodName     = "/xstockstrat.identity.v1.IdentityService/LinkExternalIdentity"
+	IdentityService_GetExternalIdentityLinks_FullMethodName = "/xstockstrat.identity.v1.IdentityService/GetExternalIdentityLinks"
 )
 
 // IdentityServiceClient is the client API for IdentityService service.
@@ -80,6 +84,18 @@ type IdentityServiceClient interface {
 	// Active admin user IDs for notify's push audience (feature 242). Authorized by mTLS peer SAN
 	// xstockstrat-notify only; every request header is ignored.
 	ListAdminUserIds(ctx context.Context, in *ListAdminUserIdsRequest, opts ...grpc.CallOption) (*ListAdminUserIdsResponse, error)
+	// Maps an OIDC (issuer, subject) to its linked user (feature 345). Authorized by mTLS peer SAN
+	// xstockstrat-ui or xstockstrat-agent only; every request header is ignored.
+	ResolveExternalIdentity(ctx context.Context, in *ResolveExternalIdentityRequest, opts ...grpc.CallOption) (*ResolveExternalIdentityResponse, error)
+	// Mints a session for an SSO-resolved user (feature 345). Authorized by mTLS peer SAN
+	// xstockstrat-ui only; every request header is ignored.
+	IssueSessionForUser(ctx context.Context, in *IssueSessionForUserRequest, opts ...grpc.CallOption) (*AuthTokenResponse, error)
+	// Links an OIDC identity after a password re-check (feature 345). Authorized by mTLS peer SAN
+	// xstockstrat-ui only; every request header is ignored.
+	LinkExternalIdentity(ctx context.Context, in *LinkExternalIdentityRequest, opts ...grpc.CallOption) (*LinkExternalIdentityResponse, error)
+	// Lists the issuers a user is linked to (feature 345). Authorized by mTLS peer SAN
+	// xstockstrat-ui only; every request header is ignored.
+	GetExternalIdentityLinks(ctx context.Context, in *GetExternalIdentityLinksRequest, opts ...grpc.CallOption) (*GetExternalIdentityLinksResponse, error)
 }
 
 type identityServiceClient struct {
@@ -310,6 +326,46 @@ func (c *identityServiceClient) ListAdminUserIds(ctx context.Context, in *ListAd
 	return out, nil
 }
 
+func (c *identityServiceClient) ResolveExternalIdentity(ctx context.Context, in *ResolveExternalIdentityRequest, opts ...grpc.CallOption) (*ResolveExternalIdentityResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ResolveExternalIdentityResponse)
+	err := c.cc.Invoke(ctx, IdentityService_ResolveExternalIdentity_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *identityServiceClient) IssueSessionForUser(ctx context.Context, in *IssueSessionForUserRequest, opts ...grpc.CallOption) (*AuthTokenResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(AuthTokenResponse)
+	err := c.cc.Invoke(ctx, IdentityService_IssueSessionForUser_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *identityServiceClient) LinkExternalIdentity(ctx context.Context, in *LinkExternalIdentityRequest, opts ...grpc.CallOption) (*LinkExternalIdentityResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(LinkExternalIdentityResponse)
+	err := c.cc.Invoke(ctx, IdentityService_LinkExternalIdentity_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *identityServiceClient) GetExternalIdentityLinks(ctx context.Context, in *GetExternalIdentityLinksRequest, opts ...grpc.CallOption) (*GetExternalIdentityLinksResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetExternalIdentityLinksResponse)
+	err := c.cc.Invoke(ctx, IdentityService_GetExternalIdentityLinks_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // IdentityServiceServer is the server API for IdentityService service.
 // All implementations should embed UnimplementedIdentityServiceServer
 // for forward compatibility.
@@ -347,6 +403,18 @@ type IdentityServiceServer interface {
 	// Active admin user IDs for notify's push audience (feature 242). Authorized by mTLS peer SAN
 	// xstockstrat-notify only; every request header is ignored.
 	ListAdminUserIds(context.Context, *ListAdminUserIdsRequest) (*ListAdminUserIdsResponse, error)
+	// Maps an OIDC (issuer, subject) to its linked user (feature 345). Authorized by mTLS peer SAN
+	// xstockstrat-ui or xstockstrat-agent only; every request header is ignored.
+	ResolveExternalIdentity(context.Context, *ResolveExternalIdentityRequest) (*ResolveExternalIdentityResponse, error)
+	// Mints a session for an SSO-resolved user (feature 345). Authorized by mTLS peer SAN
+	// xstockstrat-ui only; every request header is ignored.
+	IssueSessionForUser(context.Context, *IssueSessionForUserRequest) (*AuthTokenResponse, error)
+	// Links an OIDC identity after a password re-check (feature 345). Authorized by mTLS peer SAN
+	// xstockstrat-ui only; every request header is ignored.
+	LinkExternalIdentity(context.Context, *LinkExternalIdentityRequest) (*LinkExternalIdentityResponse, error)
+	// Lists the issuers a user is linked to (feature 345). Authorized by mTLS peer SAN
+	// xstockstrat-ui only; every request header is ignored.
+	GetExternalIdentityLinks(context.Context, *GetExternalIdentityLinksRequest) (*GetExternalIdentityLinksResponse, error)
 }
 
 // UnimplementedIdentityServiceServer should be embedded to have
@@ -421,6 +489,18 @@ func (UnimplementedIdentityServiceServer) SetUserActive(context.Context, *SetUse
 }
 func (UnimplementedIdentityServiceServer) ListAdminUserIds(context.Context, *ListAdminUserIdsRequest) (*ListAdminUserIdsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListAdminUserIds not implemented")
+}
+func (UnimplementedIdentityServiceServer) ResolveExternalIdentity(context.Context, *ResolveExternalIdentityRequest) (*ResolveExternalIdentityResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ResolveExternalIdentity not implemented")
+}
+func (UnimplementedIdentityServiceServer) IssueSessionForUser(context.Context, *IssueSessionForUserRequest) (*AuthTokenResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method IssueSessionForUser not implemented")
+}
+func (UnimplementedIdentityServiceServer) LinkExternalIdentity(context.Context, *LinkExternalIdentityRequest) (*LinkExternalIdentityResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method LinkExternalIdentity not implemented")
+}
+func (UnimplementedIdentityServiceServer) GetExternalIdentityLinks(context.Context, *GetExternalIdentityLinksRequest) (*GetExternalIdentityLinksResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetExternalIdentityLinks not implemented")
 }
 func (UnimplementedIdentityServiceServer) testEmbeddedByValue() {}
 
@@ -838,6 +918,78 @@ func _IdentityService_ListAdminUserIds_Handler(srv interface{}, ctx context.Cont
 	return interceptor(ctx, in, info, handler)
 }
 
+func _IdentityService_ResolveExternalIdentity_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ResolveExternalIdentityRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(IdentityServiceServer).ResolveExternalIdentity(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: IdentityService_ResolveExternalIdentity_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(IdentityServiceServer).ResolveExternalIdentity(ctx, req.(*ResolveExternalIdentityRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _IdentityService_IssueSessionForUser_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(IssueSessionForUserRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(IdentityServiceServer).IssueSessionForUser(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: IdentityService_IssueSessionForUser_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(IdentityServiceServer).IssueSessionForUser(ctx, req.(*IssueSessionForUserRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _IdentityService_LinkExternalIdentity_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(LinkExternalIdentityRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(IdentityServiceServer).LinkExternalIdentity(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: IdentityService_LinkExternalIdentity_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(IdentityServiceServer).LinkExternalIdentity(ctx, req.(*LinkExternalIdentityRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _IdentityService_GetExternalIdentityLinks_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetExternalIdentityLinksRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(IdentityServiceServer).GetExternalIdentityLinks(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: IdentityService_GetExternalIdentityLinks_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(IdentityServiceServer).GetExternalIdentityLinks(ctx, req.(*GetExternalIdentityLinksRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // IdentityService_ServiceDesc is the grpc.ServiceDesc for IdentityService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -932,6 +1084,22 @@ var IdentityService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ListAdminUserIds",
 			Handler:    _IdentityService_ListAdminUserIds_Handler,
+		},
+		{
+			MethodName: "ResolveExternalIdentity",
+			Handler:    _IdentityService_ResolveExternalIdentity_Handler,
+		},
+		{
+			MethodName: "IssueSessionForUser",
+			Handler:    _IdentityService_IssueSessionForUser_Handler,
+		},
+		{
+			MethodName: "LinkExternalIdentity",
+			Handler:    _IdentityService_LinkExternalIdentity_Handler,
+		},
+		{
+			MethodName: "GetExternalIdentityLinks",
+			Handler:    _IdentityService_GetExternalIdentityLinks_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

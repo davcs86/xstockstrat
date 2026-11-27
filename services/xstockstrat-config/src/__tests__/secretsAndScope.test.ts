@@ -70,6 +70,8 @@ describe('GetSecret allow-list + failure modes', () => {
   let client: any;
   let ingestClient: any;
   let notifyClient: any;
+  let uiClient: any;
+  let agentClient: any;
   const state: Handlers = {};
 
   before(async () => {
@@ -82,6 +84,8 @@ describe('GetSecret allow-list + failure modes', () => {
     const marketdataLeaf = mintLeaf(dir, 'xstockstrat-marketdata', ca, caKey);
     const ingestLeaf = mintLeaf(dir, 'xstockstrat-ingest', ca, caKey);
     const notifyLeaf = mintLeaf(dir, 'xstockstrat-notify', ca, caKey);
+    const uiLeaf = mintLeaf(dir, 'xstockstrat-ui', ca, caKey);
+    const agentLeaf = mintLeaf(dir, 'xstockstrat-agent', ca, caKey);
 
     setEnv(...serverLeaf, caPem);
     server = new grpc.Server();
@@ -99,8 +103,15 @@ describe('GetSecret allow-list + failure modes', () => {
     ingestClient = new ConfigServiceClient(`127.0.0.1:${port}`, mtls.clientCredentials(), mtls.targetOverride('xstockstrat-config'));
     setEnv(...notifyLeaf, caPem);
     notifyClient = new ConfigServiceClient(`127.0.0.1:${port}`, mtls.clientCredentials(), mtls.targetOverride('xstockstrat-config'));
+    setEnv(...uiLeaf, caPem);
+    uiClient = new ConfigServiceClient(`127.0.0.1:${port}`, mtls.clientCredentials(), mtls.targetOverride('xstockstrat-config'));
+    setEnv(...agentLeaf, caPem);
+    agentClient = new ConfigServiceClient(`127.0.0.1:${port}`, mtls.clientCredentials(), mtls.targetOverride('xstockstrat-config'));
   });
-  after(() => { client?.close(); ingestClient?.close(); notifyClient?.close(); server?.forceShutdown(); });
+  after(() => {
+    client?.close(); ingestClient?.close(); notifyClient?.close(); uiClient?.close(); agentClient?.close();
+    server?.forceShutdown();
+  });
 
   function getSecretAs(c: any, metadata: grpc.Metadata, req: Record<string, unknown>) {
     return new Promise<{ err: any; res: any }>((resolve) =>
@@ -111,6 +122,18 @@ describe('GetSecret allow-list + failure modes', () => {
   function getSecret(metadata: grpc.Metadata, req: Record<string, unknown>) {
     return getSecretAs(client, metadata, req);
   }
+
+  it('@AC-35 the UI peer reads ui/oidc.client_secret; the agent peer with the same header is denied', async () => {
+    state.getSecretCiphertext = encryptSecret('oidc-client-secret-xyz');
+    const req = { namespace: 'ui', key: 'oidc.client_secret', environment: 'ENVIRONMENT_STAGING' };
+    const ui = await getSecretAs(uiClient, md({ [HEADER_INTERNAL_CALLER]: 'ui' }), req);
+    assert.equal(ui.err, null);
+    assert.equal(ui.res.found, true);
+    assert.equal(ui.res.value, 'oidc-client-secret-xyz');
+    const agent = await getSecretAs(agentClient, md({ [HEADER_INTERNAL_CALLER]: 'ui' }), req);
+    assert.equal(agent.err?.code, grpc.status.PERMISSION_DENIED);
+    assert.equal(agent.res, undefined);
+  });
 
   it('AC-4: an allow-listed caller resolves the decrypted plaintext', async () => {
     state.getSecretCiphertext = encryptSecret('alpaca-key-xyz');

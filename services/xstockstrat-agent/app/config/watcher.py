@@ -1,6 +1,7 @@
 """
 Config watchers for xstockstrat-agent (feature 295).
-The lifespan subscribes to the `agent` and `indicators` WatchConfig streams before serving.
+The lifespan subscribes to the `agent`, `indicators` and `identity` WatchConfig streams before
+serving.
 """
 
 import asyncio
@@ -13,7 +14,7 @@ from app import mtls
 from app.config.watch_core import KEEPALIVE_OPTIONS, SNAPSHOT_WAIT_TIMEOUT_S, WatchCore
 from app.scopes import resolve_scope
 
-WATCHED_NAMESPACES = ("agent", "indicators")
+WATCHED_NAMESPACES = ("agent", "indicators", "identity")
 
 # Process-wide registry keyed by namespace; readers go through get_watcher().
 _WATCHERS: dict = {}
@@ -80,6 +81,9 @@ def read_value(namespace: str, key: str) -> str | None:
         return None
     which = value.WhichOneof("value")
     return str(getattr(value, which)) if which else None
+
+
+read_config_value = read_value
 
 
 def int_positive(cfg, key: str, default: int) -> int:

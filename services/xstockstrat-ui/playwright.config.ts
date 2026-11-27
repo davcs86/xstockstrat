@@ -1,6 +1,7 @@
 import { defineConfig, devices } from '@playwright/test';
 import { preinstalledBrowser, resolveChromiumExecutable } from './e2e/helpers/browser-resolution';
 import { devCerts } from './e2e/helpers/devCerts';
+import { BASE_URL } from './e2e/helpers/auth';
 
 const isCI = !!process.env.CI;
 
@@ -98,7 +99,7 @@ export default defineConfig({
   globalSetup: './e2e/global-setup.ts',
   globalTeardown: './e2e/global-teardown.ts',
   use: {
-    baseURL: 'http://localhost:3000',
+    baseURL: BASE_URL,
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
   },
@@ -110,6 +111,8 @@ export default defineConfig({
     {
       name: 'chromium',
       dependencies: ['setup'],
+      // The serial SSO file changes the mock's global mode, so it runs only in chromium-sso.
+      testIgnore: /e2e\/sso\//,
       use: {
         ...devices['Desktop Chrome'],
         // Use a pre-installed Chromium when present (managed sandboxes). Must go under
@@ -122,6 +125,7 @@ export default defineConfig({
           {
             name: 'firefox',
             dependencies: ['setup'],
+            testIgnore: /e2e\/sso\//,
             use: {
               ...devices['Desktop Firefox'],
               ...(firefoxExecutable
@@ -131,6 +135,18 @@ export default defineConfig({
           },
         ]
       : []),
+    // One worker, after chromium: a hard chromium failure skips this project (spec-level choice 3).
+    {
+      name: 'chromium-sso',
+      testMatch: /e2e\/sso\/.*\.spec\.ts/,
+      dependencies: ['chromium'],
+      fullyParallel: false,
+      workers: 1,
+      use: {
+        ...devices['Desktop Chrome'],
+        ...(chromiumExecutable ? { launchOptions: { executablePath: chromiumExecutable } } : {}),
+      },
+    },
   ],
   webServer: {
     command: isCI
@@ -169,6 +185,8 @@ export default defineConfig({
       // guard and UI gating (deploymentEnv.ts) — deterministic across CI/local runs.
       APPLICATION_ENV: process.env.E2E_APPLICATION_ENV ?? 'development',
       JWT_SECRET: 'test-jwt-secret-for-e2e-tests-min32c',
+      // Feature 345 — the exact browser origin: the SSO routes' Origin check and redirects (D-67).
+      APP_URL: BASE_URL,
       // Feature 051 — the /accounts layout reads AGENT_PUBLIC_URL server-side to render the
       // connector URL + drive the agent-health probe. Point at a dead port so the probe is
       // deterministically "unreachable" unless a test overrides /accounts/api/agent-health.

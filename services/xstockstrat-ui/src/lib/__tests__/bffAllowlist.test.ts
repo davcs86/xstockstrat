@@ -5,7 +5,13 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import { metrics } from '@opentelemetry/api';
 import { MeterProvider, MetricReader } from '@opentelemetry/sdk-metrics';
-import { recordAuthEvent, recordBffDuration, recordBffRequest } from '@/lib/bffMetrics';
+import {
+  LOGOUT_REASONS,
+  recordAuthEvent,
+  recordBffDuration,
+  recordBffRequest,
+} from '@/lib/bffMetrics';
+import { LINK_ERROR_CODES, SSO_ERROR_CODES } from '@/lib/ssoErrors';
 
 class CollectingReader extends MetricReader {
   protected onShutdown(): Promise<void> {
@@ -44,9 +50,26 @@ const FORBIDDEN_KEYS = [
   'token',
 ];
 
+const DRIVEN_EVENTS = [
+  'login_ok',
+  'jwt_rejected',
+  'logout',
+  'sso_login_ok',
+  'sso_login_failed',
+  'sso_login_error',
+  'sso_link_failed',
+  'login_disabled',
+];
+
 function drive(): void {
   recordAuthEvent('login_ok');
   recordAuthEvent('jwt_rejected', 'expired');
+  recordAuthEvent('logout', 'cross_origin');
+  recordAuthEvent('sso_login_ok');
+  recordAuthEvent('sso_login_failed', 'no_access');
+  recordAuthEvent('sso_login_error');
+  recordAuthEvent('sso_link_failed', 'no_access');
+  recordAuthEvent('login_disabled');
   recordBffRequest('xstockstrat.trading.v1.TradingService', 'ListOrders', 503);
   recordBffDuration({
     segment: 'trader',
@@ -55,6 +78,18 @@ function drive(): void {
     status: 200,
     startMs: performance.now(),
   });
+}
+
+// Compile-time only (D-83, D-93): `pnpm run typecheck` fails with TS2578 if any directive goes unused.
+export function typedReasonMisuse(): void {
+  // @ts-expect-error login_ok takes no reason
+  recordAuthEvent('login_ok', 'expired');
+  // @ts-expect-error logout requires a reason
+  recordAuthEvent('logout');
+  // @ts-expect-error a JwtRejectReason is not a LogoutReason
+  recordAuthEvent('logout', 'expired');
+  // @ts-expect-error a LinkErrorCode is not an SsoErrorCode
+  recordAuthEvent('sso_login_failed', 'already_linked_self');
 }
 
 async function keysByInstrument(reader: CollectingReader): Promise<Map<string, Set<string>>> {
@@ -95,10 +130,44 @@ describe('BFF telemetry allowlist (feature 294)', () => {
       }
     });
 
+    it('every driven auth event is collected under the allow-listed keys', async () => {
+      drive();
+      const { resourceMetrics } = await reader.collect();
+      const events = new Set(
+        resourceMetrics.scopeMetrics
+          .flatMap((sm) => sm.metrics)
+          .filter((m) => m.descriptor.name === 'ui.auth.events')
+          .flatMap((m) => m.dataPoints.map((p) => p.attributes.event)),
+      );
+      expect([...events].sort()).toEqual([...DRIVEN_EVENTS].sort());
+    });
+
     it('@AC-41 http.server.duration keeps its name and attribute keys', async () => {
       drive();
       const keys = (await keysByInstrument(reader)).get('http.server.duration');
       expect([...(keys ?? [])].sort()).toEqual([...ALLOWED_KEYS['http.server.duration']].sort());
     });
+  });
+});
+
+describe('closed reason sets (D-72, D-113)', () => {
+  it('pins SSO_ERROR_CODES, LINK_ERROR_CODES and LOGOUT_REASONS', () => {
+    expect(SSO_ERROR_CODES).toEqual([
+      'failed',
+      'not_configured',
+      'not_linked',
+      'inactive',
+      'no_access',
+    ]);
+    expect(LINK_ERROR_CODES).toEqual([
+      'failed',
+      'not_configured',
+      'no_access',
+      'invalid_credentials',
+      'inactive',
+      'already_linked_other',
+      'already_linked_self',
+    ]);
+    expect(LOGOUT_REASONS).toEqual(['verified', 'unverified', 'expired_too_old', 'cross_origin']);
   });
 });

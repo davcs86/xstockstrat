@@ -15,14 +15,17 @@ Run with uv (preferred — auto-installs deps):
     uv run scripts/manage-users.py update-roles admin@example.com
     uv run scripts/manage-users.py reset-password admin@example.com
     uv run scripts/manage-users.py delete-user old@example.com
+    uv run scripts/manage-users.py set-auth-mode both --environment staging --reason "SSO pilot"
+    uv run scripts/manage-users.py unlink-sso user@example.com
 
 Non-interactive (CI/scripts) — bypass the role selector / confirmation:
     uv run scripts/manage-users.py create-user admin@example.com --roles admin,trader
     uv run scripts/manage-users.py update-roles admin@example.com --roles trader
     uv run scripts/manage-users.py delete-user old@example.com --force
+    uv run scripts/manage-users.py unlink-sso user@example.com --issuer https://auth.example.com --force
 
 DATABASE_URL must be set, or POSTGRES_PASSWORD in .env will be used to
-construct a local-dev connection string.
+construct a local-dev connection string (set-auth-mode requires DATABASE_URL).
 """
 
 from __future__ import annotations
@@ -30,6 +33,7 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
+from urllib.parse import urlsplit
 
 import bcrypt
 import psycopg
@@ -502,6 +506,136 @@ def delete_user(
             f"User [bold]{email}[/] has been permanently deleted.",
             border_style="green",
         )
+    )
+
+
+# ── SSO (feature 345) ────────────────────────────────────────────────────
+
+AUTH_MODES = ("local", "both", "oidc")
+
+AUTH_MODE_ROWS_SQL = (
+    "SELECT environment, value_data, updated_by FROM config.config_values "
+    "WHERE namespace = 'identity' AND key = 'auth.mode' AND user_id IS NULL "
+    "ORDER BY environment"
+)
+
+# Always notifies (D-108): every reader re-parses even when the value is unchanged.
+SET_AUTH_MODE_SQL = (
+    "WITH u AS (UPDATE config.config_values SET value_data = %s, "
+    "updated_by = 'operator:manage-users', update_reason = %s, caller_identity = NULL, "
+    "updated_at = NOW() WHERE namespace = 'identity' AND key = 'auth.mode' "
+    "AND environment = %s AND user_id IS NULL RETURNING namespace, key, environment), "
+    "nt AS (SELECT pg_notify('config_changed', json_build_object('namespace', 'identity', "
+    "'key', 'auth.mode', 'environment', %s, 'user_id', NULL)::text) AS sent) "
+    "SELECT (SELECT count(*) FROM u), (SELECT count(*) FROM nt)"
+)
+
+
+def _connect(db_url: str):
+    try:
+        return psycopg.connect(db_url)
+    except psycopg.OperationalError as exc:
+        err.print(
+            Panel(
+                f"[red bold]Database connection failed[/]\n\n{exc}",
+                title="Connection Error",
+                border_style="red",
+            )
+        )
+        raise typer.Exit(1) from exc
+
+
+def _print_auth_mode_rows(conn, label: str) -> None:
+    table = Table(title=f"identity/auth.mode ({label})")
+    for col in ("environment", "value", "updated_by"):
+        table.add_column(col)
+    for environment, value, updated_by in conn.execute(AUTH_MODE_ROWS_SQL).fetchall():
+        table.add_row(environment, value, updated_by or "")
+    out.print(table)
+
+
+@app.command("set-auth-mode")
+def set_auth_mode(
+    value: str = typer.Argument(help="local | both | oidc"),
+    environment: str = typer.Option(
+        ..., "--environment", help="production | staging (the row to change)"
+    ),
+    reason: str = typer.Option(..., "--reason", help="Recorded as update_reason"),
+) -> None:
+    """Set this database's identity/auth.mode for one environment (FR-17).
+
+    Break-glass: [bold]set-auth-mode local[/] restores password login and the built-in
+    MCP OAuth server at once. Rollback is the same command with the previous value.
+    Requires DATABASE_URL (no .env fallback).
+    """
+    if value not in AUTH_MODES:
+        err.print(
+            f"[red bold]Error:[/] auth.mode must be one of: {', '.join(AUTH_MODES)}"
+        )
+        raise typer.Exit(2)
+    if environment not in ("production", "staging"):
+        err.print("[red bold]Error:[/] --environment must be production or staging")
+        raise typer.Exit(2)
+    db_url = os.environ.get("DATABASE_URL")
+    if not db_url:
+        err.print("[red bold]Error:[/] DATABASE_URL must be set for set-auth-mode")
+        raise typer.Exit(1)
+    target = urlsplit(db_url)
+    out.print(
+        f"Database: host [bold]{target.hostname}[/] database [bold]{target.path.lstrip('/')}[/]"
+    )
+
+    with _connect(db_url) as conn:
+        _print_auth_mode_rows(conn, "before")
+        updated, _notified = conn.execute(
+            SET_AUTH_MODE_SQL, (value, reason, environment, environment)
+        ).fetchone()
+        conn.commit()
+        if updated == 0 and value != "local":
+            err.print(
+                f"[red bold]Error:[/] no identity/auth.mode row for {environment}: "
+                "seed migration not applied"
+            )
+            raise typer.Exit(1)
+        _print_auth_mode_rows(conn, "after")
+    out.print(f"[green]auth.mode = {value} for {environment}[/] (readers notified)")
+
+
+@app.command("unlink-sso")
+def unlink_sso(
+    email: str = typer.Argument(help="Email of the user to unlink"),
+    issuer: str | None = typer.Option(None, "--issuer", help="Only this issuer's link"),
+    force: bool = typer.Option(False, "--force", "-f", help="Skip confirmation prompt"),
+) -> None:
+    """Remove a user's SSO link(s) so they can link again (FR-12)."""
+    with _connect(_load_db_url()) as conn:
+        row = conn.execute(
+            "SELECT user_id FROM identity.users WHERE email = %s", (email,)
+        ).fetchone()
+        if row is None:
+            err.print(
+                f"[red bold]Error:[/] No user found with email [bold]'{email}'[/]."
+            )
+            raise typer.Exit(1)
+        (user_id,) = row
+        if not force:
+            scope = f"the {issuer} link" if issuer else "every SSO link"
+            if not typer.confirm(f"Remove {scope} of {email}?"):
+                err.print("[dim]Aborted.[/]")
+                raise typer.Exit(0)
+        sql = "DELETE FROM identity.external_identities WHERE user_id = %s"
+        params: tuple = (user_id,)
+        if issuer:
+            sql += " AND issuer = %s"
+            params = (user_id, issuer)
+        deleted = conn.execute(sql + " RETURNING issuer", params).fetchall()
+        conn.commit()
+    if not deleted:
+        err.print(f"[red bold]Error:[/] no SSO link found for {email}")
+        raise typer.Exit(1)
+    out.print(
+        f"[green]Removed {len(deleted)} SSO link(s).[/] {email} can link again with "
+        "Link SSO while the deployment's auth.mode is both."
     )
 
 

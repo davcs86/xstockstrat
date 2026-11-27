@@ -52,3 +52,38 @@ def roles_to_access_scope(roles: list[str] | None) -> int:
         elif role == "admin":
             scope |= _READ | _WRITE | _ADMIN | _TRADING
     return scope
+
+
+# OAuth scope → access-scope bit for SSO access tokens (feature 345, D-3).
+_OAUTH_SCOPE_BITS = {
+    "xstockstrat.read": _READ,
+    "xstockstrat.write": _WRITE,
+    "xstockstrat.admin": _ADMIN,
+    "xstockstrat.trade": _TRADING,
+}
+MCP_SCOPES_SUPPORTED = tuple(_OAUTH_SCOPE_BITS)
+
+
+def granted_scopes(payload: dict) -> list[str]:
+    """`scp` when it is a list of str, else the space-split `scope` string, else nothing (D-95)."""
+    scp = payload.get("scp")
+    if isinstance(scp, list) and all(isinstance(s, str) for s in scp):
+        return scp
+    scope = payload.get("scope")
+    if isinstance(scope, str):
+        return scope.split()
+    return []
+
+
+def scopes_to_mask(granted) -> int:
+    mask = 0
+    for s in granted:
+        mask |= _OAUTH_SCOPE_BITS.get(s, 0)
+    return mask
+
+
+def effective_access_scope(claims: dict) -> int:
+    """A stamped `access_scope` wins whenever the key is present (0 included, D-105)."""
+    if "access_scope" in claims:
+        return claims["access_scope"]
+    return roles_to_access_scope(claims.get("roles"))

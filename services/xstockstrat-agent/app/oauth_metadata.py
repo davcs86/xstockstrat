@@ -11,13 +11,32 @@ documents point at AGENT_PUBLIC_URL.
 
 import os
 
-from starlette.responses import JSONResponse
+from starlette.responses import JSONResponse, Response
+
+from app.scopes import MCP_SCOPES_SUPPORTED
+from app.sso_mode import agent_issuer, current_auth_mode
 
 AGENT_PUBLIC_URL = os.environ.get("AGENT_PUBLIC_URL", "http://localhost:9000")
 
 
 async def protected_resource_metadata(request):
     """RFC 9728 — the protected resource (the agent's MCP endpoint) and its auth server."""
+    if current_auth_mode() == "oidc":
+        issuer, valid = agent_issuer()
+        if not valid:
+            return Response(
+                "Service Unavailable",
+                503,
+                media_type="text/plain",
+                headers={"Cache-Control": "no-store"},
+            )
+        return JSONResponse(
+            {
+                "resource": AGENT_PUBLIC_URL,
+                "authorization_servers": [issuer],
+                "scopes_supported": list(MCP_SCOPES_SUPPORTED),
+            }
+        )
     return JSONResponse(
         {
             "resource": AGENT_PUBLIC_URL,

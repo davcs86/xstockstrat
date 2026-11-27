@@ -37,8 +37,8 @@ directly on port 9000.
 | `/` (GET/POST) | **Streamable HTTP** MCP endpoint — the connector URL itself |
 | `GET /sse`, `POST /messages` | **Removed** (feature 079) — return `404 text/plain` naming the replacement URL, *before* the auth gate, so a stale client gets an immediate answer instead of a pointless OAuth round-trip |
 | `GET /.well-known/oauth-protected-resource` | RFC 9728 discovery |
-| `GET /.well-known/oauth-authorization-server` | RFC 8414 discovery |
-| `POST /oauth/register`, `GET /oauth/authorize`, `GET /oauth/callback`, `POST /oauth/token` | OAuth 2.1 endpoints |
+| `GET /.well-known/oauth-authorization-server` | RFC 8414 discovery (`404` in `auth.mode` `oidc`) |
+| `POST /oauth/register`, `GET /oauth/authorize`, `GET /oauth/callback`, `POST /oauth/token` | OAuth 2.1 endpoints (`404` in `auth.mode` `oidc`) |
 
 **Direct (local):** `http://localhost:9000`
 
@@ -57,6 +57,7 @@ now answers 401 like any other unauthenticated request.
 No authentication required — the process is launched by the MCP client with the correct environment.
 
 ### Streamable HTTP — OAuth 2.1 (recommended, feature 049 Part B)
+This is the flow in `identity` / `auth.mode` `local` (the default) and `both`. In `oidc` see the next section.
 The **recommended** production method for Claude.ai. The agent is the OAuth 2.1 Resource Server +
 Authorization-Server HTTP facade; `xstockstrat-identity` is the durable client/code store + token mint.
 The end-to-end connect flow:
@@ -81,6 +82,44 @@ The end-to-end connect flow:
    **audience-bound JWT** (`aud` = the agent resource URI) plus a rotating refresh token. The JWT is
    presented as `Authorization: Bearer <jwt>` on the root MCP endpoint; the agent rejects tokens whose `aud` does
    not match.
+
+### Streamable HTTP — issuer tokens (`auth.mode` `oidc`, feature 345)
+In `oidc` the agent accepts only access tokens from the OIDC issuer in `agent` / `oidc.issuer`, and the built-in
+server above is off: its AS metadata and the four `/oauth/*` routes answer `404 text/plain`, and an identity-minted
+token gets `401`. There is no DCR: each connector uses a client pre-registered at the issuer. Mode lifecycle,
+cutover and rollback → `docs/runbooks/authelia-sso-cutover.md`.
+
+**Connector setup.** Use `AGENT_PUBLIC_URL` as the connector URL and paste the client ID into the connector's OAuth
+settings. `/accounts/authorized-apps` shows the deployment's IDs (from `ui` / `oidc.mcp_client_id`,
+`oidc.mcp_client_id_readonly`, `oidc.mcp_client_id_claude_code`, `oidc.mcp_client_id_claude_code_readonly`; an
+empty key hides its line).
+
+| Client | Production | Staging | Redirect URIs |
+|---|---|---|---|
+| Claude.ai, full | `xstockstrat-mcp-claude` | `xstockstrat-staging-mcp-claude` | `https://claude.ai/api/mcp/auth_callback`, `https://claude.com/api/mcp/auth_callback` |
+| Claude.ai, read-only | `xstockstrat-mcp-claude-ro` | `xstockstrat-staging-mcp-claude-ro` | same as above |
+| Claude Code, full | `xstockstrat-mcp-claude-code` | `xstockstrat-staging-mcp-claude-code` | the Claude Code loopback redirect, `http://localhost:<port>/callback` (port chosen per login) |
+| Claude Code, read-only | `xstockstrat-mcp-claude-code-ro` | `xstockstrat-staging-mcp-claude-code-ro` | same as above |
+
+The homelab registers no Claude Code client and leaves the two `oidc.mcp_client_id_claude_code*` keys empty; the
+Claude Code rows are for other self-hosted deployments that register them.
+
+**Scopes.** The protected-resource document lists `scopes_supported`: `xstockstrat.read` (READ `0x01`),
+`xstockstrat.write` (WRITE `0x02`), `xstockstrat.admin` (ADMIN `0x04`), `xstockstrat.trade` (TRADING `0x08`). The
+granted scopes are the token's `scp` list, else its space-separated `scope`. The forwarded `x-access-scope` is
+`roles_to_access_scope(roles) & scopes_to_mask(granted)`: roles stay in xstockstrat (resolved by
+`ResolveExternalIdentity`, cached 60 s per issuer and subject), so a token can only narrow them, never widen them,
+and a token with none of the four scopes has scope `0`.
+
+**Responses.**
+- `GET /.well-known/oauth-protected-resource` → `{resource, authorization_servers: [<issuer>], scopes_supported}`;
+  `503 no-store` while `agent` / `oidc.issuer` is invalid or empty (every MCP call is then `503` too).
+- `401` with the `WWW-Authenticate` pointer: missing or invalid token (RS/PS/ES algorithms only, `typ` `at+jwt`,
+  `iss` = the issuer, `aud` = `AGENT_PUBLIC_URL`, unexpired, non-empty `sub`).
+- `403 text/plain` `not linked` or `account inactive`: the issuer account is not linked to an xstockstrat user, or
+  that user is inactive.
+- `503` without `WWW-Authenticate`: the issuer's keys cannot be fetched (`jwks_unavailable`) or identity cannot be
+  reached (`identity_unavailable`).
 
 ---
 

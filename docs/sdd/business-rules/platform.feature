@@ -2862,3 +2862,53 @@ Feature: Platform-wide guarantees
     Then the ledger holds an order.partially_filled event with qty 4 and an order.filled event with qty 10 at average fill price 110 for that leg
     And the "AAPL" position quantity is 0
     And GetPnL realized for the round trip is 100
+
+
+  # Promoted from docs/roadmap/features/345-authelia-sso/acceptance.feature (C-16); staging-only, no Background.
+  @AC-20 @FR-13 @feature-345
+  Scenario: MCP connector setup is documented
+    When an operator reads docs/runbooks/mcp-tools.md
+    Then it lists client IDs "xstockstrat-mcp-claude", "xstockstrat-mcp-claude-ro", "xstockstrat-mcp-claude-code" and "xstockstrat-mcp-claude-code-ro", and the same four with the "xstockstrat-staging-" prefix
+    And it gives the redirect URIs "https://claude.ai/api/mcp/auth_callback" and "https://claude.com/api/mcp/auth_callback" and the Claude Code loopback redirect
+    And the runbook it links describes cutover (local, both, link, oidc), rollback and break-glass with the FR-17 command, Link SSO and unlink-sso
+
+  @AC-36 @FR-13 @feature-345
+  Scenario: The seed-owner rule and the agent's namespaces are documented
+    When an engineer reads IDENTITY-15 in services/xstockstrat-identity/docs/context-constitution.md
+    Then it states that new migrations resolve the seed owner by SEED_USER_ID, never by admin@localhost
+    And AGENT-9 in services/xstockstrat-agent/docs/context-constitution.md lists "agent", "identity" and "indicators" as the watched namespaces
+    And the identity, ui and agent CLAUDE.md files and docs/patterns/frontend-auth.md name identity/auth.mode, the ui/oidc.* and agent/oidc.issuer keys, and the Link SSO flow
+
+  @AC-44 @FR-14 @FR-17 @feature-345
+  Scenario: Setting the mode back to local rolls a deployment back
+    Given staging identity/auth.mode is "oidc"
+    When an operator sets it to "local" with the FR-17 command, without signing in
+    Then the next login page render shows the password form and no "Sign in with SSO" button
+    And within 60 seconds MCP accepts identity-minted tokens again
+
+  @AC-50 @FR-12 @FR-16 @feature-345
+  Scenario: unlink-sso refuses the old subject and lets the user link again
+    Given staging user "alice@example.test" is linked to subject "a1b2"
+    When an admin runs "uv run scripts/manage-users.py unlink-sso alice@example.test"
+    Then identity.external_identities has no row for that user
+    And a login for subject "a1b2" is refused as not linked
+    And with staging in "both", alice can link subject "n3w0" through Link SSO
+
+  @AC-71 @FR-17 @feature-345
+  Scenario Outline: The mode command sets the mode without a login
+    Given an operator on a tailnet host with access to the staging config database
+    When they run the FR-17 command with "<value>" for staging
+    Then <outcome>
+
+    # "oidcc" is a deliberate misspelling: an invalid value.
+    Examples:
+      | value | outcome                                                                                           |
+      | both  | identity/auth.mode is "both" and the running UI, identity and agent use it within 60 seconds, without a restart |
+      | oidcc | the command exits non-zero, names the allowed values and changes nothing                           |
+
+  @AC-72 @FR-9 @feature-345
+  Scenario: An invalid stored mode reads as local and is logged
+    Given the staging identity/auth.mode row holds "sso"
+    When a user opens the login page and the agent receives an MCP call
+    Then both behave as in "local"
+    And the UI, identity and the agent each log "auth_mode_invalid" once

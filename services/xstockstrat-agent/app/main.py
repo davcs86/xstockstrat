@@ -118,6 +118,7 @@ def build_http_app(server: MCPServer | None = None):
     from starlette.responses import Response
     from starlette.routing import Mount, Route
 
+    from app import sso_auth
     from app.auth import IDENTITY_UNAVAILABLE, validate_bearer_claims
     from app.oauth_metadata import (
         authorization_server_metadata,
@@ -127,6 +128,7 @@ def build_http_app(server: MCPServer | None = None):
     from app.oauth_server import callback as oauth_callback
     from app.oauth_server import register as oauth_register
     from app.oauth_server import token as oauth_token
+    from app.sso_mode import agent_issuer, current_auth_mode
 
     server = server or create_server()
 
@@ -139,6 +141,11 @@ def build_http_app(server: MCPServer | None = None):
     )
     session_manager = server.session_manager
 
+    def _bearer_token(scope) -> str:
+        headers = dict(scope.get("headers", []))
+        auth_header = headers.get(b"authorization", b"").decode("utf-8", errors="ignore")
+        return auth_header[len("Bearer ") :] if auth_header.startswith("Bearer ") else ""
+
     async def _authorized(scope) -> bool | object:
         """OAuth 2.1 gate for the Streamable HTTP transport.
 
@@ -146,9 +153,7 @@ def build_http_app(server: MCPServer | None = None):
         wrong is rejected — FR-B8). Returns ``IDENTITY_UNAVAILABLE`` (truthy) when identity could
         not answer, so callers must test for it before the boolean check.
         """
-        headers = dict(scope.get("headers", []))
-        auth_header = headers.get(b"authorization", b"").decode("utf-8", errors="ignore")
-        token = auth_header[len("Bearer ") :] if auth_header.startswith("Bearer ") else ""
+        token = _bearer_token(scope)
         if not token:
             record_auth_rejected("missing_bearer")
             return False
@@ -183,6 +188,42 @@ def build_http_app(server: MCPServer | None = None):
         response = Response("Service Unavailable", status_code=503, media_type="text/plain")
         await response(scope, receive, send)
 
+    async def _send_forbidden(body: str, scope, receive, send) -> None:
+        # No WWW-Authenticate: re-authenticating cannot fix an unlinked or inactive account.
+        await Response(body, status_code=403, media_type="text/plain")(scope, receive, send)
+
+    async def _handle_oidc(scope, receive, send) -> None:
+        issuer, valid = agent_issuer()
+        if not valid:
+            record_auth_rejected("internal_error")
+            await _send_identity_unavailable(scope, receive, send)
+            return
+        token = _bearer_token(scope)
+        if not token:
+            record_auth_rejected("missing_bearer")
+            await _send_unauthorized(scope, receive, send)
+            return
+        verdict = await sso_auth.authenticate(token, issuer, _new_trace_id())
+        if verdict.outcome is sso_auth.Outcome.OK:
+            scope.setdefault("state", {})[MCP_CLAIMS_SCOPE_KEY] = verdict.claims
+            await session_manager.handle_request(scope, receive, send)
+        elif verdict.outcome is sso_auth.Outcome.UNAUTHORIZED:
+            await _send_unauthorized(scope, receive, send)
+        elif verdict.outcome is sso_auth.Outcome.FORBIDDEN:
+            await _send_forbidden(verdict.body, scope, receive, send)
+        else:
+            await _send_identity_unavailable(scope, receive, send)
+
+    def _legacy_only(endpoint):
+        """The built-in OAuth server's routes stay registered but answer 404 in `oidc` (R-5)."""
+
+        async def wrapped(request):
+            if current_auth_mode() == "oidc":
+                return Response("Not Found", status_code=404, media_type="text/plain")
+            return await endpoint(request)
+
+        return wrapped
+
     async def _send_transport_removed(scope, receive, send) -> None:
         # 404 must precede the auth gate, else a client on a removed path gets a 401 that starts a
         # pointless OAuth flow. text/plain, not JSON — a JSON body risks parsing as JSON-RPC.
@@ -210,6 +251,10 @@ def build_http_app(server: MCPServer | None = None):
         # and the legacy `?session_id=…` lives in query_string, not path.
         if path in REMOVED_TRANSPORT_PATHS:
             await _send_transport_removed(scope, receive, send)
+            return
+
+        if current_auth_mode() == "oidc":
+            await _handle_oidc(scope, receive, send)
             return
 
         verdict = await _authorized(scope)
@@ -242,12 +287,12 @@ def build_http_app(server: MCPServer | None = None):
         ),
         Route(
             "/.well-known/oauth-authorization-server",
-            endpoint=authorization_server_metadata,
+            endpoint=_legacy_only(authorization_server_metadata),
         ),
-        Route("/oauth/register", endpoint=oauth_register, methods=["POST"]),
-        Route("/oauth/authorize", endpoint=oauth_authorize, methods=["GET"]),
-        Route("/oauth/callback", endpoint=oauth_callback, methods=["GET"]),
-        Route("/oauth/token", endpoint=oauth_token, methods=["POST"]),
+        Route("/oauth/register", endpoint=_legacy_only(oauth_register), methods=["POST"]),
+        Route("/oauth/authorize", endpoint=_legacy_only(oauth_authorize), methods=["GET"]),
+        Route("/oauth/callback", endpoint=_legacy_only(oauth_callback), methods=["GET"]),
+        Route("/oauth/token", endpoint=_legacy_only(oauth_token), methods=["POST"]),
         # The MCP transport at the agent root. MUST be last — the specific routes above win.
         Mount("/", app=handle_mcp),
     ]

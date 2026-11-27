@@ -5,17 +5,22 @@ import type { Pool } from 'pg';
 
 const ADMIN_DIRECTORY_PEER_SANS = ['xstockstrat-notify'] as const;
 
-interface AdminDirectoryCall {
+export interface AdminDirectoryCall {
   getAuthContext?: () => { sslPeerCertificate?: { subjectaltname?: string } } | undefined;
 }
 
-function peerDnsSans(call: AdminDirectoryCall): string[] {
+export function peerDnsSans(call: AdminDirectoryCall): string[] {
   const raw = call.getAuthContext?.()?.sslPeerCertificate?.subjectaltname ?? '';
   return raw
     .split(',')
     .map((s) => s.trim())
     .filter((s) => s.startsWith('DNS:'))
     .map((s) => s.slice('DNS:'.length));
+}
+
+// Exact DNS SAN membership, never a prefix match.
+export function hasPeerSan(call: AdminDirectoryCall, allowed: readonly string[]): boolean {
+  return peerDnsSans(call).some((s) => allowed.includes(s));
 }
 
 function hasAdminDirectoryPeer(call: AdminDirectoryCall): boolean {
