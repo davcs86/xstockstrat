@@ -241,7 +241,7 @@ head -2 docs/reports/2026-10-19-notify-severities-type-runtime-mismatch-defect.s
 
 ### Step 5 — test: AC-2 mock unit tests for the bounded queue and the status-path eviction
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-notify`
 **Files**:
 - `services/xstockstrat-notify/src/__tests__/notifyServiceImpl.test.ts` — modify
@@ -303,7 +303,7 @@ grep -n "__tests__/fixtures\|fixtures/withLogs" services/xstockstrat-notify/src/
 
 ### Step 6 — test: real-grpc-js eviction test — spike conditions (f) and (g)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-notify`
 **Files**:
 - `services/xstockstrat-notify/src/__tests__/notifyServiceImpl.test.ts` — modify
@@ -367,7 +367,7 @@ grep -n "node:http2\|createInsecure" services/xstockstrat-notify/src/__tests__/n
 
 ### Step 7 — service: bounded StreamAlerts queue with a `RESOURCE_EXHAUSTED` status-path eviction
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-notify`
 **Files**:
 - `services/xstockstrat-notify/src/grpc/notifyServiceImpl.ts` — modify

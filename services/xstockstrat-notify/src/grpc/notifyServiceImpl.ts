@@ -15,6 +15,8 @@ const FANOUT_WEBHOOK_PEER_SANS: readonly string[] = ['xstockstrat-ingest'];
 const WEBHOOK_NAME_MAX_CHARS = 256;
 const WEBHOOK_PAYLOAD_MAX_BYTES = 64 * 1024;
 const ALERT_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+// Memory-safety bound in messages (call.writableLength), not a config key.
+const MAX_QUEUED_ALERTS = 1024;
 
 function peerDnsSans(call: any): string[] {
   const raw: string = call.getAuthContext?.()?.sslPeerCertificate?.subjectaltname ?? '';
@@ -121,6 +123,18 @@ export class NotifyServiceImpl {
     let deliveredCount = 0;
     for (const [subId, sub] of this.subscribers) {
       if (this.matchesSubscriber(alert, sub)) {
+        if (sub.call.writableLength >= MAX_QUEUED_ALERTS) {
+          // The delete must precede the emit: any later write ends the stream with no status.
+          this.subscribers.delete(subId);
+          recordStreamEviction('backpressure');
+          log.warn('StreamAlerts subscriber evicted', { reason: 'backpressure' });
+          try {
+            sub.call.emit('error', { code: 8, details: 'slow consumer evicted' });
+          } catch (e: any) {
+            log.warn('StreamAlerts eviction teardown failed', { error: e?.message ?? String(e) });
+          }
+          continue;
+        }
         try {
           sub.call.write(alert);
           deliveredCount++;
@@ -172,12 +186,10 @@ export class NotifyServiceImpl {
     });
 
     call.on('cancelled', () => {
-      log.info('StreamAlerts subscriber disconnected', { subId });
-      this.subscribers.delete(subId);
+      if (this.subscribers.delete(subId)) log.info('StreamAlerts subscriber disconnected', { subId });
     });
     call.on('error', () => {
-      this.subscribers.delete(subId);
-      recordStreamEviction('stream_error');
+      if (this.subscribers.delete(subId)) recordStreamEviction('stream_error');
     });
   }
 
