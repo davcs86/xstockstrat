@@ -497,6 +497,7 @@ const (
 	BackfillSymbolOutcome_BACKFILL_SYMBOL_OUTCOME_EMPTY       BackfillSymbolOutcome = 1
 	BackfillSymbolOutcome_BACKFILL_SYMBOL_OUTCOME_SKIPPED     BackfillSymbolOutcome = 2
 	BackfillSymbolOutcome_BACKFILL_SYMBOL_OUTCOME_FAILED      BackfillSymbolOutcome = 3
+	BackfillSymbolOutcome_BACKFILL_SYMBOL_OUTCOME_INCOMPLETE  BackfillSymbolOutcome = 4
 )
 
 // Enum value maps for BackfillSymbolOutcome.
@@ -506,12 +507,14 @@ var (
 		1: "BACKFILL_SYMBOL_OUTCOME_EMPTY",
 		2: "BACKFILL_SYMBOL_OUTCOME_SKIPPED",
 		3: "BACKFILL_SYMBOL_OUTCOME_FAILED",
+		4: "BACKFILL_SYMBOL_OUTCOME_INCOMPLETE",
 	}
 	BackfillSymbolOutcome_value = map[string]int32{
 		"BACKFILL_SYMBOL_OUTCOME_UNSPECIFIED": 0,
 		"BACKFILL_SYMBOL_OUTCOME_EMPTY":       1,
 		"BACKFILL_SYMBOL_OUTCOME_SKIPPED":     2,
 		"BACKFILL_SYMBOL_OUTCOME_FAILED":      3,
+		"BACKFILL_SYMBOL_OUTCOME_INCOMPLETE":  4,
 	}
 )
 
@@ -1062,7 +1065,8 @@ func (x *TemplateOrigin) GetUpdateAvailable() bool {
 	return false
 }
 
-// Lists non-written symbols only; reason is the source's error text, empty for EMPTY.
+// Lists non-written symbols only; reason is the source's error text (empty for EMPTY),
+// or for INCOMPLETE the still-missing session ranges.
 type BackfillSymbolResult struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Symbol        string                 `protobuf:"bytes,1,opt,name=symbol,proto3" json:"symbol,omitempty"`
@@ -1283,12 +1287,13 @@ const file_common_v1_common_proto_rawDesc = "" +
 	"\x10UnservableReason\x12!\n" +
 	"\x1dUNSERVABLE_REASON_UNSPECIFIED\x10\x00\x12\x19\n" +
 	"\x15UNSERVABLE_REASON_OTC\x10\x01\x12\"\n" +
-	"\x1eUNSERVABLE_REASON_NOT_TRADABLE\x10\x02*\xac\x01\n" +
+	"\x1eUNSERVABLE_REASON_NOT_TRADABLE\x10\x02*\xd4\x01\n" +
 	"\x15BackfillSymbolOutcome\x12'\n" +
 	"#BACKFILL_SYMBOL_OUTCOME_UNSPECIFIED\x10\x00\x12!\n" +
 	"\x1dBACKFILL_SYMBOL_OUTCOME_EMPTY\x10\x01\x12#\n" +
 	"\x1fBACKFILL_SYMBOL_OUTCOME_SKIPPED\x10\x02\x12\"\n" +
-	"\x1eBACKFILL_SYMBOL_OUTCOME_FAILED\x10\x03B<Z:github.com/xstockstrat/contracts/gen/go/common/v1;commonv1b\x06proto3"
+	"\x1eBACKFILL_SYMBOL_OUTCOME_FAILED\x10\x03\x12&\n" +
+	"\"BACKFILL_SYMBOL_OUTCOME_INCOMPLETE\x10\x04B<Z:github.com/xstockstrat/contracts/gen/go/common/v1;commonv1b\x06proto3"
 
 var (
 	file_common_v1_common_proto_rawDescOnce sync.Once

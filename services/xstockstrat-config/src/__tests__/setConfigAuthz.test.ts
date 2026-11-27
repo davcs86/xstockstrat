@@ -189,11 +189,15 @@ describe('SetConfig authorization over a real gRPC connection', () => {
     assert.equal(d.internalCaller, 'trading-reconciliation-poller');
     assert.equal(d.reason, 'no_admin_or_internal_grant');
     assert.equal(d.targetState, 'ACTIVE');
+    assert.equal(d.hadPeerSan, false);
+    assert.equal(d.peerSan, '');
     const fields = Object.keys(d).filter((k) => !['level', 'message', 'service'].includes(k));
     assert.deepEqual(fields.sort(), [
+      'hadPeerSan',
       'internalCaller',
       'key',
       'namespace',
+      'peerSan',
       'reason',
       'targetState',
     ]);
@@ -209,6 +213,8 @@ describe('SetConfig authorization over a real gRPC connection', () => {
     assert.equal(denials[0][Symbol.for('level')], 'warn');
     assert.equal(denials[0].internalCaller, undefined);
     assert.equal(denials[0].targetState, undefined);
+    assert.equal(denials[0].hadPeerSan, undefined);
+    assert.equal(denials[0].peerSan, undefined);
   });
 
   it('denies a non-admin scope, and writes nothing', async () => {

@@ -12,6 +12,7 @@ ScoreStrategy grades backtests using Sharpe ratio, max drawdown, and win rate.
 
 import asyncio
 import base64
+import bisect
 import functools
 import hashlib
 import json
@@ -22,6 +23,7 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
+from typing import NamedTuple
 
 import asyncpg
 import grpc
@@ -279,6 +281,14 @@ class _GradeInputsUnknown(Exception):
     def __init__(self, symbol: str):
         super().__init__(f"{symbol}: fundamentals availability unknown")
         self.symbol = symbol
+
+
+class _FormulaVersionUnknown(_GradeInputsUnknown):
+    """A formula could not be read, so the evidence fingerprint is unknown; keep the old grade."""
+
+    def __init__(self, formula_id: str):
+        Exception.__init__(self, f"{formula_id}: formula version unavailable")
+        self.formula_id = formula_id
 
 
 class _FundamentalsUnknown(Exception):
@@ -638,6 +648,9 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         # once it reaches _OPPORTUNITY_COMPUTE_MAX_ATTEMPTS. In-memory (process-local, reset on
         # restart) — the _opportunity_recomputing guard precedent.
         self._opportunity_compute_failures: dict[str, int] = {}
+        # feature 366 FR-2a: per-user last (projected_computes, per_compute, cycle_days) key, so
+        # the shortfall line is logged only when it changes. In-memory, process-local.
+        self._live_only_shortfall_key: dict[str, tuple[int, int, int]] = {}
         # feature 185 FR-5: in-flight guard for the surgical read-time recovery, keyed by user_id,
         # so concurrent fresh reads don't stack duplicate per-symbol retries. Cleared in a finally.
         self._opportunity_retrying: set[str] = set()
@@ -920,13 +933,11 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
 
         # Fingerprint the executed definition only when the run executes the strategy's OWN
         # registered definition; the hash is from the DB definition_json, never a request dict.
-        run_fingerprint = None
-        if (
+        stamps_fingerprint = bool(
             request.strategy_id_ref
             and request.strategy_id == request.strategy_id_ref
             and executed_row is not None
-        ):
-            run_fingerprint = _definition_fingerprint(executed_row["definition_json"])
+        )
 
         # Cap every backtest to analysis.backtest.max_range_days: both bounds set + span over cap
         # → reject (not silent clamp); an unset bound is defaulted so ALL backtests stay bounded.
@@ -987,6 +998,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         fund_refusals = 0
         fund_unknown: list[str] = []
         refused_diags: dict[str, analysis_pb2.SymbolDiagnostics] = {}
+        formula_digests: dict = {}
         formula_fund_map: dict[str, list] = {}
         if active_definition is not None:
             if start_set:
@@ -997,11 +1009,20 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                     formula_deleted_cache,
                     formula_fund_map,
                     failures=fund_failures,
+                    digests=formula_digests,
                 )
             else:
                 formula_fund_map = await self._formula_fundamentals(
-                    active_definition, propagation_meta, failures=fund_failures
+                    active_definition,
+                    propagation_meta,
+                    failures=fund_failures,
+                    digests=formula_digests,
                 )
+        run_fingerprint = None
+        if stamps_fingerprint and all(isinstance(d, str) for d in formula_digests.values()):
+            run_fingerprint = _evidence_fingerprint(
+                executed_row["definition_json"], formula_digests
+            )
 
         # Benchmark (source_symbol) bars preloaded ONCE per run, shared across evaluated symbols.
         # A benchmark warmup shortfall is a run-wide coverage gap → INSUFFICIENT_DATA (AC-4).
@@ -1339,6 +1360,8 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         # definition). Detected during the warm-up prefetch's GetFormula — no extra fetch here.
         if formula_deleted_cache:
             result.warnings.extend(formula_deleted_cache.values())
+        if stamps_fingerprint and any(d is None for d in formula_digests.values()):
+            result.warnings.append(_FORMULA_VERSION_WARNING)
         if seed_symbols:
             sector_warnings.append(
                 sector_params.SEED_SPAN_WARNING.format(symbols=", ".join(sorted(seed_symbols)))
@@ -1410,14 +1433,22 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         # Feature 215 (@AC-11): a refused-only run still recomputes, so a legacy grade built on
         # the refused symbol clears; the run-level PIT cache/failures are reused.
         if result.status == analysis_pb2.BACKTEST_STATUS_OK or fund_refusals > 0:
+            recompute_formulas = {
+                fid: _FormulaRead(formula_fund_map.get(fid, []), d)
+                for fid, d in formula_digests.items()
+                if d is not None
+            }
             try:
                 await self._recompute_headline(
                     caller_user_id,
                     request.strategy_id,
                     fund_cache=fund_cache,
+                    formula_cache=recompute_formulas,
                     failures=fund_failures,
                     meta=propagation_meta,
                 )
+            except _FormulaVersionUnknown as e:
+                log.warning("formula version unavailable — grade unchanged: %s", e)
             except _GradeInputsUnknown as e:
                 log.warning("fundamentals availability unknown — grade unchanged: %s", e)
             except Exception as e:
@@ -1917,7 +1948,14 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         return out
 
     async def _formula_fundamentals(
-        self, definition, propagation_meta, *, cache=None, failures=None, warmups=None
+        self,
+        definition,
+        propagation_meta,
+        *,
+        cache=None,
+        failures=None,
+        warmups=None,
+        digests=None,
     ):
         """Feature 200 — build ``{formula_id: [FundamentalMetric enum int]}`` for the definition's
         custom-formula components that declare fundamentals inputs, via one ``GetFormula`` per
@@ -1925,7 +1963,8 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         cache). An empty result means the definition has no fundamentals-formula operand. A
         refused ``GetFormula`` (NOT_FOUND/PERMISSION_DENIED) is "not a fundamentals formula" and
         records no failure; an outage records UNKNOWN. Either caches ``[]``. When ``warmups`` is
-        given, each fetched formula's declared ``warmup_period`` is recorded in it (feature 341)."""
+        given, each fetched formula's declared ``warmup_period`` is recorded in it (feature 341),
+        and when ``digests`` is given, every visited formula's ``_formula_digest`` (feature 327)."""
         out: dict[str, list] = {}
         for comp in definition.components:
             if comp.kind != analysis_pb2.COMPONENT_KIND_CUSTOM_FORMULA or not comp.formula_id:
@@ -1934,7 +1973,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             if fid in out:
                 continue
             if cache is not None and fid in cache:
-                metrics = cache[fid]
+                metrics, digest = cache[fid]
             else:
                 try:
                     formula = await self._indicators.GetFormula(
@@ -1942,14 +1981,18 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                         metadata=propagation_meta,
                     )
                     metrics = [int(m) for m in getattr(formula, "fundamental_inputs", [])]
+                    digest = _formula_digest(formula)
                     if warmups is not None:
                         warmups[fid] = int(getattr(formula, "warmup_period", 0) or 0)
                 except grpc.RpcError as e:
                     metrics = []
+                    digest = _UNREADABLE if _rpc_code(e) in UNREADABLE_FORMULA_CODES else None
                     if failures is not None and _rpc_code(e) not in UNREADABLE_FORMULA_CODES:
                         failures[("formula", fid)] = Availability.UNKNOWN
                 if cache is not None:
-                    cache[fid] = metrics
+                    cache[fid] = _FormulaRead(metrics, digest)
+            if digests is not None:
+                digests[fid] = digest
             if metrics:
                 out[fid] = metrics
         return out
@@ -2531,7 +2574,14 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         return warmup
 
     async def _declared_formula_warmup(
-        self, formula_id, cache, propagation_meta, deleted_cache=None, fund_map=None, failures=None
+        self,
+        formula_id,
+        cache,
+        propagation_meta,
+        deleted_cache=None,
+        fund_map=None,
+        failures=None,
+        digests=None,
     ) -> int:
         """Declared `warmup_period` for one formula, memoized in `cache` for the whole run.
 
@@ -2561,8 +2611,14 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                     cache[formula_id] = int(getattr(formula, "warmup_period", 0) or 0)
                 if deleted_cache is not None and getattr(formula, "deleted", False):
                     deleted_cache[formula_id] = _deleted_formula_warning(formula.name, formula_id)
+                if digests is not None:
+                    digests[formula_id] = _formula_digest(formula)
             except grpc.RpcError as e:
                 cache[formula_id] = 0
+                if digests is not None:
+                    digests[formula_id] = (
+                        _UNREADABLE if _rpc_code(e) in UNREADABLE_FORMULA_CODES else None
+                    )
                 if (
                     fund_map is not None
                     and failures is not None
@@ -2572,7 +2628,14 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         return cache[formula_id]
 
     async def _prefetch_formula_warmups(
-        self, definition, cache, propagation_meta, deleted_cache=None, fund_map=None, failures=None
+        self,
+        definition,
+        cache,
+        propagation_meta,
+        deleted_cache=None,
+        fund_map=None,
+        failures=None,
+        digests=None,
     ) -> None:
         """Fill `cache` for every referenced custom formula BEFORE the symbol loop (feature 071).
 
@@ -2617,7 +2680,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                     formula_ids.append(comp.formula_id)
         for fid in formula_ids:
             await self._declared_formula_warmup(
-                fid, cache, propagation_meta, deleted_cache, fund_map, failures
+                fid, cache, propagation_meta, deleted_cache, fund_map, failures, digests
             )
 
     @owner_scoped
@@ -2651,6 +2714,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
 
         async with self._lock_for(caller_user_id, request.strategy_id):
             excluded: list[str] = []
+            unreadable: list[str] = []
             try:
                 score = await self._fetch_and_aggregate(
                     caller_user_id,
@@ -2658,7 +2722,17 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                     row,
                     meta=propagation_meta,
                     excluded=excluded,
+                    unreadable=unreadable,
                 )
+            except _FormulaVersionUnknown as e:
+                log.warning("score: formula version unavailable for %s", e.formula_id)
+                await context.abort(
+                    grpc.StatusCode.UNAVAILABLE,
+                    "fundamentals availability unknown — grade unchanged"
+                    if self._cfg.get_bool("backtest.fundamentals.enabled", False)
+                    else _FORMULA_VERSION_UNKNOWN_MSG,
+                )
+                return
             except _GradeInputsUnknown as e:
                 log.warning("score: fundamentals availability unknown for %s", e.symbol)
                 await context.abort(
@@ -2681,6 +2755,14 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                         log.warning("failed to clear stale score: %s", e)
                         await context.abort(grpc.StatusCode.UNAVAILABLE, "score store unavailable")
                         return
+                if unreadable:
+                    await context.abort(
+                        grpc.StatusCode.NOT_FOUND,
+                        f"no eligible evidence — formula {', '.join(unreadable)} is not readable "
+                        "and no evidence was recorded for a readable version; restore access to "
+                        "the formula or rebind the component, then run a backtest",
+                    )
+                    return
                 if excluded:
                     await context.abort(
                         grpc.StatusCode.NOT_FOUND,
@@ -2876,8 +2958,10 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         meta=None,
         sem=None,
         excluded=None,
+        unreadable=None,
     ):
-        """Read eligible cells for the strategy's CURRENT fingerprint and derive a score.
+        """Read eligible cells for the strategy's CURRENT formula-aware evidence fingerprint and
+        derive a score.
 
         Returns the derived (unpersisted) StrategyScore, or ``None`` when there is zero eligible
         evidence. Raises on a cells-read error so callers can choose best-effort vs. abort. Does
@@ -2887,8 +2971,34 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         guard-refused cells are excluded before the per-symbol dedup (never deleted). ``meta``
         defaults to the owner identity (the boot path has no inbound request).
         """
-        fingerprint = _definition_fingerprint(strategy_row["definition_json"])
+        formula_cache = formula_cache if formula_cache is not None else {}
+        failures = failures if failures is not None else {}
+        meta = meta if meta is not None else owner_metadata(user_id)
+        def_hash = _definition_fingerprint(strategy_row["definition_json"])
         definition = _row_to_strategy_definition(strategy_row)
+        fingerprint = def_hash
+        if any(
+            c.kind == analysis_pb2.COMPONENT_KIND_CUSTOM_FORMULA and c.formula_id
+            for c in definition.components
+        ):
+            digests: dict = {}
+            await self._formula_fundamentals(
+                definition, meta, cache=formula_cache, failures=failures, digests=digests
+            )
+            missing = sorted(fid for fid, d in digests.items() if d is None)
+            refused = sorted(fid for fid, d in digests.items() if d is _UNREADABLE)
+            if missing:
+                raise _FormulaVersionUnknown(missing[0])
+            if refused:
+                fingerprint = await self._backtest_run_symbols_repo.latest_formula_fingerprint(
+                    user_id, strategy_id, def_hash
+                )
+                if fingerprint is None:
+                    if unreadable is not None:
+                        unreadable.extend(refused)
+                    return None
+            else:
+                fingerprint = _evidence_fingerprint(strategy_row["definition_json"], digests)
         guarded = self._cfg.get_bool("backtest.fundamentals.enabled", False) and any(
             c.kind
             in (analysis_pb2.COMPONENT_KIND_FUNDAMENTAL, analysis_pb2.COMPONENT_KIND_CUSTOM_FORMULA)
@@ -2911,9 +3021,9 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             definition,
             cells,
             fund_cache=fund_cache if fund_cache is not None else {},
-            formula_cache=formula_cache if formula_cache is not None else {},
-            failures=failures if failures is not None else {},
-            meta=meta if meta is not None else owner_metadata(user_id),
+            formula_cache=formula_cache,
+            failures=failures,
+            meta=meta,
             sem=sem,
         )
         if excluded is not None:
@@ -3340,9 +3450,11 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             union.CopyFrom(_row_to_strategy_definition(pre))
             union.components.extend(definition.components)
             formula_outputs = await self._fetch_formula_outputs(union, propagation_meta)
+            locked_hash: list[str] = []
 
             async def _apply(current, _defn=definition, _mask=mask_paths, _has=has_mask):
                 old_json = current["definition_json"] or {}
+                locked_hash[:] = [_definition_fingerprint(old_json)]
                 if _has:
                     merged_json = _merge_definition_json(old_json, _defn, _mask)
                     # Rebuild through the shared row→proto mapper (single source of the overlay),
@@ -3390,11 +3502,15 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                     f"strategy '{definition.strategy_id}' not found",
                 )
                 return
-            # A definition change usually changes the fingerprint, so clear the stale in-memory
-            # grade FIRST, then best-effort recompute; the UPDATE never fails on a recompute error.
+            # Clear the grade first only when the hash of the row update_locked locked differs from
+            # the written one: a rename must keep the grade when the recompute cannot run.
             sid = definition.strategy_id
+            changed = not locked_hash or locked_hash[0] != _definition_fingerprint(
+                row["definition_json"]
+            )
             async with self._lock_for(caller_user_id, sid):
-                self._strategies.pop((caller_user_id, sid), None)
+                if changed:
+                    self._strategies.pop((caller_user_id, sid), None)
                 try:
                     await self._recompute_headline_locked(
                         caller_user_id, sid, row, meta=propagation_meta
@@ -4766,19 +4882,37 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             user_id,
             request.min_conviction,
             w,
-            include_expired=False,
+            include_expired=True,
             sources=req_sources,
             action_filter=request.action_filter,
             sort=request.sort,
             symbol=req_symbol,
         )
-        if rows:
+        now = datetime.now(UTC)
+        expired = [r for r in rows if r["valid_until"] <= now]
+        if any(not _is_live_only_row(r.get("provenance")) for r in expired):
+            # (i)/(ii) an expired curated row: serve stale, revalidate in the background.
+            q.kick_full = True
+            q.served_include_expired = True  # feature 190 O7 — facet matches served freshness
+        elif len(expired) < len(rows):
+            if expired:
+                # (iv) never kicks: every expiry kick would schedule another one a cycle later.
+                rows = await opps.read(
+                    user_id,
+                    request.min_conviction,
+                    w,
+                    include_expired=False,
+                    sources=req_sources,
+                    action_filter=request.action_filter,
+                    sort=request.sort,
+                    symbol=req_symbol,
+                )
+                telemetry.record_opportunity_read_reissue()
             # feature 185 FR-5 — surgical read-time recovery. On a FRESH read, a served row that
             # is data-unavailable and older than the retry cooldown gets a per-symbol recovery
             # (not the full universe). Not on the cold/empty or stale branches (the stale branch
             # already fires a full recompute). Deduped by the _opportunity_retrying guard.
             if user_id not in self._opportunity_retrying:
-                now = datetime.now(UTC)
                 q.retry_symbols = {
                     r["symbol"]
                     for r in rows
@@ -4787,9 +4921,10 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                     and (now - r["computed_at"]).total_seconds()
                     > _OPPORTUNITY_UNAVAILABLE_RETRY_SECONDS
                 }
-        else:
+        elif not await opps.has_fresh(user_id):
+            # fresh-but-filtered-empty falls through: no kick, empty page (365 FR-1)
             n = await opps.count_for_user(user_id)
-            q.kick_full = True  # every no-rows branch revalidates in the background
+            q.kick_full = True  # cold or all-stale: revalidate in the background
             if n == 0:
                 # Cold read (never materialized) OR a legitimately-empty universe. Feature 177
                 # FR-3: a still-fresh empty stamp serves empty WITHOUT a pending flag (@AC-6
@@ -4817,6 +4952,8 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                     sort=request.sort,
                     symbol=req_symbol,
                 )
+        else:
+            rows = []  # (v) only expired live-only rows here, fresh rows elsewhere: an empty page
         q.rows = rows
         # feature 190 — the source-facet, computed only on page 0 (offset==0; the client reads it),
         # scoped to the SAME freshness that produced the served rows (O1/O7) and independent of the
@@ -4919,8 +5056,33 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             self._opportunity_locks[user_id] = lock
         return lock
 
+    def _live_only_cycle_days(self) -> int:
+        """feature 366 — the single read of the live-only rotation cycle bound (days)."""
+        return int_positive(self._cfg, "opportunity.live_only_cycle_max_days", 3)
+
+    def _log_live_only_shortfall(
+        self, user_id: str, pool_size: int, n: int, cycle_days: int
+    ) -> None:
+        """feature 366 FR-2a — operators alert on this exact INFO text; it fires only when the
+        (projected_computes, per_compute, cycle_days) key changes, and is labelled in computes."""
+        projected = -(-pool_size // n)
+        key = (projected, n, cycle_days)
+        if self._live_only_shortfall_key.get(user_id) == key:
+            return
+        self._live_only_shortfall_key[user_id] = key
+        if projected > cycle_days:
+            log.info(
+                "opportunity live-only rotation shortfall: user=%s pool=%d per_compute=%d "
+                "projected_computes=%d cycle_max_days=%d",
+                user_id,
+                pool_size,
+                n,
+                projected,
+                cycle_days,
+            )
+
     async def _replace_and_stamp_compute_state(
-        self, user_id: str, rows, propagation_meta=None
+        self, user_id: str, rows, propagation_meta=None, cursor=None
     ) -> None:
         """Replace the user's materialized rows, then (feature 177 FR-3) stamp the empty-universe
         compute-state when the compute yielded nothing. An empty ``replace_for_user`` DELETEs
@@ -4928,8 +5090,14 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         records a short ``valid_until`` window so the empty result is served without a synchronous
         recompute until it elapses. Stamping is best-effort (mirrors the recompute try/except) — it
         never fails the write path. ``propagation_meta`` is accepted for call-site symmetry (the
-        DB-only stamp needs no header trio)."""
-        await self._opportunities_repo.replace_for_user(user_id, rows)
+        DB-only stamp needs no header trio). A non-None live-only ``cursor`` (feature 366) commits
+        in the same transaction as the queue replace; the empty stamp stays outside, after it."""
+        if cursor is not None and self._opportunity_compute_state_repo is not None:
+            async with self._opportunities_repo.transaction() as conn:
+                await self._opportunities_repo.replace_for_user(user_id, rows, conn=conn)
+                await self._opportunity_compute_state_repo.write_cursor(user_id, cursor, conn=conn)
+        else:
+            await self._opportunities_repo.replace_for_user(user_id, rows)
         if not rows and self._opportunity_compute_state_repo is not None:
             ttl = max(1, self._cfg.get_int_present("opportunity.empty_recompute_ttl_seconds", 30))
             try:
@@ -4949,8 +5117,10 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         async def _run():
             try:
                 async with self._opportunity_lock(user_id):
-                    rows = await self._compute_opportunities(user_id, propagation_meta)
-                    await self._replace_and_stamp_compute_state(user_id, rows, propagation_meta)
+                    rows, cursor = await self._compute_opportunities(user_id, propagation_meta)
+                    await self._replace_and_stamp_compute_state(
+                        user_id, rows, propagation_meta, cursor=cursor
+                    )
                 # feature 185 FR-4 — a successful recompute clears the terminal-failed counter.
                 self._opportunity_compute_failures.pop(user_id, None)
                 telemetry.record_opportunity_recompute("full", "ok")
@@ -5084,7 +5254,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         benchmark_cache: dict[str, list] = {}
         fundamentals_cache: dict[str, list] = {}  # feature 198 — per-symbol PIT history dedup
         # feature 200 — routing map keyed by formula_id (shared across strategies) + snapshot dedup.
-        formula_fund_cache: dict[str, list] = {}
+        formula_fund_cache: dict[str, _FormulaRead] = {}
         fund_snap_cache: dict[str, list] = {}
         heal_failures: dict = {}  # feature 215 — this heal's loader failures (guard input)
         fund_gate = self._cfg.get_bool("backtest.fundamentals.enabled", False)
@@ -5315,9 +5485,14 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             else datetime.now(UTC)
         )
         healed_valid_until = session_end + timedelta(hours=window_hours)
+        cycle_days = self._live_only_cycle_days()
         for hr in heal_rows:
             if hr.pop("_healed", False):
-                hr["valid_until"] = healed_valid_until
+                hr["valid_until"] = (
+                    datetime.now(UTC) + timedelta(days=cycle_days)
+                    if _is_live_only_row(hr["provenance"])
+                    else healed_valid_until
+                )
         await self._label_fundamentals_skip_rows(skip_labels, propagation_meta)
 
         await self._opportunities_repo.replace_symbols(user_id, heal_rows)
@@ -5356,7 +5531,9 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
 
         return _lookup
 
-    async def _compute_opportunities(self, user_id: str, propagation_meta) -> list[dict]:
+    async def _compute_opportunities(
+        self, user_id: str, propagation_meta
+    ) -> tuple[list[dict], str | None]:
         """Build the user's opportunity Universe and return persistable row dicts (feature 097).
 
         Universe = active signals (QuerySignals) ∪ held positions (ListPositions) ∪ watchlist
@@ -5540,22 +5717,81 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         # entry-traced duplicate (held symbols already got their exit-traced rows above).
         live_signal_symbols = (signals_by_symbol.keys() & live_by_symbol.keys()) - held_norm
         competitive_pool = [sym for sym in live_signal_symbols if _new_live_strats(sym)]
+        # feature 366: the per-compute chunk limit of the live-only rotation (feature 131's cap).
         max_live_only = int_positive(self._cfg, "opportunity.max_live_only_symbols_per_compute", 20)
-        ranked_live_only = sorted(
-            competitive_pool,
-            key=lambda sym: (-max(sig.conviction for sig in signals_by_symbol[sym]), sym),
-        )[:max_live_only]
-        for sym in ranked_live_only:
+        cycle_days = self._live_only_cycle_days()
+        pool = sorted(competitive_pool)
+        if pool:
+            state = (
+                await self._opportunity_compute_state_repo.get(user_id)
+                if self._opportunity_compute_state_repo is not None
+                else None
+            )
+            chunk, new_cursor = _rotation_chunk(
+                pool, (state or {}).get("live_only_cursor"), max_live_only
+            )
+            self._log_live_only_shortfall(user_id, len(pool), max_live_only, cycle_days)
+            stored = (
+                await self._opportunities_repo.read_attributed_rows(user_id)
+                if self._opportunities_repo is not None
+                else []
+            )
+        else:
+            chunk, new_cursor, stored = [], None, []
+        for sym in chunk:
             for strat in _new_live_strats(sym):
                 c = _candidate(sym, strat)
                 c["is_live"] = True
                 _add_provenance(c, "live_strategy")
+
+        # Carry selection (feature 366 D-12), from data known before step 3. (a)+(b) make every
+        # carried symbol non-held, which (c)'s denied_covered test relies on (D-15).
+        denied_covered_set = set(denied_covered)
+        chunk_set = set(chunk)
+        pool_set = set(pool)
+        best_direction_by_symbol: dict[str, str] = {}
+        for sym in pool_set - chunk_set:
+            best_conv, best_dir = -1.0, ""
+            for sig in signals_by_symbol[sym]:
+                if sig.conviction > best_conv:  # step 3's tie rule: first seen, strict >
+                    best_conv, best_dir = sig.conviction, sig.direction
+            best_direction_by_symbol[sym] = best_dir
+        carried: list[dict] = []
+        for r in stored:
+            sym, strat = r["symbol"], r["strategy_id"]
+            if not _is_live_only_row(r["provenance"]) or sym not in best_direction_by_symbol:
+                continue  # (a), (b)
+            if strat not in _capped_live(sym) or (sym, strat) in denied_covered_set:
+                continue  # (c)
+            if not _carry_within_cycle(r["valid_until"], r["computed_at"], now_utc, cycle_days):
+                continue  # (e)
+            expected = _resolve_action_tag(
+                {
+                    "is_held": False,
+                    "is_watchlist": False,
+                    "best_direction": best_direction_by_symbol[sym],
+                },
+                False,
+            )
+            if expected is None:
+                continue  # (f)
+            prov = r["provenance"]
+            if not (
+                "fundamentals_unavailable" in prov
+                or "formula_unreadable" in prov
+                or int(expected) == r["action"]
+            ):
+                continue  # (f)
+            carried.append(r)
+        carried_symbols = {r["symbol"] for r in carried}
 
         # 3. Signals — merge into every existing candidate for the symbol (collapse); if none
         #    exists, stand alone as an unattributed (symbol, "") candidate.
         for sym, sigs in signals_by_symbol.items():
             targets = [k for k in candidates if k[0] == sym]
             if not targets:
+                if sym in carried_symbols:
+                    continue  # its carried rows stand in for the (sym, "") row (D-4)
                 _candidate(sym, "")
                 targets = [(sym, "")]
 
@@ -5659,7 +5895,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         fundamentals_cache: dict[str, list] = {}
         # feature 200 — fundamentals-only formula routing map (keyed by formula_id, shared across
         # candidates) + per-symbol snapshot dedup; both filled lazily in _row_for (idempotent).
-        formula_fund_cache: dict[str, list] = {}
+        formula_fund_cache: dict[str, _FormulaRead] = {}
         fund_snap_cache: dict[str, list] = {}
         # Feature 215: (channel, symbol)/(formula, id) loader failures for this pass; row-local,
         # never folded into the symbol-wide fetch_failed.
@@ -5959,8 +6195,15 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         else:
             session_end = datetime.now(UTC)
         valid_until = session_end + timedelta(hours=window_hours)
+        # feature 366 D-7: a live-only row lives one rotation cycle from now (no 168h cap, O-5).
+        live_only_valid_until = now_utc + timedelta(days=cycle_days)
         for r in rows:
-            r["valid_until"] = valid_until
+            r["valid_until"] = (
+                live_only_valid_until if _is_live_only_row(r["provenance"]) else valid_until
+            )
+        # Carried rows keep their stored computed_at/valid_until/composite_score; fresh wins (D-6).
+        fresh_keys = {r["opportunity_key"] for r in rows}
+        rows.extend(r for r in carried if r["opportunity_key"] not in fresh_keys)
         # feature 200 — roll each symbol's opportunities into one bounded symbol_score and stamp it
         # (symbol-uniform) on EVERY row of the symbol (incl. NULL-composite / muted /
         # data-unavailable rows). owned_ids = the strategies the user owns (watchlist ∪ live
@@ -5981,7 +6224,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             )
             for r in sym_rows:
                 r["symbol_score"] = score
-        return rows
+        return rows, new_cursor
 
     async def _load_strategy_definition(self, user_id: str, strategy_id: str, cache: dict):
         """Load + cache a StrategyDefinition for the compute (one DB read per distinct strategy).
@@ -6067,8 +6310,8 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             try:
                 meta = owner_metadata(uid)
                 async with self._opportunity_lock(uid):
-                    rows = await self._compute_opportunities(uid, meta)
-                    await self._replace_and_stamp_compute_state(uid, rows, meta)
+                    rows, cursor = await self._compute_opportunities(uid, meta)
+                    await self._replace_and_stamp_compute_state(uid, rows, meta, cursor=cursor)
             except Exception as e:  # one bad user never kills the pass
                 failed += 1
                 telemetry.record_opportunity_recompute("full", "failed")
@@ -6807,6 +7050,30 @@ def _opportunity_key(user_id: str, symbol: str, strategy_id: str) -> str:
     return f"{user_id}|{_normalize_symbol(symbol)}|{strategy_id}"
 
 
+def _is_live_only_row(provenance) -> bool:
+    """A row attributed only through live coverage (feature 366): never watchlist, held or muted."""
+    p = provenance or []
+    return "live_strategy" in p and not any(m in p for m in ("watchlist", "position", "denied"))
+
+
+def _rotation_chunk(pool: list[str], cursor: str | None, n: int) -> tuple[list[str], str | None]:
+    """The next ``min(n, len(pool))`` symbols of the sorted ``pool`` after ``cursor``, wrapping
+    (the live_loop identity-resume algorithm); an empty pool leaves the cursor unchanged."""
+    if not pool:
+        return [], cursor
+    start = bisect.bisect_right(pool, cursor) if cursor is not None else 0
+    if start >= len(pool):
+        start = 0
+    chunk = [pool[(start + i) % len(pool)] for i in range(min(n, len(pool)))]
+    return chunk, chunk[-1]
+
+
+def _carry_within_cycle(valid_until, computed_at, now, cycle_days: int) -> bool:
+    """A row aged exactly one cycle is dropped (FR-8 ``>=``). The age clause only bites after
+    ``live_only_cycle_max_days`` is lowered — do not delete it as redundant."""
+    return valid_until > now and now - computed_at < timedelta(days=cycle_days)
+
+
 def _resolve_action_tag(candidate: dict, exit_fires: bool):
     """Derive an OpportunityActionTag for a materialized candidate (feature 097), real data only.
 
@@ -7347,6 +7614,72 @@ def _definition_fingerprint(definition_json: dict) -> str:
     }
     canonical = json.dumps(filtered, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+# Every FormulaDefinition/FormulaParameter/FormulaOutput field must sit in exactly one set; the
+# descriptor-walk test fails on an unclassified proto field. `author` stays DISPLAY (legacy repair).
+_FORMULA_BEHAVIOURAL_FIELDS = frozenset(
+    {"source", "input_schema", "parameters", "outputs", "warmup_period", "fundamental_inputs"}
+)
+_FORMULA_DISPLAY_FIELDS = frozenset(
+    {
+        "formula_id",
+        "name",
+        "description",
+        "author",
+        "created_at",
+        "updated_at",
+        "is_public",
+        "deleted",
+        "origin",
+    }
+)
+_FORMULA_PARAMETER_BEHAVIOURAL_FIELDS = frozenset(
+    {"name", "type", "default_value", "required", "min", "max"}
+)
+_FORMULA_PARAMETER_DISPLAY_FIELDS = frozenset({"description"})
+_FORMULA_OUTPUT_BEHAVIOURAL_FIELDS = frozenset({"name"})
+_FORMULA_OUTPUT_DISPLAY_FIELDS = frozenset({"description"})
+
+
+def _formula_digest(formula) -> str:
+    """sha256 of a formula's behavioural content; a display-only edit leaves it unchanged."""
+    raw = json_format.MessageToDict(formula, preserving_proto_field_name=True)
+    kept = {k: v for k, v in raw.items() if k in _FORMULA_BEHAVIOURAL_FIELDS}
+    if "parameters" in kept:
+        kept["parameters"] = [
+            {k: v for k, v in p.items() if k in _FORMULA_PARAMETER_BEHAVIOURAL_FIELDS}
+            for p in kept["parameters"]
+        ]
+    if "outputs" in kept:
+        kept["outputs"] = [
+            {k: v for k, v in o.items() if k in _FORMULA_OUTPUT_BEHAVIOURAL_FIELDS}
+            for o in kept["outputs"]
+        ]
+    canonical = json.dumps(kept, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+# A refused formula's digest marker; an object(), never a string, so it can never be hashed.
+_UNREADABLE = object()
+_FORMULA_VERSION_WARNING = "evidence not recorded: formula version unavailable — rerun"
+_FORMULA_VERSION_UNKNOWN_MSG = "formula version unavailable — grade unchanged"
+
+
+class _FormulaRead(NamedTuple):
+    metrics: list
+    digest: object  # hex str, _UNREADABLE, or None for an outage
+
+
+def _evidence_fingerprint(definition_json: dict, digests: dict) -> str:
+    """The evidence-cell key: the definition hash, plus a formula suffix when digests exist."""
+    def_hash = _definition_fingerprint(definition_json)
+    if not digests:
+        return def_hash
+    if any(not isinstance(d, str) for d in digests.values()):
+        raise ValueError("a refused or unknown formula digest cannot be stamped")
+    joined = ";".join(f"{fid}={digests[fid]}" for fid in sorted(digests))
+    return def_hash + "." + hashlib.sha256(joined.encode("utf-8")).hexdigest()
 
 
 def _row_to_strategy_template(row: dict) -> "analysis_pb2.StrategyTemplate":

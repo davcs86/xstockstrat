@@ -105,7 +105,8 @@ Every anticipated refusal reaches the caller as `isError=true` text `Error execu
 - **Passed through:** `FAILED_PRECONDITION`, `PERMISSION_DENIED`, `INVALID_ARGUMENT`, `ALREADY_EXISTS`,
   `OUT_OF_RANGE`, `UNAUTHENTICATED`, `RESOURCE_EXHAUSTED`, `ABORTED`, and a server-set `DEADLINE_EXCEEDED`.
 - **`NOT_FOUND`:** the tool's own literal followed by the server's hint.
-- **`UNAVAILABLE`:** only `fundamentals availability unknown — grade unchanged` (`manage_strategy` score) and
+- **`UNAVAILABLE`:** only `fundamentals availability unknown — grade unchanged` and
+  `formula version unavailable — grade unchanged` (`manage_strategy` score) and
   `positions not published; re-confirm to retry` (`manage_offline_account`) pass through.
 - **Everything else** (other `UNAVAILABLE`, `CANCELLED`, `INTERNAL`, `UNKNOWN`, unlisted codes) collapses to a fixed hint:
   `upstream unavailable; retry shortly`, `upstream call cancelled; …` or `upstream error, details withheld; report it`.
@@ -616,7 +617,9 @@ gate.
 | `score` on a strategy that is missing or not yours | `strategy not found or not owned` (PERMISSION_DENIED); no grade is written |
 | `score` with no eligible evidence | `no eligible evidence — run a backtest` (NOT_FOUND); the stale grade is cleared |
 | `score` where every evidence symbol was excluded by the fundamentals guard | `no eligible evidence — all evidence symbols excluded (fundamentals unavailable: …)` (NOT_FOUND); the stale grade is cleared |
+| `score` when a referenced formula is not readable and no evidence exists for a readable version | `no eligible evidence — formula <ids> is not readable and no evidence was recorded for a readable version; …` (NOT_FOUND); the stale grade is cleared |
 | `score` while fundamentals availability is unknown | `UNAVAILABLE: fundamentals availability unknown — grade unchanged` (passed through verbatim) |
+| `score` while a referenced formula's version cannot be read (fundamentals gate off) | `UNAVAILABLE: formula version unavailable — grade unchanged` (passed through verbatim) |
 | `score` while an analysis store is down | `UNAVAILABLE: upstream unavailable; outcome unknown, verify before retrying` (the store-down detail is logged on the agent) |
 | `score` exceeds the 45 s budget | `DEADLINE_EXCEEDED: upstream did not respond within 45s (deadline exceeded); outcome unknown, verify before retrying` |
 
@@ -1029,6 +1032,10 @@ A symbol flagged delisted that the data source cannot serve ends `skipped`, not 
 listed in the job's `symbol_results` (see `get_backfill_status`), stays out of `failed_symbols` and
 does not make the job `PARTIAL` (feature 352).
 
+A `gaps_only` bars job fills interior holes too, not only the head and tail of the stored range: gaps
+are computed per trading session, and sessions still missing after the fetch are reported as
+`incomplete` (feature 364).
+
 **Parameters**
 
 | Parameter | Type | Required | Description |
@@ -1125,6 +1132,7 @@ as `{"symbol", "outcome", "reason"}`; `reason` is omitted when empty. `outcome` 
 | `empty` | Nothing to write for the symbol in the requested range |
 | `skipped` | The symbol is flagged delisted and the data source could not serve it — not a failure: it is not in `failed_symbols` and does not make the job `PARTIAL` |
 | `failed` | A real failure; the symbol is also in `failed_symbols` |
+| `incomplete` | `gaps_only` bars jobs only: sessions in the range are still missing after the fetch. `reason` names the ranges (`missing sessions YYYY-MM-DD..YYYY-MM-DD[; …]`); the job ends `PARTIAL`, but the symbol is not in `failed_symbols` and no alert is sent. A head gap with no stored bar in the 730 days before it is exempt (treated as pre-listing) |
 
 **Errors**
 

@@ -648,6 +648,7 @@ jobs:
         if: always()
         run: |
           docker cp e2e-shard-${{ matrix.shard }}:/workspace/services/xstockstrat-ui/playwright-report ./playwright-report 2>/dev/null || true
+          docker cp e2e-shard-${{ matrix.shard }}:/workspace/services/xstockstrat-ui/flaky-report ./flaky-report 2>/dev/null || true
           docker rm e2e-shard-${{ matrix.shard }} 2>/dev/null || true
 
       - name: upload playwright report
@@ -656,6 +657,27 @@ jobs:
         with:
           name: playwright-report-shard-${{ matrix.shard }}
           path: playwright-report/
+          retention-days: 7
+
+      - name: flaky e2e tests
+        if: always()
+        run: |
+          {
+            echo '### Flaky e2e tests, shard ${{ matrix.shard }} (passed only on retry)'
+            echo '| File | Test |'
+            echo '|---|---|'
+            if [ -f flaky-report/playwright.json ]; then
+              jq -r '.. | objects | select(has("specs")) | .specs[] as $s | $s.tests[] | select(.status == "flaky") | "| \($s.file) | \($s.title) (\(.projectName)) |"' flaky-report/playwright.json
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: upload flaky report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: flaky-report-e2e-shard-${{ matrix.shard }}
+          path: flaky-report/
+          if-no-files-found: ignore
           retention-days: 7
 
   frontend-e2e-production:
@@ -802,6 +824,28 @@ jobs:
           name: node-coverage-${{ matrix.service }}
           path: services/${{ matrix.service }}/coverage/lcov.info
           if-no-files-found: ignore
+
+      - name: flaky unit tests
+        if: always() && matrix.service == 'xstockstrat-ui'
+        working-directory: services/xstockstrat-ui
+        run: |
+          {
+            echo '### Flaky unit tests (passed only on retry)'
+            echo '| File | Test |'
+            echo '|---|---|'
+            if [ -f flaky-report/vitest.json ]; then
+              jq -r '.testResults[] as $f | $f.assertionResults[] | select(.status == "passed" and (.failureMessages | length > 0)) | "| \($f.name | sub("^" + env.PWD + "/"; "")) | \(.fullName) |"' flaky-report/vitest.json
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: upload flaky unit report
+        if: always() && matrix.service == 'xstockstrat-ui'
+        uses: actions/upload-artifact@v7
+        with:
+          name: flaky-report-unit
+          path: services/xstockstrat-ui/flaky-report/
+          if-no-files-found: ignore
+          retention-days: 7
 
   dockerfile-lint:
     name: Dockerfile lint (hadolint)

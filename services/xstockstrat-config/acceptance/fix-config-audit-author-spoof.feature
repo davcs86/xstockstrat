@@ -22,9 +22,9 @@ Feature: fix-config-audit-author-spoof (config)
       | admin-7     | 4     |             | 2      |
       | user-42     | 1     | user-42     | absent |
 
-  @AC-2 @FR-2 @regression @feature-241
+  @AC-2 @FR-2 @regression @feature-241 @feature-319
   Scenario: An automated internal-caller write is attributed to its x-internal-caller identity
-    Given a caller with no x-user-id and x-internal-caller "trading-reconciliation-poller"
+    Given a caller with no x-user-id and x-internal-caller "trading-reconciliation-poller" from an mTLS peer with DNS SAN "xstockstrat-trading"
     And the "platform.trading_state" row in environment "staging" with user_id "" holds "ACTIVE"
     When SetConfig writes "platform.trading_state" = "REDUCE_ONLY" in environment "staging" with author "someone-else@example.com"
     Then the write succeeds
