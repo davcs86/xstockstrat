@@ -5,7 +5,7 @@
 **GitHub Issue**: none (Issues disabled) — reports: `docs/reports/2026-10-19-trading-listorders-body-user-id-filter-defect.md`, `docs/reports/2026-10-19-portfolio-default-identity-fallback-defect.md`, `docs/reports/2026-10-19-notify-listalerts-owner-fallback-unscoped-defect.md`
 **Severity**: SEV-3
 **Created**: 2026-11-10
-**Last Updated**: 2026-11-26
+**Last Updated**: 2026-11-27
 
 ---
 

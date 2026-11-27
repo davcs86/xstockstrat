@@ -153,6 +153,7 @@ func main() {
 	grpcServer := grpc.NewServer(
 		grpc.Creds(serverCreds),
 		grpc.ChainUnaryInterceptor(middleware.UnaryServerInterceptor),
+		grpc.ChainStreamInterceptor(middleware.StreamServerInterceptor),
 		grpc.StatsHandler(otelgrpc.NewServerHandler()),
 		grpc.KeepaliveParams(keepalive.ServerParameters{
 			MaxConnectionIdle: 60 * time.Second,

@@ -548,3 +548,13 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 ```sdd-batch-setup
 {"mainDev":"f802b184b13bd899d858c4b0349a616e9981b9d9","date":"2026-11-26"}
 ```
+
+## Session 2026-11-27 — sdd-execute sequential (sdd-batch-execute)
+
+### Step 1 — service: trading stream identity interceptor [done]
+- Moved the incoming-metadata read into `withIncomingPropagation`, which `UnaryServerInterceptor` now calls. Added `StreamServerInterceptor`, which wraps the stream in `propagatedStream` so that `Context()` carries `PropagationData`, and registered it in `main.go` with `grpc.ChainStreamInterceptor` right after the unary chain. The stream adapter (`handler/trading.go:204`) is unchanged (R-1).
+- TDD: red-green. There is no paired test in this step's **Files**; Step 2 creates `propagation_test.go`. RED was this step's Verification on the pre-fix tree: exit=1 because the `ChainStreamInterceptor(middleware.StreamServerInterceptor)` grep had no match. Build and tests passed (`ok .../internal/middleware`, `ok .../internal/service`). GREEN was the same Verification: exit=0 with `156:		grpc.ChainStreamInterceptor(middleware.StreamServerInterceptor),`, both packages `ok` and golangci-lint v2.14.0 `0 issues.` The interceptor's behaviour is first asserted in Step 2, and on the wire in Step 6.
+- Stream RPC audit (design Open Risk 6): `StreamOrderUpdates` is the only streaming `TradingService` RPC. Health Watch and reflection also stream through this chain, but the interceptor only adds a context value, so their behaviour is unchanged.
+- Tooling: go1.27.0 ✓ · golangci-lint v2.14.0 ✓ (`~/go/bin`, put first on PATH for the run; `/usr/local/bin` still has 2.5.0/go1.25). The config-key wiring gate does not apply because this step declares no config key.
+- Files modified: `services/xstockstrat-trading/internal/middleware/propagation.go`, `services/xstockstrat-trading/cmd/server/main.go`
+- Deviations: none

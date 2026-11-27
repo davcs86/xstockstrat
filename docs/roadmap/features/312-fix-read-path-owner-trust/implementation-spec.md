@@ -97,7 +97,7 @@ D-17, operator decision 2026-11-20). They are promoted as durable trading `@AC`s
 
 ### Step 1 — service: trading stream identity interceptor
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/middleware/propagation.go` — modify
