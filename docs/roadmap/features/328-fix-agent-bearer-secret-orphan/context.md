@@ -691,3 +691,26 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 Operator answer (2026-11-27) to the orchestrator list item "328: Settle the Step 4 target-database and cadence gate, and the two-seed-user reading.": "B2 use defaults".
 
 Effect: use the defaults recorded in this file and in the implementation spec for the Step 4 target database, the sweep cadence and the two-seed-user reading (sweep328-v1 / sweep328-v2). The Step 4 operator gate is cleared on those defaults. Orchestrator note (not an operator quote): if the executor cannot identify a single default for any of the three, it must stop with a blocker rather than choose.
+
+## Session 2026-11-27 — sdd-execute sequential (sdd-batch-execute)
+
+**Up-front confirmation** (operator-approved record, binding, verbatim):
+
+```json
+{"mainDev":"f802b184b13bd899d858c4b0349a616e9981b9d9","dev":"d402f91496712ee53e3fd60dc0573f60ffa09144","specHash":"22ed7a8a0d0325efd8d4e0b8a5a0be3207a54180","directive":"conditional","pending":[1,2,3,4,5,6,7,8,9],"mismatches":[{"n":1,"detail":"No blocking mismatch. The only Files path, services/xstockstrat-config/src/__tests__/mcpCredentialSweep.test.ts, is a create target and does not exist yet, as expected. The evidence holds: deadRowsMig"},{"n":2,"detail":"Files: scripts/migration-assertions/config-mcp-credential-sweep.sql is a create target and is absent, as expected; .github/workflows/ci.yml exists. ci.yml matches: the config filter is at :60, the mig"},{"n":3,"detail":"Files: both scripts/config-heal/mcp-credential-orphan-sweep*.sql are create targets and are absent, as expected; scripts/config-heal/ holds no mcp-credential* file. These match: 046_config_dead_rows_p"},{"n":6,"detail":"Files: services/xstockstrat-agent/tests/test_tools.py exists. The seam test test_manage_signal_source_mcp_client_secret_first_two_write is at :150 (spec :149) and the credentials_ref assertion is stil"},{"n":9,"detail":"All four Files exist. Line drift: in docs/patterns/config-governance.md the feature-224 paragraph is at :460-467 ('written secret-first by the owner' at :466; spec :440-447), and the feature-166 dynam"}]}
+```
+
+- **Branch sync**: merged `origin/main-dev@f802b184` into the dev branch (`8009fbcc`); the
+  merge-train resolver had nothing to resolve and `ledger-guard` reported clean.
+- **Re-spec (conditional)**: `aeac7a80 respec(fix-agent-bearer-secret-orphan): align steps 1,2,3,6,9 with current codebase`.
+  It corrects line citations only; no step changes its instructions, files or verification. Step 1's
+  evidence holds, so its body is unchanged.
+- **Tooling (detection)**: node v22 is the default on `PATH`, and Node 24 (v24.22.3) is at
+  `/opt/node24/bin`; pnpm 9.15.9, Python 3.13, uv and the Playwright Chromium
+  (`/opt/pw-browsers`) are present, and `uv` fetched `pglast` (Step 2's parse check). The hook check
+  passed and `pnpm-lock.yaml` matches `main-dev` after the merge.
+- Status: `implementation-ready` → `in-progress`.
+
+```sdd-batch-setup
+{"mainDev":"f802b184b13bd899d858c4b0349a616e9981b9d9","date":"2026-11-27"}
+```
