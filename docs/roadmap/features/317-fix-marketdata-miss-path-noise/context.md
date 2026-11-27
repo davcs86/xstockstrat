@@ -911,3 +911,63 @@ Up-front confirmation: the operator approved the plan with this record (binding,
   `trading_state`), unrelated. Status → `code-completed`.
 - Files modified: `services/xstockstrat-marketdata/CLAUDE.md`, `services/xstockstrat-marketdata/docs/alpaca-integration.md`, `services/xstockstrat-marketdata/docs/context-constitution.md`, `services/xstockstrat-portfolio/docs/context-constitution.md`, `docs/patterns/config-governance.md`, `docs/roadmap/features/317-fix-marketdata-miss-path-noise/product-spec.md`
 - Deviations: Deviation 5 (Verification framing; two consistency edits within the step's Files).
+
+## Session 2026-11-27 — sdd-batch-execute promotion plan (awaiting operator confirm)
+
+```sdd-batch-promotion-plan
+## Promotion plan — fix-marketdata-miss-path-noise (feature 317)
+
+Source: docs/roadmap/features/317-fix-marketdata-miss-path-noise/acceptance.feature, 2 scenarios (@AC-1, @AC-2), read verbatim.
+
+### Verdicts
+| @AC | target suite (path) | CREATE/APPEND | verdict | note |
+|---|---|---|---|---|
+| AC-1 | services/xstockstrat-marketdata/acceptance/fix-marketdata-miss-path-noise.feature | CREATE | NEW | Subject is the "GetBars: live fetch failed" WARN in marketdata's GetBars. Distinct from @AC-6/8/11 @feature-290 in fix-ctx-cancel-warn-flood.feature, which assert the "GetBars: cache insert failed" WARN. |
+| AC-2 | services/xstockstrat-marketdata/acceptance/fix-marketdata-miss-path-noise.feature | CREATE | NEW | Subject is the GetBars live-fetch count and the "no bars stored and live fetch returned none" log. No existing scenario asserts it (see Notes). |
+
+### Ready-to-write blocks
+
+--- services/xstockstrat-marketdata/acceptance/fix-marketdata-miss-path-noise.feature (CREATE) ---
+# Promoted from docs/roadmap/features/317-fix-marketdata-miss-path-noise/acceptance.feature at launch
+# (Constitution C-16). Source-feature provenance is carried on every scenario's `@feature-317` tag.
+# Durable business rules xstockstrat-marketdata already guarantees — a rule enters only by promotion
+# from a reviewed feature acceptance.feature, never by hand-authoring.
+
+Feature: fix-marketdata-miss-path-noise (bug fix)
+  Regression guard for clustered defect reports: cancel-caused failures do not log per-item WARNs, and GetBars does
+  not live-fetch on every call for a symbol that recently returned no bars.
+
+  # guards: docs/reports/2026-11-04-cancel-warn-remaining-sites-defect.md
+  @AC-1 @regression @feature-317
+  Scenario: a GetBars live fetch aborted by client cancellation logs no WARN
+    Given a symbol "AAPL" with no stored 1Day bars
+    And the GetBars client cancels its context while the live fetch is in flight
+    When the live fetch returns context.Canceled
+    Then no "GetBars: live fetch failed" WARN is logged
+    And a live fetch that fails with a non-cancel error still logs that WARN
+
+  # guards: docs/reports/2026-11-04-marketdata-getbars-miss-path-refetch-every-call-defect.md
+  @AC-2 @regression @feature-317
+  Scenario: repeated GetBars for a symbol with no data performs one live fetch
+    Given symbol "DNB" has no stored bars and the vendor returns no bars for it
+    When GetBars is called for "DNB" three times within the back-off window
+    Then exactly one live vendor fetch is made
+    And "GetBars: no bars stored and live fetch returned none" is logged at most once
+
+### Notes / ambiguities / conflicts
+- Service attribution: both scenarios assert on marketdata's GetBars (a log line and the live vendor fetch count), so both go to marketdata. Nothing spans services, so platform.feature gets nothing.
+- Cancel-quiet work in portfolio: feature.md's Reviewers table lists portfolio (steps 3-4, `processAccountDeregistered`). The acceptance.feature has no portfolio-observable scenario, so there is nothing to route to services/xstockstrat-portfolio/acceptance/. I did not invent one. If portfolio cancel-quiet needs a durable guarantee, it needs a reviewed scenario in the feature first.
+- Missing @FR tags: the source scenarios carry only `@AC-n @regression` and no `@FR-n`. Rule 3 says to keep the original tags and add `@feature-317`, and not to invent tags, so I added none. docs/sdd/business-rules/CLAUDE.md expects at least one @FR per scenario. A human can add the FR tags if wanted. I could not check the product-spec mapping (see the last note).
+- AC-2 and existing suites (no CONFLICT, no OVERLAP):
+  - @AC-4 @feature-282 (filter-otc-symbols.feature) and @AC-7 @feature-282 (platform.feature:1307) cover unservable symbols, which make 0 live fetches. AC-2 covers a servable symbol whose vendor returns none, with exactly one fetch inside the back-off window. These are different observable outcomes.
+  - @AC-9 @feature-282 (never-loaded asset set attempts the live fetch) is compatible, because AC-2 still makes the first fetch.
+  - fix-marketdata-dead-symbol-ingest.feature (feature 291) concerns the ingester back-off, not GetBars. Its line 56 comment says GetBars is untouched by that feature.
+  - design.md classed AC-2 as a CHANGE to GetBars miss behaviour (operator decision O-11), not a contradiction of any promoted rule.
+- AC-1 and existing suites: it is compatible with @AC-8 and @AC-11 @feature-290, the genuine cache-insert failures that still WARN. Those are a different log site (`GetBars: cache insert failed`).
+- Dedup grep for `@feature-317`, `live fetch failed`, `no bars stored` and `miss.path` across services/*/acceptance and platform.feature found no existing match, so this is not a re-run.
+- Worktree read problem: partway through, docs/roadmap/features/317-fix-marketdata-miss-path-noise/ stopped resolving in this worktree. An earlier Glob listed it, but a later Read of product-spec.md and a later Glob both found nothing. I had already read acceptance.feature, feature.md and design.md in full before that, so the blocks above are verbatim from that read. The caller should re-verify them against origin/feature/fix-marketdata-miss-path-noise before writing.
+
+### Coverage check
+- Source scenarios: 2. Planned (NEW+DUP+OVERLAP): 2 (2 NEW, 0 DUP, 0 OVERLAP, 0 CONFLICT). Every @AC-* is accounted for and none were skipped.
+- The target file does not exist, so it is a CREATE; the `acceptance/` directory already exists for marketdata.
+```
