@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { metrics, SpanKind } from '@opentelemetry/api';
 import { NodeSDK } from '@opentelemetry/sdk-node';
 import * as telemetry from '../telemetry';
-import { CollectingReader, install } from './fixtures/collectingReader';
+import { CollectingReader, counterValue, install } from './fixtures/collectingReader';
 
 const ALLOWED_KEYS = new Set(
   Object.entries(telemetry)
@@ -47,6 +47,7 @@ function drive(): void {
   telemetry.recordRefreshRejection('oauth');
   telemetry.recordRevokeUnverifiable();
   telemetry.recordAuditFailure('identity.user.created');
+  telemetry.recordLinkFailure('link_disabled');
   telemetry.recordAuditFailure('not.an.audited.type');
   telemetry.recordAuditAppendDuration(0.25);
 }
@@ -119,4 +120,17 @@ test('AC-41: rpc.server.duration keeps its name and attribute keys', async () =>
   } as never);
   const keys = (await keysByInstrument(reader)).get('rpc.server.duration');
   assert.deepEqual([...(keys ?? [])].sort(), [...RPC_KEYS].sort());
+});
+
+test('feature 345: identity.external.linked is an audited type and identity.link.failures keys only reason', async () => {
+  const reader = install();
+  telemetry.recordAuditFailure('identity.external.linked');
+  telemetry.recordLinkFailure('already_linked');
+  assert.equal(
+    await counterValue(reader, 'identity.audit.failures', 'event_type', 'identity.external.linked'),
+    1,
+  );
+  assert.equal(await counterValue(reader, 'identity.audit.failures', 'event_type', 'other'), 0);
+  const keys = (await keysByInstrument(reader)).get('identity.link.failures');
+  assert.deepEqual([...(keys ?? [])], ['reason']);
 });

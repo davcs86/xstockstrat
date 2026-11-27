@@ -583,7 +583,7 @@ grep -n "hasPeerSan" src/grpc/adminDirectory.ts src/grpc/identityServiceImpl.ts
 
 ### Step 12 — test: SAN gates, resolve, link, sessions, refusal contract and the audit seam
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-identity`
 **Files**:
 - `services/xstockstrat-identity/src/__tests__/externalIdentity.test.ts` — create

@@ -9,6 +9,7 @@ import { createLedgerAudit } from '../grpc/ledgerAudit';
 import * as mtls from '../mtls';
 import { counterValue, install, points } from './fixtures/collectingReader';
 import { fakeConfig } from './fixtures/fakeConfig';
+import { callWith } from './fixtures/sanCall';
 
 const reader = install();
 const config = fakeConfig();
@@ -108,4 +109,55 @@ test('@AC-24 a failed audit append is counted and timed, and AppendEvent gets no
     !calls[0].some((a) => a !== null && typeof a === 'object' && 'deadline' in (a as object)),
     'AppendEvent call options carry a deadline',
   );
+});
+
+test('@AC-28 a failed audit of a successful link still answers OK and counts identity.external.linked', async () => {
+  const proto = LedgerServiceClient.prototype as any;
+  const originalAppend = proto.appendEvent;
+  const originalCredentials = mtls.clientCredentials;
+  (mtls as any).clientCredentials = () => grpc.credentials.createInsecure();
+  proto.appendEvent = (...args: unknown[]) => {
+    (args[args.length - 1] as (err: Error) => void)(new Error('ledger unavailable'));
+  };
+  const prevEnv = process.env.APPLICATION_ENV;
+  delete process.env.APPLICATION_ENV;
+  const { SEED_ADMIN_PASSWORD_HASH } = await import('../grpc/identityServiceImpl');
+  const rows = [
+    [{ user_id: 'u1', email: 'u@example.com', password_hash: SEED_ADMIN_PASSWORD_HASH, roles: [], is_active: true }],
+    [],
+  ];
+  const pool = { query: async () => ({ rows: rows.shift() ?? [] }) } as any;
+  const impl = new IdentityServiceImpl(
+    pool,
+    fakeConfig({ strings: { 'auth.mode': 'both' } }),
+    createLedgerAudit('localhost:1'),
+  );
+  let output = '';
+  let reply: unknown = 'unset';
+  try {
+    output = await captureStdout(async () => {
+      reply = await new Promise((resolve) =>
+        impl.linkExternalIdentity(
+          {
+            ...callWith('DNS:xstockstrat-ui'),
+            request: { userId: 'u1', issuer: 'https://auth.example.test', subject: 's', password: 'admin' },
+          },
+          (err: any) => resolve(err ?? null),
+        ),
+      );
+      await new Promise(setImmediate);
+      await new Promise(setImmediate);
+    });
+  } finally {
+    proto.appendEvent = originalAppend;
+    (mtls as any).clientCredentials = originalCredentials;
+    if (prevEnv === undefined) delete process.env.APPLICATION_ENV;
+    else process.env.APPLICATION_ENV = prevEnv;
+  }
+  assert.equal(reply, null, 'the link answers OK despite the audit failure');
+  assert.equal(
+    await counterValue(reader, 'identity.audit.failures', 'event_type', 'identity.external.linked'),
+    1,
+  );
+  assert.ok(/ledger audit append failed \(best-effort\)/.test(output), 'the ERROR was logged');
 });
