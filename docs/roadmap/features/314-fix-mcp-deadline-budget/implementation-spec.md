@@ -360,7 +360,7 @@ cases and every cross-key rejection case.
 
 ### Step 3 — migration: config `056_mcp_deadline_budget` (seed + global clamp + notify) and its real-DB assertion
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/migrations/057_mcp_deadline_budget.up.sql` — create
@@ -498,7 +498,7 @@ not reverse the clamp, by design (operator condition). The apply, replay and ass
 
 ### Step 4 — test: static test for `*_mcp_deadline_budget` and the PREPARE-copy pin
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/__tests__/mcpDeadlineBudgetMigration.test.ts` — create
@@ -999,3 +999,12 @@ _Populated by /sdd-execute as implementation proceeds._
   executor put the paren on its own line.
 - **Disposition**: the block was run verbatim and judged from its log: lint 0 errors, `ℹ pass 419` /
   `ℹ fail 0`, coverage lines 92.63 % with no c8 `ERROR` line, and the grep printed nothing. No spec edit.
+
+### Steps 3+4 — Step 4 Verification block exits 1 on success (2026-11-26)
+- **Spec said**: Step 4's Verification ends with `grep -n "__tests__/fixtures" … # expect no hit`.
+- **Actual**: this is the same problem as the Steps 1+2 entry above. On a passing tree the grep matches
+  nothing and exits 1, so the block exits 1 and hides the exit of the `lint && test:coverage && c8
+  check-coverage` line. The executor put the closing paren on its own line, as before.
+- **Disposition**: the block was run verbatim and judged from its log `.sdd-logs/v-3.log`. Lint reported
+  0 errors, the tests `# pass 427` / `# fail 0`, coverage `All files | 92.63` lines with no c8 `ERROR`
+  line, and the grep printed nothing. No spec edit.

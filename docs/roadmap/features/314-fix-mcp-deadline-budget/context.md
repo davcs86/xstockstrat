@@ -921,3 +921,53 @@ the first body line of the re-spec commit below.
   shows `exit=1` only because the trailing no-fixtures `grep` matched nothing (Deviation Log).
 - Files modified: `services/xstockstrat-config/src/__tests__/setConfigScalarBounds.test.ts`
 - Deviations: Step 2 Verification exit semantics (Deviation Log, no spec edit).
+
+### Step 3 — migration: config `057_mcp_deadline_budget` (seed + global clamp + notify) and its real-DB assertion [done]
+- Atomic unit steps 3+4. The `057_mcp_deadline_budget.up.sql` migration is one CTE statement with three parts:
+  - it seeds global `agent` / `extract.call_budget_seconds` = `35` (float, default `35`) in staging and
+    production;
+  - it clamps global, non-secret `opportunities.read_timeout_seconds` rows whose value matches the regex and
+    is above 44 down to `44`, with the sentinel and `caller_identity = NULL`;
+  - it sends `pg_notify` over the DISTINCT seed ∪ heal (namespace, environment) pairs.
+- The `.down` deletes only the sentinel `35` seed rows and notifies. It is forward-only for the clamp; by
+  inspection it holds no UPDATE and no clamp-key reference.
+- The `scripts/migration-assertions/config-mcp-deadline-budget.sql` file uses BEGIN … ROLLBACK with a
+  verbatim `PREPARE mdb_clamp` copy, and `:ROW_COUNT` expects clamp 2, replay 0, 40/abc 0 and 50s 0. It checks:
+  - global 55 and 44.5 become 44, with the sentinel and a NULL caller_identity;
+  - one audit row per environment;
+  - a per-user 50 is untouched;
+  - the seed rows exist.
+  It also prints a reported-only NOTICE for per-user rows above 44. The file was not run here; the CI
+  `migration-rerun` job runs it.
+- Temporary `seeded-unread` baseline entry added to `scripts/config-wiring.json`; Step 5 removes it.
+- Stored set: generated on the operator-provisioned scratch Postgres 16.15 (operator go-ahead in the main
+  session on 2026-11-26; this agent did not start or stop any database).
+  - With the two `057` files held aside, the generator reproduced the committed file exactly.
+  - With them, the diff was exactly the two `agent` / `extract.call_budget_seconds` rows plus `inputs_sha256`.
+  - `config-heal-dryrun.py --fresh` left `scripts/config-heal/dryrun-fresh.tsv` unchanged.
+- Verification `.sdd-logs/v-4.log` `exit=0`: `057` is the highest number, the down grep found nothing,
+  `check-config-wiring --final` passed (only the pre-existing `REPORTED:` readers-disagree lines), and
+  `config-wiring.test.mjs` gave `# pass 75` / `# fail 0`.
+- Config-wiring step-time gate (`--declared-from product-spec.md --declared-migration …057….up.sql`): `.sdd-logs/v-5.log`, `exit=0`, no findings.
+- TDD: N/A (migration).
+- Files modified: `services/xstockstrat-config/migrations/057_mcp_deadline_budget.up.sql`,
+  `services/xstockstrat-config/migrations/057_mcp_deadline_budget.down.sql`,
+  `scripts/migration-assertions/config-mcp-deadline-budget.sql`, `scripts/config-wiring-stored.json`,
+  `scripts/config-wiring.json`
+- Deviations: none. The step heading and the task title still say `056`; the files are `057`, per the re-spec.
+
+### Step 4 — test: static test for `*_mcp_deadline_budget` and the PREPARE-copy pin [done]
+- Atomic unit steps 3+4. New `mcpDeadlineBudgetMigration.test.ts` (8 cases) checks:
+  - one statement per direction;
+  - the seed rows (`@AC-1`);
+  - the clamp SET/WHERE and CASE guard (`@AC-2`), plus the guard regex's accept/reject behaviour in JS;
+  - that no other key or cross-hop key is touched;
+  - the notify CTE and the final SELECT;
+  - the down's guards, notify and forward-only shape;
+  - that no migration number appears in the SQL;
+  - the PREPARE-copy pin, and that the assertion file starts with BEGIN; and ends with ROLLBACK;.
+- AC-1/AC-2 red: `.sdd-logs/v-1.log`, all 8 cases failed with `expected exactly one *_mcp_deadline_budget.up.sql, got []` → green: `.sdd-logs/v-3.log`, `# pass 427` / `# fail 0`, coverage `All files | 92.63` lines.
+- Run `.sdd-logs/v-2.log` was an intermediate failure from the test's own bug: a case-insensitive
+  `/UPDATE|INSERT/i` matched `updated_by`. It was fixed to `\b(UPDATE|INSERT)\b` before the green run.
+- Files modified: `services/xstockstrat-config/src/__tests__/mcpDeadlineBudgetMigration.test.ts`
+- Deviations: Step 4 Verification exit semantics (Deviation Log, no spec edit).
