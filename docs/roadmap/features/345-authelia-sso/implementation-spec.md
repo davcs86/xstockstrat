@@ -91,7 +91,8 @@ Retired IDs (never reused): AC-5, AC-8, AC-9, AC-18, AC-19, AC-26, AC-37, AC-39,
    `sso_login_failed{reason}`; link destination always records `sso_link_failed{reason}` (D-72 remainder, D-113).
 7. **`prm.expected` includes `scopes_supported`** with the four `xstockstrat.*` scopes (D-10, carried by D-110).
 8. **No migration-assertion file for the config seed.** It sends no notify (D-109), and its idempotence comes from
-   `ON CONFLICT DO NOTHING` replayed by `migration-rerun`.
+   `ON CONFLICT DO NOTHING`. Since feature 318 (#1619) `migration-rerun` applies it once and replays only the
+   feature-224/225 up-files, so no CI job re-applies the seed; the static seed test (Step 5) asserts the clause.
 
 ## Step Dependencies
 

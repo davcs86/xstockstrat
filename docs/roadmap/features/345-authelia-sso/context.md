@@ -1180,3 +1180,9 @@
 ### Post-CI fix 2026-11-27 — 768 px header overflow (Frontend E2E shard 1/2)
 - Root cause (this PR): Step 46's Sign-out icon (+40 px) filled the 768 px top header row (local scrollWidth 768 = clientWidth); CI rendering overflowed 16 px on `/accounts/notifications` and `/insights/opportunities`. Owner chose: wordmark `hidden lg:inline` (was `sm:inline`) in `PlatformHeader.tsx`.
 - Verification: typecheck + lint clean, build 0; host Playwright `mobile-overflow.spec.ts` + `e2e/theme` + `nav-reachability.spec.ts` 38 passed; `chromium-sso` 37 passed; probe at 768 px: 59 px free, 0 overflow (640 px: 185 px). No test loosened.
+
+## Session 2026-11-27 — post-merge docs follow-ups
+- PR #1637 squash-merged to `main-dev` as `6739f030` (coordinator, after 51/51 checks green on `e2943a98`); `status.md` stays `code-completed` until promotion.
+- Spec-level choice 8 reworded: the seed's idempotence is `ON CONFLICT DO NOTHING`; since 318 `migration-rerun` applies it once and replays only the 224/225 up-files (closes the 2026-11-27 open thread). Docs-only edit after execution — not a step body.
+- Root `CLAUDE.md` Context Guide gains the `docs/runbooks/authelia-sso-cutover.md` row; `docs/runbooks/CLAUDE.md` is unchanged because it lists only runbooks the root Context Guide does not route.
+- Still open (owner): the Claude Code loopback redirect form in `docs/runbooks/mcp-tools.md`.
