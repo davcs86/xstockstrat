@@ -118,6 +118,26 @@ describe('hasSecretCallerAuthority — notify grant', () => {
   });
 });
 
+describe('hasSecretCallerAuthority — ui grant (feature 345)', () => {
+  const UI_SAN = 'DNS:xstockstrat-ui';
+
+  it('@AC-35 authorizes ui for ui / oidc.client_secret over its own SAN', () => {
+    assert.equal(hasSecretCallerAuthority(callWith('ui', UI_SAN), 'ui', 'oidc.client_secret'), true);
+  });
+
+  it('denies the agent SAN, a near-miss SAN and an absent SAN', () => {
+    for (const san of ['DNS:xstockstrat-agent', 'DNS:xstockstrat-uix', undefined]) {
+      assert.equal(hasSecretCallerAuthority(callWith('ui', san), 'ui', 'oidc.client_secret'), false, `${san}`);
+    }
+  });
+
+  it('denies another callerID, another ui key and a missing header', () => {
+    assert.equal(hasSecretCallerAuthority(callWith('agent', UI_SAN), 'ui', 'oidc.client_secret'), false);
+    assert.equal(hasSecretCallerAuthority(callWith('ui', UI_SAN), 'ui', 'oidc.client_id'), false);
+    assert.equal(hasSecretCallerAuthority(callWith('', UI_SAN), 'ui', 'oidc.client_secret'), false);
+  });
+});
+
 describe('secretDenialReason parity with hasSecretCallerAuthority', () => {
   // Every combination of the allow-list's callers, namespaces, keys and peer SANs, plus misses.
   const callers = ['marketdata', 'ingest', 'notify', 'analysis', ''];

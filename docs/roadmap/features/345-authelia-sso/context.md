@@ -859,3 +859,9 @@
 - Verification: lint exit 0; `callerID: 'ui'` at `authz.ts:163`. TDD: recorded under Step 14.
 - Files modified: `services/xstockstrat-config/src/grpc/authz.ts`
 - Deviations: none
+
+### Step 14 — test: The ui secret grant is header- and SAN-bound [done]
+- `secretCallerAuthz.test.ts` "ui grant (feature 345)": `ui` + SAN `xstockstrat-ui` → true; agent SAN, `xstockstrat-uix`, no SAN, callerID `agent`, key `oidc.client_id`, no header → false. `secretsAndScope.test.ts`: real-mTLS `xstockstrat-ui`/`xstockstrat-agent` leaves; **@AC-35** UI peer gets the decrypted value, the agent peer with the same `x-internal-caller: ui` header → `PERMISSION_DENIED`.
+- TDD: AC-35 red (no grant): "@AC-35 authorizes ui…" and "@AC-35 the UI peer reads…" fail (exit 1) → green: lint 0, `test:coverage` 449/449 (exit 0), c8 ≥ 40 (94.35 %).
+- Files modified: `services/xstockstrat-config/src/__tests__/secretCallerAuthz.test.ts`, `services/xstockstrat-config/src/__tests__/secretsAndScope.test.ts`
+- Deviations: none

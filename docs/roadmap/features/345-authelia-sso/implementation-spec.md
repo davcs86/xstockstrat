@@ -660,7 +660,7 @@ cd services/xstockstrat-config && pnpm run lint && grep -n "callerID: 'ui'" src/
 
 ### Step 14 — test: The ui secret grant is header- and SAN-bound
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/__tests__/secretCallerAuthz.test.ts` — modify
