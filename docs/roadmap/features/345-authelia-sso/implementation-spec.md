@@ -1120,7 +1120,7 @@ grep -n "APP_URL: http://localhost:3000" ../../docker-compose.yml && docker comp
 
 ### Step 27 — test: UI leaf-module unit tests
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/oidcIssuer.test.ts` — create

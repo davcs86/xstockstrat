@@ -5,7 +5,7 @@ import {
   LoggerProvider,
   SimpleLogRecordProcessor,
 } from '@opentelemetry/sdk-logs';
-import { serverLog } from './serverLog';
+import { __resetLogOnce, logOnce, serverLog } from './serverLog';
 
 beforeEach(() => {
   vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -47,4 +47,22 @@ test('non-scalar attribute values are stringified, never walked', () => {
   serverLog.info('shape', { n: 1, ok: true, nested: { a: 1 }, skipped: undefined });
   const [record] = exporter.getFinishedLogRecords();
   expect(record.attributes).toEqual({ n: 1, ok: true, nested: '[object Object]' });
+});
+
+test('logOnce emits once per key', () => {
+  __resetLogOnce();
+  logOnce('warn', 'auth_mode_invalid', 'BOTH');
+  logOnce('warn', 'auth_mode_invalid', 'BOTH');
+  logOnce('error', 'sso_issuer_invalid', 'ui_issuer', { reason: 'ui_issuer' });
+  expect(console.warn).toHaveBeenCalledTimes(1);
+  expect(console.warn).toHaveBeenCalledWith('auth_mode_invalid');
+  expect(console.error).toHaveBeenCalledWith('sso_issuer_invalid', { reason: 'ui_issuer' });
+});
+
+test('__resetLogOnce lets a key log again', () => {
+  __resetLogOnce();
+  logOnce('warn', 'auth_mode_invalid', 'x');
+  __resetLogOnce();
+  logOnce('warn', 'auth_mode_invalid', 'x');
+  expect(console.warn).toHaveBeenCalledTimes(2);
 });

@@ -940,3 +940,9 @@
 - TDD: recorded under Step 27. Verification: typecheck exit 0, lint exit 0, each deploy target greps 1 `APP_URL`, `docker compose config --quiet` exit 0 (run with `--env-file .env.example`; without an `.env` compose refuses on `POSTGRES_PASSWORD`, unrelated to this step).
 - Files modified: `services/xstockstrat-ui/src/lib/{oidcIssuer,sameOrigin}.ts` (new), `services/xstockstrat-ui/src/lib/{deadlines,serverLog}.ts`, `docker-compose.yml`
 - Deviations: none. Gaps filled: `appOrigin`'s log-once key is the constant `app_url_invalid` (APP_URL is per-process); `logOnce` keys its set on message+key so two messages never share a key; `originHost` returns `'null'` for a `null` Origin and `'invalid'` for an unparseable one; `raceDeadline` rejects with `Error('deadline exceeded')`.
+
+### Step 27 — test: UI leaf-module unit tests [done]
+- `oidcIssuer.test.ts` (patterns equal the JSON, 66 issuer + 16 app_url rows, @AC-54), `sameOrigin.test.ts` (required/if_present matrix, @AC-57/@AC-58/@AC-59, one `app_url_invalid`), `deadlines.test.ts` (`raceDeadline` with fake timers), and two appended `logOnce` cases in `serverLog.test.ts` (the "no provider" test still runs first).
+- TDD: red (before Step 26): `Cannot find module './oidcIssuer'` / `'./sameOrigin'`, `raceDeadline is not a function`, `__resetLogOnce is not a function` (5 failed, 3 passed) → green: the four files 107 passed; full `pnpm run test:coverage` 89 files, 852 passed / 2 skipped, `src/lib/**` 82.87 % lines; typecheck and lint exit 0.
+- Files modified: `services/xstockstrat-ui/src/lib/{oidcIssuer,sameOrigin,deadlines}.test.ts` (new), `services/xstockstrat-ui/src/lib/serverLog.test.ts`
+- Deviations: none
