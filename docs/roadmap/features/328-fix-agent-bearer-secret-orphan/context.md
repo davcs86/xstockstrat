@@ -871,3 +871,20 @@ Feature: fix-agent-bearer-secret-orphan (config)
 - Source scenarios: 4 (`@AC-1` to `@AC-4`). Planned: 4 NEW, 0 DUP, 0 OVERLAP, 0 CONFLICT, none skipped.
 - Counts match: agent has 2, ui has 1, config has 1.
 ````
+
+## Session 2026-11-27 — operator ruling recorded by the orchestrator (verbatim)
+
+Operator answer (2026-11-27) to the orchestrator question "328 C-16 promotion routing: per-service suites or one platform.feature block?": "Per-service suites (Recommended)".
+
+Effect: `@AC-1` and `@AC-2` promote to `services/xstockstrat-agent/acceptance/fix-agent-bearer-secret-orphan.feature`, `@AC-3` to `services/xstockstrat-ui/acceptance/fix-agent-bearer-secret-orphan.feature`, `@AC-4` to `services/xstockstrat-config/acceptance/fix-agent-bearer-secret-orphan.feature`; each promoted scenario carries `@feature-328` (no `@FR-*` tags added, the source scenarios have none). The orchestrator verified that the promotion plan's 21 Scenario/Given/When/Then/And lines match the branch's `acceptance.feature`.
+
+## Session 2026-11-27 — ALL-DONE tail: main-dev merge and config-key wiring gate (F-09)
+
+`origin/main-dev` merged into the feature branch (merge commit `f9beb109`). Two append-only doc conflicts, both resolved by keeping both sides: `docs/context-constitution-findings.md` (this feature's operator-db-access row and feature 318's `migration-rerun.py` row) and `docs/patterns/config-governance.md` (this feature's `system:config-heal-mcp-credential-sweep` author row and feature 314's `system:config-migration-feature-fix-mcp-deadline-budget` row). This feature adds no `xstockstrat-config` migration (only `scripts/config-heal/mcp-credential-orphan-sweep*.sql` and `scripts/migration-assertions/config-mcp-credential-sweep.sql`), so main-dev's `057_mcp_deadline_budget` / `058_marketdata_bars_miss_backoff` do not collide; `scripts/migration-assertions/` on main-dev holds no `config-mcp-credential-sweep.sql`.
+
+Gate, run after the merge: `node scripts/check-config-wiring.mjs --final`, exit `0`, output:
+
+```
+REPORTED: services/xstockstrat-analysis/app/engine/fundsignal_loop.py:marketdata/fundamentals.provider:readers-disagree
+REPORTED: services/xstockstrat-trading/internal/service/trading.go:platform/trading_state:readers-disagree
+```
