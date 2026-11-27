@@ -1128,7 +1128,7 @@ grep -n "MYSZ_EVALUATION_FAILED_OPPORTUNITY" e2e/fixtures/INVENTORY.md e2e/insig
 
 ### Step 19 — service: `evaluation_failed` cue on the Signal-detail header
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/trader/positions/[symbol]/page.tsx` — modify
@@ -1696,3 +1696,39 @@ _Populated by /sdd-execute as implementation proceeds._
       - The Playwright warmup timed out at 10 s. A re-run with only `--timeout=240000` added gave
         `47 passed (2.9m)`, and the new test was among them.
 - **Disposition**: CI-equivalent fallback. No file outside Step 18's **Files** is committed.
+
+### Step 19: probe RED, stale linked proto dist and two baseline-failing AAPL tests (2026-11-27)
+
+- **Expected**: Step Dependencies has Step 20's test capture RED for Step 19. The Verification block
+  (`lint`, `tsc --noEmit`, `playwright test e2e/trader/position-detail.spec.ts`, two greps) passes as
+  written.
+- **Actual**:
+  - RED and GREEN came from a temporary untracked probe, `e2e/trader/tmp-step19-probe.spec.ts`. It
+    served `MYSZ_EVALUATION_FAILED_OPPORTUNITY` through `page.route` twice: non-held (provenance
+    `['watchlist', 'evaluation_failed']`) and held (`['position', 'evaluation_failed']`). It asserted
+    that `detail-evaluation-failed` is visible with text `evaluation failed`, and that the non-held
+    case has no `detail-formula-unreadable`. It ran with `--project=chromium --no-deps --timeout=240000`.
+    - RED: `getByTestId('detail-evaluation-failed')` `element(s) not found` in both tests
+      (`2 failed`). The Opportunity card rendered `— Conviction 0 0/0 conditions`.
+    - GREEN: `2 passed (27.9s)`.
+    - The probe was deleted before the commit.
+  - The verbatim block exited 1.
+    - Lint passed, with warnings in untouched files only.
+    - The `detail-evaluation-failed\|EVALUATION_FAILED_CUE` grep hit `page.tsx:28,1051,1059`. The
+      `'evaluation_failed'` literal grep printed nothing.
+    - `tsc` reported `BackfillSymbolOutcome.INCOMPLETE` in two untouched files, because the linked
+      proto dist is stale. Against this branch's dist, through a `paths` override under `.sdd-logs/`,
+      it exited 0 and compiled `page.tsx`.
+    - The Playwright warmup timed out at 10 s (`61 did not run`).
+  - Two re-runs with only `--timeout=240000` added gave `5 failed, 57 passed` and then
+    `3 failed, 59 passed`. All failures are in tests this step does not touch:
+    - `@AC-5 an INCOMPLETE-only partial …` received the pre-INCOMPLETE text `Backfill partial: …`.
+      This is the stale linked proto dist again, this time at runtime.
+    - `renders the risk-framed header …` (`+$100.00`) and `a position with no resting stop …`
+      (`no stop set`) failed in both re-runs. With `page.tsx` restored to the pre-Step-19 commit
+      `062b7194`, those two alone fail the same way (`2 failed`), so they are pre-existing in this
+      worktree and not caused by Step 19.
+    - The feature-125 and feature-139 tests failed once and passed on the second re-run (timing).
+- **Disposition**: CI-equivalent fallback for `tsc`; the e2e failures are pre-existing or environmental,
+  shown against the baseline. No file outside Step 19's **Files** is committed. Step 20 still adds the
+  permanent Playwright test and its own RED as specced.

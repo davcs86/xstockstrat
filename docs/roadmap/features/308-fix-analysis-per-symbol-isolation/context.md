@@ -860,3 +860,29 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Config-wiring gate: not applicable (no config key, no migration).
 - Files modified: `services/xstockstrat-ui/e2e/insights/opportunities.spec.ts`, `services/xstockstrat-ui/e2e/fixtures/INVENTORY.md`
 - Deviations: a targeted RED run, plus the stale linked proto dist and the host-harness timeout (Deviation Log "Step 18").
+
+## Session 2026-11-27 — sdd-execute sequential (sdd-batch-execute), step 19
+
+- Tooling: pnpm 9.15.9 ✓ · chromium ✓ (`/opt/pw-browsers`) · hook check hook=0. No install was run. Lockfile gate: `git diff --quiet origin/main-dev -- pnpm-lock.yaml` rc=0.
+- Discovery: the advisory digest read the main checkout's pre-re-spec spec, which ends at Step 17 with O-9 deferred. At `origin/feature/fix-analysis-per-symbol-isolation@062b7194`, Step 19 exists and every evidence symbol is in place: the `readinessCue` import at `page.tsx:27`, `OpportunitySection` at `:1009`, the header chain at `:1038-1052`, and `EVALUATION_FAILED_PROVENANCE` / `EVALUATION_FAILED_CUE` at `readinessCue.ts:27,29` (Step 15).
+
+### Step 19 — service: `evaluation_failed` cue on the Signal-detail header [done]
+- `OpportunitySection` derives `evalFailed` from `opportunity.provenance` after the `if (!opportunity)` guard. The header chain gains an `evalFailed && !held` arm after the unreadable arm, rendering `EVALUATION_FAILED_CUE` with test id `detail-evaluation-failed`. The held branch renders the same badge beside the action badge. Both constants come from the existing `readinessCue` import. No literal token and no colour literal. `SignalReadiness` is unchanged (Step 21).
+- TDD:
+  - RED (temporary probe spec, `.sdd-logs/v-1.log`): `getByTestId('detail-evaluation-failed')` `element(s) not found` in both the non-held and held tests, with the Opportunity card rendered (`2 failed`).
+  - GREEN (`.sdd-logs/v-2.log`): `2 passed (27.9s)`. The probe was then deleted.
+- Verification:
+  - The verbatim block (`.sdd-logs/v-3.log`) exited 1.
+    - Lint passed, with warnings in untouched files only.
+    - The grep hit `page.tsx:28,1051,1059`, and the `'evaluation_failed'` literal grep printed nothing.
+    - tsc failed on `BackfillSymbolOutcome.INCOMPLETE`, because the linked proto dist is stale. Against this branch's dist it exited 0 and compiled `page.tsx` (`.sdd-logs/v-4.log`).
+    - The warmup timed out at 10 s.
+  - The spec re-runs with `--timeout=240000` gave `5 failed, 57 passed` (`.sdd-logs/v-5.log`) and `3 failed, 59 passed` (`.sdd-logs/v-6.log`). None of the failures is in a test this step touches:
+    - `@AC-5 INCOMPLETE-only partial` fails from the stale proto dist at runtime.
+    - The two AAPL `Single Position page` tests (`+$100.00`, `no stop set`) fail the same way with `page.tsx` at the pre-Step-19 commit `062b7194` (`.sdd-logs/v-7.log`, `2 failed`), so they were already failing in this worktree.
+- Config-wiring gate: not applicable (no config key, no migration).
+- Files modified: `services/xstockstrat-ui/src/app/trader/positions/[symbol]/page.tsx`
+- Deviations: probe RED, the stale linked proto dist, and the baseline-failing e2e tests (Deviation Log "Step 19").
+
+### Open Threads
+- [ ] `position-detail.spec.ts` tests `renders the risk-framed header …` and `a position with no resting stop …` fail on the host harness in this worktree both with and without Step 19. CI (Docker e2e, the branch's own proto dist) is the arbiter; if they fail there, triage them separately from 308.
