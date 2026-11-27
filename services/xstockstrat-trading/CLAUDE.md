@@ -96,7 +96,7 @@ namespace-relative; logs and errors may print the FQN (`platform.trading_state`)
 | `risk.bracket_orders_enabled` | bool | `true` (all environments) | Master gate for automatic stop-loss/take-profit bracket orders on auto-sized entries. Production was seeded `false` (pending feature 103) by feature 030, but the pre-189 config bug meant the getter always returned its code default `true`, so production actually ran with brackets ON; feature 189 (migration 029) bumped the production seed to `true` to preserve that behavior once config resolution was fixed (operator sign-off, feature 189 context.md). |
 | `risk.take_profit_rr_multiple` | float | `2.0` | Reward-to-risk multiple for the take-profit leg; `0` disables the take-profit leg (stop-loss only) |
 | `risk.max_unprotected_seconds` | int | `30` | Provisional default — max seconds an auto-sized position may go without a confirmed bracket before an automatic flatten+halt |
-| `reconciliation.interval_ms` | float | `60000` | Interval for the broker-state-reconciliation poller (`reconcileTick`). Read live on every cycle. |
+| `reconciliation.interval_ms` | float | `60000` | Interval for the broker-state-reconciliation poller (`reconcileTick`). Read live on every cycle. Feature 311: bracket-leg adoption reuses it as the `ListOrders` cooldown for an account with adoption candidates but no tracked legs (a value `<= 0` reads as `60000` for adoption), and `halted_poll_interval_ms` for a halted account. |
 | `reconciliation.grace_ticks` | int | `1` | Consecutive ticks a mismatch must persist before it's a real finding (not a benign propagation delay). |
 | `reconciliation.systemic_threshold_pct` | float | `0.5` | Share of accounts erroring/unprotected in one tick that escalates to `trading_state=REDUCE_ONLY` (namespace `platform`). |
 | `reconciliation.halted_poll_interval_ms` | float | `300000` (5 min) | Cooldown between `reconcileTick` broker polls (`ListOrders`/`GetPositions`) for an **already-halted** account — slower than the ordinary `interval_ms` cadence, since a halted account can't place new orders regardless (`isAccountHalted` gates `PlaceOrder`/`ReplaceOrder`) and only needs occasional re-observation to notice broker-side drift (e.g. a manual dashboard order). Read live on every cycle; `<= 0` disables the throttle (polls every tick, matching `interval_ms`'s own convention). |
@@ -113,6 +113,7 @@ never wedge the sync loop. Likewise every ledger `AppendEvent` is bounded (`ledg
 - Schema: `trading`
 - Hypertable: `trading.orders` (partition: `created_at`, chunk: 1 day)
 - `trading.order_brackets` — the per-order bracket (stop-loss/take-profit) state machine (feature 030): `NONE→SUBMITTING→PENDING_VERIFY→ACTIVE→CANCELING→CANCELED`, with a `FAILED` terminal on any submission error. Plain indexed `order_id` column (no FK — `trading.orders`' composite hypertable PK has no single-column FK target, matching this service's existing avoidance of cross-hypertable FKs).
+- `trading.bracket_legs` — one row per tracked bracket leg (feature 311, migration `012`), PK `(account_id, leg_order_id)`, carrying the parent's order, user, mode, symbol and the closing side. Written by `ActivateBracket` at each ACTIVE transition and by adoption of pre-existing open legs; `filled_qty` is the emit cursor and `observed_filled_qty` feeds reconciliation. A resize blanks the `order_brackets` leg ids but never these rows. Cutover and tombstone undo → [`docs/runbooks/position-fold-cutover.md`](../../docs/runbooks/position-fold-cutover.md).
 - `trading.offline_snapshot_headers` — one header per offline snapshot (feature 240). The carry is computed atomically with the snapshot write and frozen: a re-submit with the same id and `as_of` keeps it, an `as_of` change on a non-latest snapshot is `FAILED_PRECONDITION`, and an all-rejected re-submit commits nothing. Migration `011` also adds `trading.orders.fees` (`NUMERIC`, NULL for broker orders).
 - `trading.offline_position_baselines` — effective-dated brokerage-statement baseline rows per offline account (feature 163). The effective baseline for an account is the rows of its latest snapshot header (greatest `as_of`, then `created_at`; a header with no rows is a full flatten); a re-submitted snapshot replaces its own rows atomically (DELETE + INSERT in the same tx as its header). Only offline accounts may have baselines.
 
@@ -126,8 +127,8 @@ Orders requiring approval (above configured thresholds) are placed in `ORDER_STA
 |---|---|---|
 | `order.created` | `{order_id}` | New order placed |
 | `order.submitted` | `{order_id}` | Order sent to broker |
-| `order.filled` | `{order_id}` | Order fully filled |
-| `order.partially_filled` | `{order_id}` | Partial fill received |
+| `order.filled` | `{order_id}` | Order fully filled; also emitted for a tracked bracket leg, with the broker leg id as `order_id` and stream key (feature 311) |
+| `order.partially_filled` | `{order_id}` | Partial fill received; also emitted for a tracked bracket leg, with the broker leg id as `order_id` and stream key (feature 311) |
 | `order.canceled` | `{order_id}` | Order canceled |
 | `order.replaced` | `{order_id}` | Working order modified via `ReplaceOrder` (qty/price/TIF) |
 | `order.rejected` | `{order_id}` | Broker rejected order |

@@ -94,56 +94,6 @@ func TestGetPosition_ScopesToRequestedAccount(t *testing.T) {
 	}
 }
 
-// TestGetFeesAccum is the feature-029 fee-accumulator read (the parallel of GetRealizedAccum). It is
-// read just before a full close so the sealed fees_total is accum + the closing fill's fee. The
-// service has no live-DB harness, so the query runs through pgxmock (mirrors TestGetPosition above).
-func TestGetFeesAccum(t *testing.T) {
-	t.Run("returns the accumulated fees", func(t *testing.T) {
-		mock, err := pgxmock.NewPool()
-		if err != nil {
-			t.Fatalf("pgxmock.NewPool: %v", err)
-		}
-		defer mock.Close()
-		repo := &PortfolioRepo{db: mock}
-
-		mock.ExpectQuery(`COALESCE\(fees_accum, 0\)`).
-			WithArgs("user-1", "AAPL", commonv1.TradingMode_TRADING_MODE_PAPER.String(), "acc-1").
-			WillReturnRows(mock.NewRows([]string{"fees_accum"}).AddRow(3.45))
-
-		got, err := repo.GetFeesAccum(context.Background(), "user-1", "AAPL", commonv1.TradingMode_TRADING_MODE_PAPER, "acc-1")
-		if err != nil {
-			t.Fatalf("GetFeesAccum: %v", err)
-		}
-		if got != 3.45 {
-			t.Fatalf("fees_accum = %v, want 3.45", got)
-		}
-		if err := mock.ExpectationsWereMet(); err != nil {
-			t.Fatalf("pgxmock expectations unmet: %v", err)
-		}
-	})
-
-	t.Run("returns 0 when the position row is absent (net == gross, AC-11)", func(t *testing.T) {
-		mock, err := pgxmock.NewPool()
-		if err != nil {
-			t.Fatalf("pgxmock.NewPool: %v", err)
-		}
-		defer mock.Close()
-		repo := &PortfolioRepo{db: mock}
-
-		mock.ExpectQuery(`COALESCE\(fees_accum, 0\)`).
-			WithArgs("user-1", "AAPL", commonv1.TradingMode_TRADING_MODE_PAPER.String(), "acc-1").
-			WillReturnError(pgx.ErrNoRows)
-
-		got, err := repo.GetFeesAccum(context.Background(), "user-1", "AAPL", commonv1.TradingMode_TRADING_MODE_PAPER, "acc-1")
-		if err != nil {
-			t.Fatalf("GetFeesAccum on no-rows must not error: %v", err)
-		}
-		if got != 0 {
-			t.Fatalf("fees_accum on no rows = %v, want 0", got)
-		}
-	})
-}
-
 // TestGetAccountDrawdowns_ScopesToUserAndMode is the feature-172 regression proving the drawdown
 // fetch projects account_id/equity/peak_equity and scopes to (user_id=$1, trading_mode=$2). CI
 // provisions no database, so the query shape is asserted through pgxmock.

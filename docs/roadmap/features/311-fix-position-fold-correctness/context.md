@@ -2989,3 +2989,676 @@ Written by the orchestrating session itself.
   - [ ] unaddressed — A-10 residual: a bracket-leg fill that reaches the analysis consumer when no P&L window is open would open one. Whether a leg fill can arrive after its position's close event was not checked. Target: check at Step 22, when the leg emit order is in code.
   - [ ] unaddressed — Overlap: 312 edits the same `alpaca-default` lines of `portfolio_service.go` that Step 9 builds on (`:434-437`); 315, 317, 321 and 326 edit other ranges of files this feature changes. All from product-spec evidence only. Target: whichever merges second rebases; re-run the overlap scan when a peer becomes implementation-ready.
 - **Carried forward unchanged.** The O-61 operator confirmations before the cutover step and every accepted residual in the "sdd-design (approved)" and "sdd-spec" Open Threads above still stand.
+
+## Session 2026-11-21 — operator ruling on D-50, recorded by the orchestrator (verbatim)
+
+Question (handoff § 3.3): "Feature 311 (fix-position-fold-correctness), design decision D-50: accounts with adoption-only bracket legs (no fills) are polled for open bracket orders at the reconciler cadence, not on every fill-poller tick. This is currently an orchestrator assumption. Confirm it, or overturn it?"
+
+Operator's answer (option selected): "Confirm D-50 (Recommended)".
+
+Option text as offered: "Adoption-only accounts are listed at the reconciler cadence. Recorded verbatim in 311's context.md; the Step 23 gate clears."
+
+Effect: D-50 is operator-confirmed; the Step 23 confirmation is cleared. Other § 3.3 items (how portfolio is stopped on each staging target; the real-Postgres trading test job follow-up) are still open.
+
+## Session 2026-11-21 — operator rulings on cutover and CI scope, recorded by the orchestrator (verbatim)
+
+Question (handoff § 3.3, cutover): "Feature 311 cutover is stop-then-start on staging, with no write fence. The design proposes stopping portfolio by removing the portfolio component from the DigitalOcean staging app spec, and by a compose stop on the homelab staging VM, but neither is verified from the repo. How is portfolio actually stopped on each staging target?"
+Operator's answer (option selected): "As the design proposes".
+Option text as offered: "DO staging: remove the portfolio component from the app spec and redeploy. Homelab staging: `docker compose stop` for portfolio on the VM. Recorded verbatim; 311's runbook step uses exactly this."
+
+Question (handoff § 3.3, CI): "Feature 311 (position-fold correctness, portfolio + trading): should a follow-up real-Postgres test job for trading be added to CI, so trading's new fold/duplicate-guard SQL is tested against a real database rather than only fakes?"
+Operator's answer (option selected): "Add to 311's scope".
+Option text as offered: "Add a step for a real-Postgres trading job to 311's spec. Re-spec and a new impl-spec review are needed; 311 grows beyond 27 steps."
+
+Orchestrator note (not an operator quote): the second ruling changes scope. 311 needs `/sdd-spec` re-spec for the added real-Postgres trading test step (and a C-11 design-gate check that no Floor rule or C-16 rule changes), then `/sdd-review impl-spec`, before `/sdd-execute`. Not yet done. The cutover ruling is confirmed as designed.
+
+## Session 2026-11-26 — sdd-spec re-spec (operator ruling: add real-Postgres trading job)
+
+- Re-spec of `implementation-spec.md` after the operator ruling "Add to 311's scope" (session 2026-11-21, "operator rulings on cutover and CI scope", recorded verbatim above). The cutover ruling is "as designed" and changes nothing. Status stays `implementation-ready`; total steps 27 → 29. `feature.md` (Status History row, Artifacts line, Reviewers snapshot, Next Action) and the spec header carry the new count; `status.md` is a plain lifecycle string and is unchanged.
+- **Written by Claude from the orchestrator's task, not by the operator.** The skills' subagents were not available, so the review below is a **self-review by the same session that wrote the steps**, not an independent `/sdd-review impl-spec`. Run `/sdd-review fix-position-fold-correctness impl-spec` before `/sdd-execute`.
+- **New steps** (all on `xstockstrat-trading`; former Steps 21-27 renumbered to 23-29, every cross-reference in the spec re-mapped by script and re-read):
+  - **Step 21 — test:** real-Postgres proof for the `trading.bracket_legs` SQL. Creates `internal/repository/dbtest_helpers_test.go` (`//go:build dbtest`, `TRADING_DB_TEST_URL`, skip locally, fatal under `CI=true`, `lock_timeout` 500ms, prefix cleanup), `bracket_legs_dbtest_test.go` and `trading_repo_legs_dbtest_test.go`; edits the stale "no live-DB test harness" comment at `trading_repo.go:17-18`. Cases run in default and `QueryExecModeExec` (`DB_PGBOUNCER`) mode: `ActivateBracket` rows and rollback, the `ON CONFLICT DO NOTHING` duplicate guard, `ListTrackedLegs` order and retired filter, `ListAdoptionCandidates` (latest parent row's side, status bind, existing-leg and no-parent exclusions), `InsertAdoptedLeg`, `RecordLegObservation`, `AdvanceLegEmit` 4 then 10 (`@AC-5` at the SQL layer), `KnownBrokerOrderIDs` and `NetFilledQtyBySymbol` unions with signs, the observed column and the `DISTINCT ON` dedup. Covers `AC-4, AC-5`.
+  - **Step 22 — config:** CI job `trading-db-test` (clone of `portfolio-db-test`, `./internal/repository/...`, `TRADING_DB_TEST_URL`), its `ci-gate` `needs:` and echo entries, and `build-tags: [dbtest]` in trading's `.golangci.yml`. `TDD: N/A` (workflow YAML).
+  - **Step 29 (was 27):** also adds the `trading-db-test` row to `docs/patterns/ci-overview.md`.
+  - Spec text changed: A-5 rewritten; new A-14 to A-17; Scenario Coverage rows for `@AC-4` and `@AC-5`; Step Dependencies lines for Steps 21-22 and the `ci.yml` overlap with 318 and 324; the D-50 gating line now records the operator confirmation (2026-11-21), clearing the old Step 25 gate.
+- **Evidence used** (tree `origin/main-dev@fb52065c`, re-checked on tip `2b2dec92`): `.github/workflows/ci.yml` (`portfolio-db-test` `:1016-1065`, `marketdata-db-test` `:1067-1116`, `ci-gate` `:1377`, `needs` `:1396-1397`, echo `:1429-1430`, failure step `:1444-1447`, filters `:53`, `:88-97`); `docs/patterns/ci-overview.md:26-28`; `services/xstockstrat-portfolio/.golangci.yml:28-29`; portfolio `internal/repository/dbtest_helpers_test.go`, marketdata `fundamentals_replace_dbtest_test.go:22`; trading `trading_repo.go` (`:17-19`, `:41`, `:53`, `:130`, `:171`), `bracket_repo.go` (`:46-91`), `pool.go:31-32`, `internal/service/mtls_env_test.go:22`, migrations `001`, `003`, `005`; `scripts/db-migrate.sh:164`; `scripts/Dockerfile.migrate`. The tip diff touched none of these (trading changed only OTel versions in `go.mod`, `go.sum`, `internal/telemetry/otel.go`).
+- **Design gate (C-11) check:** no design decision, `@AC-*` guarantee (C-16) or Floor rule changes. F-06 untouched (throwaway CI container), F-07 untouched (test-only env var), F-08 satisfied (each step lists everything it stages).
+- **Self-review verdict (impl-spec criteria B2, B2b, B3, B3b applied to Steps 21-22 and to the renumbered spec; advisory):** 0 failures, 3 warnings.
+  - Mechanical checks passed: 29 headings in order, every step has all template fields, every `**Lands with**` is symmetric, adjacent, at most 3 members (cap 4) and has its `## Step Dependencies` line, no reference to a step above 29, every `Covers` ID exists, every new `**Files**` path is exact.
+  - Warning 1 (Step 21): the atomicity case relies on Postgres rejecting a NUL byte in a TEXT parameter (SQLSTATE `22021`). It could not be run here (no database). The step names a fallback and forbids weakening the assertion.
+  - Warning 2 (Steps 21-22): the cases cannot be shown red or green locally. The TDD line records the mutation method and the CI job as the proof; a green run must show no skipped case (the helper is fatal under `CI=true`).
+  - Warning 3 (Step 22): textual overlap on the `ci-gate` lists with 318 (Step 9) and 324; recorded in Step Dependencies.
+  - Not covered by any case, on purpose: whether `AdvanceLegEmit` refuses a lower cursor (Step 18 does not specify it; Step 21 asserts only forward moves).
+- **Resolved by this session:** the 2026-11-20 impl-spec review item "Step 20 (A-5): trading has no real-Postgres test job; operator decision on a follow-up CI job" is resolved by the ruling and Steps 21-22. The D-50 gate item is cleared by the 2026-11-21 operator confirmation. All other unaddressed items from that review's Open Threads stand (the old step numbers 23-25 there are now 25-27).
+
+## Open Threads
+
+- **Still open, needs an operator decision:** none. One reading to confirm if wanted: A-15 takes "trading's new fold / duplicate-guard SQL" to mean the `trading.bracket_legs` family (trading has no fold; the fold, pre-check and applied-row insert are portfolio SQL already on a real database in Step 11). If the operator meant more, say what.
+- **Before `/sdd-execute`:** `/sdd-review fix-position-fold-correctness impl-spec` (independent, with subagents) on the 29-step spec; then `/sdd-distill fix-position-fold-correctness` (context.md is far over 65536 bytes).
+- **Carried unchanged:** migration numbers re-check after BRANCH SYNC; Step 23 (was 21) IBKR status lower-casing only in the leg observer; A-10 analysis residual; peer overlaps 312, 315, 317, 321, 326 and now 318, 324 on `ci.yml`; the O-61 cutover confirmations (the stop methods were ruled "as designed" on 2026-11-21 and Step 28's runbook uses them).
+
+## Session 2026-11-26 — independent impl-spec review + operator ruling on A-15, recorded by the orchestrator (verbatim)
+
+Question (operator): "Your ruling was 'add a real-Postgres trading job so trading's new fold / duplicate-guard SQL is tested against a real database'. Trading has no position fold... The spec reads your ruling as: test trading's new trading.bracket_legs SQL (ON CONFLICT duplicate guards, the leg-adoption inserts, and the net-filled-quantity unions) at the repository level. Is that what you meant?"
+
+Operator's answer (option selected): "Yes, repository-level bracket_legs SQL (Recommended)".
+
+Effect: A-15 is operator-confirmed and is no longer an open assumption.
+
+Independent `/sdd-review impl-spec` of the 29-step spec: PASS WITH WARNINGS, no blockers. Changes made to `implementation-spec.md` (nothing else changed):
+- Step 21 atomicity case: the failure is now injected through `BracketLegParent.Symbol` containing a NUL byte, a field only the INSERT sees. A NUL in a stop or take-profit id would fail at the preceding UPDATE (`bracket_repo.go:94-95`) and never exercise the rollback. The case asserts a server `PgError` (22021), the bracket row's pre-call status and leg ids, and no `bracket_legs` rows; a fallback keeps the same assertions.
+- Step 21 names its test functions (`TestBracketLegsDB_*`, `TestTradingRepoLegsDB_*`) so the `-run 'BracketLegsDB|TradingRepoLegsDB'` filter in Steps 21 and 22 matches. Step 18 now names the exported status identifiers (`LegStatusOpen`, `LegStatusFilled`, `LegStatusCanceled`, `LegStatusExpired`, `LegStatusRejected`, `LegStatusUnknown`, `LegStatusBaselineRetired`, `LegStatusNotOpenAtAdoption`); Step 21 refers to them.
+- Step 21 skip check: an unpiped `go test` run (exit code) plus an unanchored `grep -c -- '--- SKIP'` on its output, so indented subtest skips count.
+- `bracket_repo.go` cites aligned to the file: Step 18 `:41-43`, `:46`, `:91-100`; Step 21 `:91-100`.
+- Low-severity notes: Step 29 -> Steps 21 and 22 dependency line; the take-profit NULL assertion uses a raw SELECT (`GetBracketByOrderID` COALESCEs to `''`) and the evidence and seed (d) note that `CreateBracket` stores `''` for an empty id; `seedParentOrder` takes a `brokerOrderID` argument; the cleanup remark now states `t.Cleanup` runs last-registered first and gives the registration order; Step 21 item 4 deletes the false parenthetical outright with no replacement comment.
+- A-15 text now records the operator confirmation and drops "if the operator meant more, it is an open item".
+- Open Threads: the A-15 item in the 2026-11-26 re-spec entry is closed by this ruling. Nothing else changed in status.
+
+## Session 2026-11-26 — sdd-execute sequential (sdd-batch-execute)
+
+Up-front confirmation: the operator approved the plan with this record (verbatim, binding):
+
+```json
+{"mainDev":"f802b184b13bd899d858c4b0349a616e9981b9d9","dev":"54c2fd8199edae3eca3b939a3769117d82da24c8","specHash":"18c51d35977e80bf26445e262047ae76b926a1f2","directive":"conditional","pending":[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29],"mismatches":[{"n":3,"detail":"Codebase Evidence says '**Not found**: `pg_advisory`, `FOR UPDATE` or `Begin` anywhere in `internal/repository/`'. That is false on the merged tree. `Begin` appears in watchlist_repo.go:39,194,301,325,350,388 (`r.pool.Begin`), signal_expiry_repo.go:62 and deli"},{"n":5,"detail":"The call-site list is incomplete. `grep -rn 'emitEventAs(' services/xstockstrat-portfolio --include=*.go` returns 4 calls, not 3: portfolio_service.go:1360 (`emitRiskAlert`: `s.emitEventAs(ctx, userID, eventType, \"portfolio:risk\", payload)`), portfolio_service"},{"n":7,"detail":"Line drift only; all symbols found. ConsumeOrderFills/observed wrap :179-180, observed :234, streamRetryDelay :248, sleepFor :253, processOrderFill :376, ErrLedgerUnavailable :929, ErrFillUnattributable :975. boundedRetry is at :1550 with its 'event parked' lo"},{"n":9,"detail":"Line drift only. The positionsMu lock sites that stay are at :1610-1611 (processAccountDeregistered) and :1657-1658 (processPositionSync), not :1602-1603/:1649-1650. The fill-path lines match (:399, :409, :423 'fill.Qty > 0 { // buying more', :438 alpaca-defau"},{"n":14,"detail":"The verification `grep -n 'limit=500' services/xstockstrat-trading/internal/broker/alpaca.go # none` will still match the comment at alpaca.go:483 ('status=all keeps just-filled/canceled orders visible; limit=500 is the bulk-list ceiling.'). The evidence cites"},{"n":16,"detail":"Line drift only (about +8 after line 3500). appendLedgerEvent is at trading.go:3953 (spec :3945), IdempotencyKey uuid at :3965 (spec :3957), the emitLedgerEvent call at :3997 (spec :3989), emitLedgerEvent at :3996. The call at :1123 and test calls trading_offl"},{"n":19,"detail":"Line drift only. ACTIVE UpdateBracketStatus writes are at trading.go:3688 (Alpaca createBracket), :3705 (IBKR createBracket) and :3747 (resizeBracket), not :3680/:3697/:3739. ReArmProtection is at :3732, oppositeSide at :3580 (call sites :3695, :3737), emitBra"},{"n":23,"detail":"Line drift only. maybeSubmitBracket is at :3638 (spec :3630), alpacaStatusToProto at :3915 (spec :3907), ledgerEmitTimeout at :3940 and appendMaxAttempts at :3943, appendLedgerEvent at :3953. StartFillPoller :1793, pollFills :1816, logTick :1877, alpacaCallCon"},{"n":25,"detail":"Line drift only. shouldPollHaltedAccount is at :2953, haltAccount at :2977 (pre-stamp :2988), ResumeAccountSvc at :3295 (delete :3322), and TestShouldPollHaltedAccount_ThrottlesAndRecovers at trading_reconciliation_test.go:514 (spec :491-513; the same drift ap"},{"n":26,"detail":"Line drift only. credStatus copy is at :2166-2171, the credentialsKnownInvalid skip at :2178, ErrInvalidCredentials at :2194, isAccountHalted at :2945, credentialsKnownInvalid at :3235, and haltedPollInterval at :2678-2679 (spec :2674-2676). StartReconciliatio"},{"n":28,"detail":"Line drift only. The merge-order.md entry naming 311's trading.go overlap is now at :431 (spec :430). docs/runbooks/position-fold-cutover.md does not yet exist (correct for a create). The .do/app.dev.yaml citations match (:101 portfolio, :439 ledger DATABASE_U"},{"n":29,"detail":"Line drift only. The bracket-leg residual in services/xstockstrat-trading/docs/reconciliation.md is at :76-79 ('Alpaca bracket-leg fills, which never reach `trading.orders`'), not :70-75. The portfolio CLAUDE.md pointer to position-closed-contract.md is at :13"}]}
+```
+
+- Setup: the stale check passed (`origin/main-dev` = `f802b184`, dev = `54c2fd81`) and the hook check returned `hook=0`. Tooling detection for the Go steps: go1.27.0 is present. The host `golangci-lint` is v2.5.0 (built with go1.25.1), so each Go step must first install the pinned v2.14.0 with `GOTOOLCHAIN=go1.27.0 go install …` (tooling-setup.md) before its lint check.
+- Merged `f802b184` into the dev branch (`acadbbdc`, no conflicts; ledger-guard clean).
+- Re-spec (directive `conditional`), step bodies only:
+  - Step 3: the "Not found: `FOR UPDATE`/`Begin`" line was false. Every existing transaction starts from `r.pool` or a pool argument, never from `r.db`, and the only row locks are `FOR UPDATE SKIP LOCKED`. `pg_advisory` is still not found. The design is unchanged.
+  - Step 5: `emitRiskAlert` (`portfolio_service.go:1360`) is a fourth `emitEventAs` caller. It passes `""` and discards the error, like the `signal_prune.go` callers.
+  - Step 14: the `limit=500` verification grep now matches only the URL literal, because the `alpaca.go:483` comment also names `limit=500`.
+  - Steps 7, 9, 16, 19, 23, 25, 26, 28, 29: line numbers re-anchored.
+- `respec(fix-position-fold-correctness)` commits in `git log --first-parent origin/main-dev..HEAD`: `a20ba1c4` (implementation-spec.md), `b93cb70f` (feature.md), `0f9340bc` (status.md).
+
+```sdd-batch-setup
+{"mainDev":"f802b184b13bd899d858c4b0349a616e9981b9d9","date":"2026-11-26"}
+```
+
+## Session 2026-11-27 — sdd-execute sequential (sdd-batch-execute), Step 1
+
+### Step 1 — migration: portfolio `019_fill_applied_events` [done]
+- Created `019_fill_applied_events.{up,down}.sql`. The `.up` creates `portfolio.consumer_applied_events`, with PK `(consumer, user_id, account_id, order_id)`, `event_id`, an `outcome` CHECK of `applied`/`parked`, `parked_reason`, `pending_closed JSONB` and `applied_at`. It also creates `portfolio.consumer_floors (consumer PK, floor_recorded_at)`. It seeds no row, creates no trigger and creates no other table. The `.down` drops both tables in reverse order. `019` was still the next free number: the highest on the merged tree is `018_watchlist_signal_expiry`. Other features' unmerged branches were not checked.
+- TDD: N/A (migration). Verified offline: run `.sdd-logs/v-1.log` printed both paths, `2` and `0`. `exit=1` is `grep -c` exiting on a zero count; see the Deviation Log. Inspection: each CREATE TABLE has a matching DROP TABLE. No database was started. The config-wiring gate does not apply, because the migration writes no `config.config_values` row and the step declares no key.
+- Tooling: none needed (migration step).
+- Files modified: `services/xstockstrat-portfolio/migrations/019_fill_applied_events.up.sql`, `services/xstockstrat-portfolio/migrations/019_fill_applied_events.down.sql`
+- Deviations: the Verification block exits 1 when it passes (Deviation Log, Step 1).
+
+## Session 2026-11-27 — sdd-execute sequential (sdd-batch-execute), Step 2
+
+### Step 2 — migration: trading `012_bracket_legs` [done]
+- Created `012_bracket_legs.{up,down}.sql`. The `.up` creates `trading.bracket_legs` with PK `(account_id, leg_order_id)`, `order_id UUID`, `user_id`, `trading_mode`, `symbol`, `side` (CHECK `buy`/`sell`), `filled_qty` (emit cursor) and `observed_filled_qty` (reconciliation), both `NUMERIC(18,8) NOT NULL DEFAULT 0`, `status TEXT DEFAULT 'OPEN'` with no CHECK, `not_found_ticks`, `adopted` (only reader: the `GetOrder` fallback sort), and `created_at`/`updated_at`. It is DDL only: no seed INSERT and no index beyond the PK. The `.down` drops the table. `012` was still the next free number: the highest on the worktree tree and on `origin/main-dev` is `011_offline_fees_snapshot_headers`. Other features' unmerged branches were not checked.
+- TDD: N/A (migration). Verified offline: run `.sdd-logs/v-1.log` printed both paths, `2` and `0`. `exit=1` is `grep -c` exiting on a zero count (Deviation Log, Step 2). Inspection: the one CREATE TABLE in `.up` has its DROP TABLE in `.down`. No database was started. The config-wiring gate does not apply, because the migration writes no `config.config_values` row and the step declares no key.
+- Tooling: none needed (migration step).
+- Files modified: `services/xstockstrat-trading/migrations/012_bracket_legs.up.sql`, `services/xstockstrat-trading/migrations/012_bracket_legs.down.sql`
+- Deviations: the Verification block exits 1 when it passes (Deviation Log, Step 2).
+
+## Session 2026-11-27 — sdd-execute sequential (sdd-batch-execute), Steps 3+4
+
+Tooling (steps 3+4): go1.27.0 ✓ · golangci-lint ⬇ v2.14.0 (built with go1.27.0, at `/root/go/bin`; the host `/usr/local/bin` copy is v2.5.0, so the lint runs put `/root/go/bin` first on `PATH`)
+
+### Step 3 — service: portfolio fill-apply repository seam and floor [done]
+- Atomic unit with Step 4 (planned, **Lands with**). Created `fill_apply_repo.go`: `ConsumerOrderFill`, `ErrFillAlreadyApplied`, `txBeginner` (asserted on `r.db`), `FillKey`, `AppliedFill`, `PositionKey`, `LockedPosition`, `PositionValues`, `FoldWrite` (`FoldUpsert`/`FoldDelete`/`FoldFlip`), `FoldOutcome`, `FoldFn func(*LockedPosition) FoldOutcome`, `FillResult{Prior, Outcome}`, and the methods `FillApplied`, `ApplyFill`, `ClearPendingClosed`, `ParkFill` and `EnsureFillFloor`. `ApplyFill` runs in one tx: applied INSERT (0 rows means `ErrFillAlreadyApplied`), `pg_advisory_xact_lock(hashtextextended('user|symbol|mode|account', 0))`, `FOR UPDATE` read, fold, absolute upsert / delete / delete+insert, optional `pending_closed` UPDATE bound as `string`, then COMMIT. `queryRower` and `portfolio_repo.go` are unchanged.
+- Step 9 needs to know: `FoldFn` returns no error. A flip's fresh row goes through the same absolute upsert after the delete, with `opened_at = NOW()`. A zero `FoldWrite` is rejected with an error.
+- TDD (unit): RED `.sdd-logs/v-1.log`, `exit=1`, `undefined: FillKey` … `FAIL github.com/xstockstrat/portfolio/internal/repository [build failed]` → GREEN: `v-5.log` `ok github.com/xstockstrat/portfolio/internal/repository 1.054s` (`-race`), with 10 cases passing (`v-7.log`: `10`). Verification: `v-2.log` build+vet ran clean; lint `v-3.log` `0 issues.` `exit=0`; `Begin` grep `v-4.log` printed nothing (`exit=1`, no match). The config-wiring gate does not apply, because the step declares no key.
+- Files modified: `services/xstockstrat-portfolio/internal/repository/fill_apply_repo.go`
+- Deviations: the Verification blocks stop after their first line (Deviation Log, Steps 3+4).
+
+### Step 4 — test: fill-apply repository (pgxmock) [done]
+- Atomic unit with Step 3. Created `fill_apply_repo_test.go` with 10 ordered-expectation pgxmock tests covering the nine listed asserts, plus a no-position-row case. The flip case also proves the order delete, insert, then `pending_closed` UPDATE (matched only as a Go `string`), all before Commit.
+- TDD: the RED/GREEN results above. Coverage line `v-6.log`: `total: (statements) 79.1%`, `exit=0` (≥ 40%; `repository` is excluded from the figure).
+- Files modified: `services/xstockstrat-portfolio/internal/repository/fill_apply_repo_test.go`
+- Deviations: the same Deviation Log entry (Steps 3+4).
+
+## Session 2026-11-27 — sdd-execute sequential (sdd-batch-execute), Steps 5+6
+
+Tooling (steps 5+6): go1.27.0 ✓ · golangci-lint ✓ v2.14.0 (built with go1.27.0, at `/root/go/bin`, put first on `PATH` for the lint runs)
+
+### Step 5 — service: portfolio `emitEventAs` returns an error and takes a key [done]
+- Atomic unit with Step 6 (planned, **Lands with**). `emitEventAs(ctx, ownerUserID, eventType, streamKey, idempotencyKey string, payload) error`: an empty key gets `uuid.NewString()`; the key is set once on the request before the retry loop, so the 4× `Unavailable` retry still reuses one key. Success returns nil, the `ctx.Done()` branch returns `ctx.Err()`, and the WARN `ledger append failed` stays, followed by `return err`. `emitEvent`, `emitRiskAlert` and both `signal_prune.go` callers pass `""` and discard the error with `_ =`. No other emit site changed.
+- Step 9 needs to know: the `pending_closed` clear (D-21) must gate on `emitEventAs` returning nil; `emitEvent` never returns the error.
+- TDD (unit): RED `.sdd-logs/v-1.log` `exit=1`: `too many arguments in call to s.emitEventAs`, `(no value) used as value`, `FAIL github.com/xstockstrat/portfolio/internal/service [build failed]` → GREEN `v-2.log` `ok github.com/xstockstrat/portfolio/internal/service 1.041s` (`-race`); `v-7.log` (`-v`) shows the 5 new tests `--- PASS`. Verification: build+vet (`-tags dbtest`) `v-8.log` `exit=0`; grep `v-5.log` lists 4 production calls and 4 test calls, all with six arguments; lint `v-6.log` `0 issues.` `exit=0`; `Prune` `v-4.log` `ok` `exit=0`; whole package `-race` `v-9.log` `ok … 11.020s` `exit=0`. No coverage threshold (`service` is excluded). The config-wiring gate does not apply: the step declares no key.
+- Files modified: `services/xstockstrat-portfolio/internal/service/portfolio_service.go`, `services/xstockstrat-portfolio/internal/service/signal_prune.go`
+- Deviations: the Verification blocks stop after their first line (Deviation Log, Steps 5+6).
+
+### Step 6 — test: keyed emit and its error return [done]
+- Atomic unit with Step 5. Created `portfolio_emit_key_test.go` on the existing `fakeLedger`/`newSvc`: `TestEmitEventAs_CallerKeyReachesLedger`, `_EmptyKeyGeneratesDistinctKeys`, `_LedgerErrorIsReturned` (`codes.Internal`, one call), `TestEmitEvent_SwallowsLedgerError` and `TestEmitEventAs_SuccessReturnsNil`.
+- TDD: the RED/GREEN results above.
+- Files modified: `services/xstockstrat-portfolio/internal/service/portfolio_emit_key_test.go`
+- Deviations: the same Deviation Log entry (Steps 5+6).
+
+## Session 2026-11-27 — sdd-execute sequential (sdd-batch-execute), Steps 7+8
+
+Tooling (steps 7+8): go1.27.0 ✓ · golangci-lint ✓ v2.14.0 (built with go1.27.0, at `/root/go/bin`, put first on `PATH` for the lint runs)
+
+### Step 7 — service: fill floor at boot and `observed()` sentinels [done]
+- Atomic unit with Step 8 (planned, **Lands with**). `PortfolioService.fillFloor time.Time` (zero value folds everything) and the unexported `errFillAcked`. `ConsumeOrderFills` first calls `loadFillFloor`: `s.repo.EnsureFillFloor(ctx)` in a loop that logs ERROR `order fill floor load failed, retrying` and waits `streamRetryDelay` via `sleepFor` on error, and returns without opening the stream once `ctx` ends (A-6). On success it sets `fillFloor` and logs INFO `order fill floor loaded` with `floor` and `stamped_now`. `processOrderFill` returns `errFillAcked` right after the stop-store update when `RecordedAt` is before the floor, with no DB call. `observed()` now maps `errFillAcked` to `sig.handled("acked")` and nil, and `ErrFillUnattributable` to ERROR `event parked` (the `boundedRetry` field set, `consumer` = the consumer name, `attempts` 1), `parked` and nil. Every other error is unchanged. `boundedRetry`, `consumeEventStream`, `streamEventsFrom` and the other consumers are untouched. The A-2 skip class was not added (Step 9).
+- Step 9 needs to know: the floor check sits directly after the `s.stops.set` block and before `s.positionsMu.Lock()`. The A-2 skip goes before it. A nil `RecordedAt` reads as the Unix epoch, so it is acked whenever a floor is loaded.
+- TDD (unit): RED `.sdd-logs/v-1.log` `exit=1`: `svc.fillFloor undefined (type *PortfolioService has no field or method fillFloor)`, `undefined: errFillAcked`, `FAIL github.com/xstockstrat/portfolio/internal/service [build failed]` → GREEN `v-2.log` `ok github.com/xstockstrat/portfolio/internal/service 1.111s` (`-race`, filter `FillFloor|Observed|AC56`). `v-3.log` (`-v`) shows 8 `--- PASS`: the 7 new tests and `TestOrderFillConsumer_AC56_OneTickRecordPerBatch` (unchanged, still 4 `ok`; 294 `@AC-56` PRESERVE). Verification: build + vet (`-tags dbtest`) `v-4.log` clean; whole package `-race` `v-5.log` `ok … 11.561s` `exit=0`; lint `v-6.log` `0 issues.` `exit=0`; `RecordedAt` grep `v-7.log` empty (`exit=1`, no match). No coverage threshold (`service` is excluded). The config-wiring gate does not apply: the step declares no key.
+- Files modified: `services/xstockstrat-portfolio/internal/service/portfolio_service.go`
+- Deviations: the Verification blocks stop after their first line (Deviation Log, Steps 7+8).
+
+### Step 8 — test: floor and sentinel handling [done]
+- Atomic unit with Step 7. `testdata.Stamped(ev, at)` returns a `proto.Clone` copy with `RecordedAt` set; it is the only `RecordedAt` builder, so the Step 8 grep finds none in a test file. `portfolio_fill_floor_test.go`: `TestFillFloor_BelowFloorAckedWithNoDBCall` (1 ms before: `errFillAcked`, no pgxmock query, no append), `TestFillFloor_SameMillisecondFolds` (at the floor: reaches the `GetPosition` query), `TestObserved_FillAckedCountsAckedAndTicks`, `TestObserved_FillUnattributableParked` (one ERROR `event parked` with `event_id`, `sequence`, `stream_key`, `consumer`, `attempts`=1), `TestObserved_OtherErrorReturned`, `TestConsumeOrderFills_FillFloorRetriedBeforeStream` (a failing floor INSERT, then success: 0 `StreamEvents` calls at the retry and 1 after; a second boot with a 0-row INSERT keeps the first floor; `stamped_now` true then false) and `TestConsumeOrderFills_FillFloorNeverLoadsNoStream`. Floor-boot tests use pgxmock through `NewPortfolioRepoWithDB` and `scriptedStreamLedger.fromSeqs` as the stream counter.
+- TDD: the RED/GREEN results above.
+- Files modified: `services/xstockstrat-portfolio/internal/service/portfolio_fill_floor_test.go`, `services/xstockstrat-portfolio/internal/testdata/ledger.go`
+- Deviations: the same Deviation Log entry (Steps 7+8).
+
+## Session 2026-11-27 — operator ruling recorded by the orchestrator (verbatim)
+
+Question (blocker on Steps 9+10): "Steps 9+10 cannot pass `go test ./internal/... -race`: `portfolio_fill_floor_test.go` (created by Step 8, not in Step 9's or Step 10's Files) has `TestFillFloor_SameMillisecondFolds` whose line 45 expects the old `GetPosition` read (`FROM portfolio.positions`) as the first DB call, but after Step 9 the first DB call past the floor check is the `FillApplied` pre-check, so the ordered pgxmock rejects it. Re-spec first, or another route?"
+
+Operator's answer (option selected): "B: re-spec first".
+
+Effect: `implementation-spec.md` re-specced minimally: Step 10 **Files** gains `portfolio_fill_floor_test.go`, a new Instruction 8 re-points that one expectation to ``FROM portfolio\.consumer_applied_events`` (intent unchanged: a fill at the floor reaches the DB path and is not acked), Codebase Evidence cites the verified lines, and a one-line Deviation Log entry records it. Steps 9 and 10 stay `pending`; no other step changed.
+
+## Session 2026-11-27 — sdd-execute sequential (sdd-batch-execute), Steps 9+10
+
+Tooling (steps 9+10): go1.27.0 ✓ · golangci-lint ✓ v2.14.0 (built with go1.27.0, at `/root/go/bin`, put first on `PATH` for the lint runs)
+
+### Step 9 — service: exactly-once, signed fill path [done]
+- Atomic unit with Step 10 (planned, **Lands with**). `processOrderFill` now runs in this order:
+  1. The A-2 skip class sits after the stop-store update and before Step 7's unchanged floor check. A payload with `qty` 0, or an empty `order_id`, `user_id` or `symbol`, logs a WARN and returns nil with no DB call.
+  2. The `alpaca-default` account fallback, then the `FillKey`.
+  3. The `FillApplied` pre-check, outside `positionsMu`. A DB error is returned. A parked hit logs DEBUG and returns `errFillAcked`. An applied hit re-emits a non-NULL `pending_closed` under `position.closed:<stored event_id>`, clears it only when the append returns nil (a failed clear is a WARN), and returns `errFillAcked`.
+  4. The side: payload `side`, else `orderSide`. `ErrLedgerUnavailable` is returned. `ErrFillUnattributable`, or a side `signedQty` rejects, calls `ParkFill`: an insert returns an error wrapping `ErrFillUnattributable`, and a conflict returns `errFillAcked`.
+  5. `positionsMu` is taken before `ApplyFill` and released right after it. `ErrFillAlreadyApplied` returns `errFillAcked` with no emit.
+- The fold is the pure `foldOrderFill`, using `pnl.FoldFrom` over the locked row:
+  - Flat: delete. `PendingClosed` holds the `closedPositionPayload` JSON, built from the row's `realized_accum` plus this fill's realized, and the row's `fees_accum` plus this fill's fees.
+  - Same sign, or no row: an absolute upsert that carries the accumulators.
+  - Opposite sign: a flip with the same sealed outbox, and the new row's accumulators at 0.
+- After the unlock, a close or flip emits `position.closed` through `emitEventAs` with key `position.closed:<event_id>`, then clears the outbox. A flip then emits `position.opened`. Every other fill emits `opened` or `updated`, then the risk check and the snapshot run. `positionsMu`, its comment and the other lock sites are unchanged. `.do/app.yaml` is unchanged.
+- `portfolio_repo.go`: deleted `UpsertPosition`, `GetRealizedAccum`, `GetFeesAccum` and `ClosePosition` (A-9). The `UpsertPositionFromSync` comment had compared itself to the deleted `UpsertPosition`; that comparison was dropped, and the comment's facts were kept.
+- TDD (unit): RED `.sdd-logs/v-2.log` `exit=1`, the right reason. 25 new or re-pointed tests fail on the old path, for example `TestFillFold_AC3_SellClosesAndSealsRealized`: `get position: scan position: could not match actual sql: "SELECT symbol, qty, … FROM portfolio.positions … ORDER BY opened_at DESC LIMIT 1" with expected regexp "FROM portfolio\.consumer_applied_events"`. The skip-class subtests fail with `… call to method Query() was not expected, want nil`. (`v-1.log` was discarded: it was a compile error in my own test, `WillDelayFor(…).WillReturnRows undefined`, fixed before this RED.)
+- GREEN:
+  - Step 10 block `v-12.log`: `ok github.com/xstockstrat/portfolio/internal/service 11.242s`, and every `internal/...` package is `ok` under `-race`.
+  - Step 9 block `v-13.log`: build and vet clean.
+  - Per-line runs: vet `v-14.log` `exit=0`; lint `v-16.log` `0 issues.` `exit=0`.
+  - The three "none" greps (`v-15`, `v-18`, `v-19`) print nothing (`exit=1`, no match).
+  - `instance_count` grep `v-20.log`: `55/109/151: instance_count: 1`, unchanged.
+  - Coverage `v-17.log`: `total: (statements) 79.1%` `exit=0`.
+  - Executed count `v-21.log`: `33` `--- PASS` lines for the fill, floor, race and AC-56 filter.
+- Mutation check: with the fill path's `positionsMu` removed, `TestFillAndSync_SameRow_Serialized` failed. The sync's write arrived inside the fill's transaction and stayed unmatched. The lock was then restored.
+- The config-wiring gate does not apply: the step declares no key.
+- Files modified: `services/xstockstrat-portfolio/internal/service/portfolio_service.go`, `services/xstockstrat-portfolio/internal/repository/portfolio_repo.go`
+- Deviations: the Verification blocks stop after their first line (Deviation Log, Steps 9+10).
+
+### Step 10 — test: fill-path regression suite (pgxmock) [done]
+- Atomic unit with Step 9. `portfolio_fill_fold_test.go` (new) runs over pgxmock through `recordingDB`, which records every pool-level SQL so "no transaction" and "no risk/snapshot read" can be asserted. It covers:
+  - `@AC-3`: close at a realized 500 with key `position.closed:<event_id>`.
+  - `@AC-1`: a duplicate makes 1 pool call and no append; a below-floor fill makes 0 calls.
+  - `@AC-4`/`@AC-5` fold half: buy 10 @100, then leg `leg-tp-1` SELL 10 @110, which closes at a realized 100.
+  - Buy-add and partial-sell exact upsert args, with the accumulators taken from the locked row.
+  - A flip that emits closed then opened (short −5, accumulators 0).
+  - 029 `@AC-10`: `fees_total` 3 and a gross `realized_pnl` 500.
+  - Side resolution: the `orderSide` fallback; park once, then ack; a park conflict acks; a ledger-unavailable lookup parks nothing.
+  - `pending_closed`: a re-emit under the stored id, a failed append that keeps the outbox, and a failed clear that is not an error.
+  - An INSERT conflict that acks with no emit or read.
+  - The four skip-class subtests.
+  - Risk and snapshot running after Commit, in order.
+- Other test files:
+  - `portfolio_fill_errors_test.go`: `fillEvent` carries `order_id`, `side` (from the qty sign) and an event id. Four DB-error tests cover the pre-check, the `FOR UPDATE` read, the upsert write and the close write. The orphaned `positionRow` was deleted.
+  - `portfolio_fill_sync_race_test.go`: `interleaveDB` and `noRow` are gone from this file. The race test uses ordered pgxmock expectations with a 300 ms delayed `FOR UPDATE` read.
+  - `portfolio_offline_test.go`: holds `noRow`, plus `syncRecorderDB.Begin` with a recording `pgx.Tx`.
+  - `portfolio_helpers_test.go`: `positionState`, `computeNewPosition` and their 5 tests were deleted.
+  - `portfolio_repo_test.go`: `TestGetFeesAccum` was deleted.
+  - `position_drain_dbtest_test.go`: seeds with a direct pool `INSERT` (both call sites).
+  - `portfolio_fill_floor_test.go`: only `:45` changed.
+  - `portfolio_telemetry_test.go` needed no edit.
+- Fails-ledger rule (feature 347): the whole package ran green. The only `recover()` in the package's tests is `watchlist_service_test.go:344`, which is unrelated to the fill service. No fill test builds its service with a nil dependency that the success path reaches: `newFoldSvc` sets `cfg`, `marketdata` and `subs`.
+- TDD: the RED/GREEN results above.
+- Files modified: `services/xstockstrat-portfolio/internal/service/portfolio_fill_fold_test.go`, `services/xstockstrat-portfolio/internal/service/portfolio_fill_errors_test.go`, `services/xstockstrat-portfolio/internal/service/portfolio_fill_sync_race_test.go`, `services/xstockstrat-portfolio/internal/service/portfolio_helpers_test.go`, `services/xstockstrat-portfolio/internal/service/portfolio_offline_test.go`, `services/xstockstrat-portfolio/internal/service/position_drain_dbtest_test.go`, `services/xstockstrat-portfolio/internal/service/portfolio_fill_floor_test.go`, `services/xstockstrat-portfolio/internal/repository/portfolio_repo_test.go`
+- Deviations: the same Deviation Log entry (Steps 9+10), plus "Step 10 — how Instructions 2, 5 and 8 were met".
+- Step 11 needs to know: `ApplyFill` gets the ledger `event.EventId` as the applied row's `event_id`, which is a UUID column, so a dbtest fixture must use UUID event ids (the `testdata` `ev-<seq>` ids work only under pgxmock).
+
+## Session 2026-11-27 — sdd-execute sequential (sdd-batch-execute), Step 11
+
+Tooling (step 11): go1.27.0 ✓ · golangci-lint ✓ v2.14.0 (built with go1.27.0, at `/root/go/bin`, put first on `PATH` for the lint run) · `PORTFOLIO_DB_TEST_URL` ✗ (unset; no database started, per the HARD CONSTRAINTS)
+
+### Step 11 — test: real-Postgres proof for exactly-once (dbtest) [done]
+- Both test pools (`testPool`, `serviceTestPool`) now also clean up `portfolio.consumer_applied_events` by their own user prefix (`it-281-`, `it-357-`; C-13, one consumer each). Their skip, CI-fatal and `lock_timeout` rules are unchanged. New `apply_fill_dbtest_test.go`:
+  - `TestApplyFillDB_ConcurrentSameKeyAppliesOnce`: two pools, run in default and `QueryExecModeExec` mode. Exactly one `ApplyFill` applies and the other gets `ErrFillAlreadyApplied`; qty goes 10 → 15 and there is 1 applied row.
+  - `TestApplyFillDB_RolledBackFoldLeavesNoAppliedRow`: a zero `FoldWrite` fails inside the tx, which leaves 0 applied rows and qty 10. A retry then applies.
+  - `TestFillFloorDB_EnsureTwiceStampsOnce`: the existing `order_fill` floor row is saved, cleared and restored. `stampedNow` is true then false, and both calls return the same floor.
+- New `fill_fold_dbtest_test.go`. Each service has its own pool and `positionsMu`, and `fillFloor` is set to one hour before the stamped events; the shared floor row is not written.
+  - `TestFillFoldDB_AC2_TwoInstancesApplyOnce`: buy 5 against a row of 10. One instance returns nil and the other returns `errFillAcked`; qty is 15 and there is exactly 1 applied row.
+  - `TestFillFoldDB_AC1_RestartDoesNotReapply`: a buy/buy/sell history reaches qty 12 with a non-zero realized. A second service then gets `errFillAcked` for every replayed event, and qty, `cost_basis` and `realized_accum` are unchanged.
+  - `TestFillFoldDB_SyncVersusFillNoDeadlock`: 25 two-symbol `processPositionSync` calls run against 25 fills on the same row, under a 60 s deadline. The check is no returned error and no sync WARN (`upsert position from sync failed` / `delete positions not in sync failed`). A broker sync returns nil even when a write fails, so the WARNs are where a `40P01` or lock timeout would show up.
+- TDD: red N/A locally. `PORTFOLIO_DB_TEST_URL` is unset and no database may be started, so the cases skip; the step's TDD line allows this, and the `portfolio-db-test` CI job is the proof (it is fatal under `CI=true` without the URL). Without a database, the RED "qty 20, not 15" against the pre-Step-9 tree was not shown. GREEN, local layer only:
+  - `v-1.log`: `go vet -tags dbtest ./...` printed nothing.
+  - `v-2.log`: lint printed `0 issues.`, `exit=0`.
+  - `v-3.log`: `ok …/internal/repository`, `ok …/internal/service`, `exit=0`. All 6 new cases (7 with the two subtests) `--- SKIP`.
+- The config-wiring gate does not apply: the step declares no key.
+- Files modified: `services/xstockstrat-portfolio/internal/repository/apply_fill_dbtest_test.go`, `services/xstockstrat-portfolio/internal/repository/dbtest_helpers_test.go`, `services/xstockstrat-portfolio/internal/service/fill_fold_dbtest_test.go`, `services/xstockstrat-portfolio/internal/service/position_drain_dbtest_test.go`
+- Deviations: two Deviation Log entries. "Step 11 — Verification block stops after its first line; the DB line cannot run here". "Step 11 — `event_id` column type": the column is `TEXT`, not UUID, so the `ev-<seq>` ids are valid.
+- Not covered here: the design's conflict-path case, where an uncommitted raw tx holds the applied row (debate O-37). Step 11's Instructions do not list it.
+
+## Session 2026-11-27 — sdd-execute sequential (sdd-batch-execute), Steps 12+13
+
+Tooling (steps 12+13): go1.27.0 ✓ · golangci-lint ✓ v2.14.0 (built with go1.27.0, at `/root/go/bin`, put first on `PATH` for the lint run)
+
+### Step 12 — service: `GetPnL` dedup keyed on account and order [done]
+- Atomic unit with Step 13 (planned, **Lands with**). `realizedPnL` keys `filledOrderIDs`, `latest` and `partialOrder` on the new helper `pnlOrderKey(f sequencedFill)` = `f.AccountId + "|" + f.OrderID` (D-28, the operator-approved scope extension of 2026-11-20). `orderSide` still takes the bare `OrderID`; the mixed-account refusal, the sort and the fold are unchanged.
+- TDD: RED `.sdd-logs/v-1.log` `exit=1`: `--- FAIL: TestPnLLegs_TwoAccountsSameLegIDKeepOtherAccountsPartial`, `RealizedPnl = 100, want 140` (account A's `order.filled` for `leg-1` hid account B's partial for the same id). GREEN: Step 13 filter `v-3.log` `ok github.com/xstockstrat/portfolio/internal/service 2.171s`; `v-7.log` (`-v`) counts `36` `--- PASS` lines for `GetPnL|PnLLegs`. Verification: build + vet (`-tags dbtest`) `v-2.log` clean; `GetPnL` filter `v-4.log` `ok`; lint `v-5.log` `0 issues.` `exit=0`; coverage `v-6.log` `total: (statements) 79.1%` `exit=0`, every package `ok`. The config-wiring gate does not apply: the step declares no key.
+- Files modified: `services/xstockstrat-portfolio/internal/service/portfolio_service.go`
+- Deviations: the Verification blocks stop after their first line, plus line drift (Deviation Log, Steps 12+13).
+
+### Step 13 — test: `GetPnL` with bracket-leg fills and two accounts [done]
+- Atomic unit with Step 12. New `portfolio_pnl_legs_test.go` on the 251 harness (`filled`, `partial`, `wantRealized`, `runPnL251`): `TestPnLLegs_AC4_TakeProfitLegFillRealized` (100), `TestPnLLegs_AC5_LegPartialDroppedOnceFilled` (100, not 140), `TestPnLLegs_TwoAccountsSameLegIDKeepOtherAccountsPartial` (140; red before Step 12) and `TestPnLLegs_MixedAccountAttributionStillFailsClosed` (251 `@AC-14`, `ErrFillUnattributable`). The first three also assert that no request with a stream key reached the ledger fake (no side lookup, 251 `@AC-4`).
+- TDD: the RED/GREEN results above; `@AC-4` and `@AC-5` (`GetPnL` half) are green.
+- Files modified: `services/xstockstrat-portfolio/internal/service/portfolio_pnl_legs_test.go`
+- Deviations: the same Deviation Log entry (Steps 12+13).
+
+## Session 2026-11-27 — sdd-execute sequential (sdd-batch-execute), Steps 14+15
+
+Tooling (steps 14+15): go1.27.0 ✓ · golangci-lint ✓ v2.14.0 (built with go1.27.0, at `/root/go/bin`, put first on `PATH` for the lint runs)
+
+### Step 14 — service: broker `ErrOrderNotFound` and IBKR `GetOrder` id match [done]
+- Atomic unit with Step 15 (planned, **Lands with**). `broker.go`: `ErrOrderNotFound` after `ErrRateLimited`, with a one-line comment that only a definitive single-order not-found may wrap it. `alpaca.go`: `GetOrder` returns `…(status 404): <body>: %w ErrOrderNotFound` on a 404; every other non-200 is unchanged, and `c.do` / `doPaced` are untouched. New exported `const ListOrdersLimit = 500` builds the `ListOrders` URL (`limit=%d`); the `:483` comment keeps its wording. `ibkr.go`: `GetOrder` returns the entry whose `OrderID == brokerOrderID`; a miss or an empty list returns `ibkr GetOrder: order <id> not in response (<n> orders)`, which wraps nothing (D-18, D-26, R-11). A parse error still wraps the `json` error. The old empty-list branch wrapped a nil error (`%!w(<nil>)`); that message is gone with it. `ListOrders` on both brokers is unchanged.
+- Step 23 needs to know: an IBKR miss is an ordinary error in the parent `pollFills` path too (a failed poll, no status change), as D-26 says; Step 29 logs it in the trading findings. `ListOrdersLimit` is the constant Step 26's complete-list gate reads.
+- TDD (unit): RED `.sdd-logs/v-1.log` `exit=1` was a compile failure (`undefined: broker.ErrOrderNotFound`). The sentinel alone was then added and RED re-run, `v-2.log` `exit=1`, the right reason: `status 404: errors.Is(err, ErrOrderNotFound) = false, want true`; `another order listed: GetOrder(42) = &{BrokerOrderID:7 Status:Filled FilledQty:3 …}`; `only another id: GetOrder(42) = &{BrokerOrderID:7 …}, want an error`. GREEN: Step 15 block `v-7.log` `ok github.com/xstockstrat/trading/internal/broker 14.951s` (`-race`); `v-9.log` (`-v`) shows 5 `--- PASS`, the 3 new tests plus the unchanged `TestAlpacaListOrders_QueryParams` (`limit=500`) and `TestIBKRGetOrder_SignsQueryOnTheWire`. Verification: build (`v-3.log`) clean; the `Orders[0]` grep (`v-4.log`) and the `status=all&limit=500` grep (`v-5.log`) print nothing; lint `v-6.log` `0 issues.` `exit=0`; coverage `v-8.log` `total: (statements) 84.9%` `exit=0`, every package `ok`. The config-wiring gate does not apply: the step declares no key.
+- Files modified: `services/xstockstrat-trading/internal/broker/broker.go`, `services/xstockstrat-trading/internal/broker/alpaca.go`, `services/xstockstrat-trading/internal/broker/ibkr.go`
+- Deviations: the Verification blocks stop after their first line (Deviation Log, Steps 14+15).
+
+### Step 15 — test: broker not-found and id match [done]
+- Atomic unit with Step 14. `alpaca_test.go`: `TestAlpacaGetOrder_OnlyA404IsOrderNotFound` (httptest, default client with no rate-limit budget, so a 429 is one attempt): 404 wraps `ErrOrderNotFound`, 500 and 429 do not. `TestAlpacaListOrders_QueryParams` is unchanged and still sees `limit=500`. `ibkr_do_test.go` (on `lenientIBKRClient` and `writeJSON`): `TestIBKRGetOrder_ReturnsTheRequestedID` (the reused `ibkrOrdersJSON`, plus an inline body listing `"7"` then `"42"`: both return order 42 `Submitted`) and `TestIBKRGetOrder_MissIsAnOrdinaryError` (only `"7"`, and an empty list: an error for which `errors.Is(err, ErrOrderNotFound)` is false). New bodies are inline, one consumer each (C-13).
+- TDD: the RED/GREEN results above.
+- Files modified: `services/xstockstrat-trading/internal/broker/alpaca_test.go`, `services/xstockstrat-trading/internal/broker/ibkr_do_test.go`
+- Deviations: the same Deviation Log entry (Steps 14+15).
+
+## Session 2026-11-27 — sdd-execute sequential (sdd-batch-execute), Steps 16+17
+
+Tooling (steps 16+17): go1.27.0 ✓ · golangci-lint ✓ v2.14.0 (built with go1.27.0, at `/root/go/bin`, put first on `PATH` for the lint runs)
+
+### Step 16 — service: `appendLedgerEvent` takes the idempotency key [done]
+- Atomic unit with Step 17 (planned, **Lands with**). `appendLedgerEvent(ctx, eventType, streamKey, userID, idempotencyKey string, payload) error`: an empty key gets `uuid.NewString()`. The key is set once on the request before the retry loop, so the `Unavailable` retry reuses it. The retry loop, `ledgerEmitTimeout` and the `RecordLedgerEmit` calls are unchanged (294 `@AC-4`). The two production callers pass `""`: `account.positions.synced` (`:1123`) and `emitLedgerEvent` (`:4000`), whose signature is unchanged. The doc comment now names the empty-key rule and stays at two lines.
+- Step 23 needs to know: pass the D-4 leg key (`bracket-leg:<account_id>:<legID>:<status>:<filledQty>`) as the fifth argument. `emitLedgerEvent` always generates a key, so a keyed leg emit must call `appendLedgerEvent` directly.
+- TDD (unit): RED `.sdd-logs/v-1.log` `exit=1`, the right reason: `too many arguments in call to s.appendLedgerEvent` … `want (context.Context, string, string, string, map[string]interface{})`, `FAIL github.com/xstockstrat/trading/internal/service [build failed]`. GREEN: Step 17 block `v-3.log` `ok github.com/xstockstrat/trading/internal/service 1.692s` (`-race`, `Ledger|Offline`); `v-6.log` (`-v`) shows 5 `--- PASS`, the 3 new tests plus the unchanged `TestEmitLedgerEventStampsOwningUserId` and `TestAppendLedgerEvent_RetriesUnavailableWithSameIdempotencyKey`. Verification: build (`v-2.log`) clean; the grep (`v-4.log`) lists 8 calls, all with the key argument; lint `v-5.log` `0 issues.` `exit=0`. No coverage threshold (`service` is excluded). The config-wiring gate does not apply: the step declares no key.
+- Files modified: `services/xstockstrat-trading/internal/service/trading.go`
+- Deviations: the Verification blocks stop after their first line, plus line drift (Deviation Log, Steps 16+17).
+
+### Step 17 — test: keyed ledger append [done]
+- Atomic unit with Step 16. `trading_offline_test.go:2215,2228` pass `""`; their assertions are unchanged. `trading_ledger_userid_test.go` (on `recordingLedger` and a bare `&TradingService{ledger: rec}`): `TestAppendLedgerEvent_CallerKeyReachesLedgerUnchanged`, `TestAppendLedgerEvent_CallerKeyReusedOnUnavailableRetry` (one `Unavailable`, then success: 2 requests with the same caller key) and `TestAppendLedgerEvent_EmptyKeyGeneratesOne` (two empty-key appends: non-empty, distinct keys). The imports `codes`, `grpcstatus` and `ledgerv1` use the aliases from `trading_offline_test.go`.
+- TDD: the RED/GREEN results above.
+- Files modified: `services/xstockstrat-trading/internal/service/trading_offline_test.go`, `services/xstockstrat-trading/internal/service/trading_ledger_userid_test.go`
+- Deviations: the same Deviation Log entry (Steps 16+17).
+- Context read: the execution sessions (2026-11-20 sdd-design approval to here) were read in full; the design-round sessions (lines 30-2874) were searched for `appendLedgerEvent` and R-5, which match this step (key parameter, empty means a uuid).
+
+## Session 2026-11-27 — sdd-execute sequential (sdd-batch-execute), Steps 18+19+20
+
+Tooling (steps 18+19+20): go1.27.0 ✓ · golangci-lint ✓ v2.14.0 (built with go1.27.0, at `/root/go/bin`, put first on `PATH` for the lint runs)
+
+### Step 18 — service: `trading.bracket_legs` repository and reconciliation UNIONs [done]
+- Atomic unit with Steps 19 and 20 (planned, **Lands with**).
+- `bracket_repo.go`:
+  - `pgBracketRepo.pool` is now the `bracketDB` interface (`dbQuerier` plus `Begin`); `NewBracketRepo(*pgxpool.Pool)` is unchanged.
+  - Adds the exported `LegStatus*` constants, `RetiredLegStatuses`, `BracketLegRecord` and `BracketLegParent`.
+  - Six new methods. `ActivateBracket` runs Begin, then the shared ACTIVE UPDATE (`bracketStatusActive` = 3), then one `ON CONFLICT DO NOTHING` INSERT per non-empty leg id with OPEN, zero quantities and `adopted` false, then Commit. Any error rolls back. `ListTrackedLegs` binds `status <> ALL($1)` and orders by `adopted ASC, updated_at ASC`. `ListAdoptionCandidates` binds `status = ANY($1)` and flips the parent's latest side. `InsertAdoptedLeg` sets `adopted` true and reports `RowsAffected() == 1`. `RecordLegObservation` writes `observed_filled_qty` and `not_found_ticks`. `AdvanceLegEmit` writes `filled_qty` and `status`. Every UPDATE also bumps `updated_at`.
+- `trading_repo.go`: `KnownBrokerOrderIDs` gains `UNION SELECT leg_order_id FROM trading.bracket_legs` (retired rows count). `NetFilledQtyBySymbol` UNION ALLs the leg rows' `observed_filled_qty` under the same sign CASE, with no status filter. No leg row is written to `trading.orders`.
+- Steps 21, 23 and 26 need to know:
+  - Leg rows carry `trading_mode` as the enum name (`TRADING_MODE_PAPER`), the ledger-payload encoding. `ListAdoptionCandidates` converts the parent's stored `paper`/`live` through `parseMode(...).String()`, so adopted rows match.
+  - A candidate's `Status` and quantities are empty; Step 26 sets them before `InsertAdoptedLeg`.
+  - `RecordLegObservation` and `AdvanceLegEmit` on a missing row are a no-op with no error.
+- TDD (unit):
+  - RED `.sdd-logs/v-1.log`, `exit=1`, the right reason: `undefined: BracketLegParent`, `repo.ActivateBracket undefined (type *pgBracketRepo has no field or method ActivateBracket)`, `undefined: repository.BracketLegRecord`, then `FAIL github.com/xstockstrat/trading/internal/repository [build failed]` and `FAIL github.com/xstockstrat/trading/internal/service [build failed]`.
+  - GREEN: Step 20's block `v-4.log` shows `ok github.com/xstockstrat/trading/internal/repository 1.073s` and `ok github.com/xstockstrat/trading/internal/service 14.564s` (`-race`), with every `internal/...` package `ok`. `v-12.log` (`-v`, filtered) counts `36` `--- PASS` lines, none FAIL or SKIP, and every new test is listed.
+- Verification:
+  - Build: clean (`v-2.log`).
+  - `bracket_legs` count: `2` (`v-5.log`).
+  - Status grep: one declaration line each (`v-6.log`).
+  - Lint: `0 issues.` `exit=0` (`v-7.log`).
+- The config-wiring gate does not apply: the step declares no key.
+- Files modified: `services/xstockstrat-trading/internal/repository/bracket_repo.go`, `services/xstockstrat-trading/internal/repository/trading_repo.go`
+- Deviations: Deviation Log, "Steps 18+19+20 — Verification blocks stop after their first line" and "Step 18 — how `ListAdoptionCandidates` and `ActivateBracket` were built".
+
+### Step 19 — service: `ActivateBracket` at the three ACTIVE writes [done]
+- Atomic unit with Steps 18 and 20. The three ACTIVE `UpdateBracketStatus` calls (Alpaca `createBracket` `:3688`, IBKR `createBracket` `:3705`, `resizeBracket` `:3747`, as the re-spec anchored them) now call `s.bracketRepo.ActivateBracket(..., bracketLegParent(order))`.
+- New helpers:
+  - `closingSide(OrderSide) OrderSide` applies `oppositeSide`'s rule as an enum (A-13).
+  - `bracketLegParent(order)` carries the account, order id, user, `order.TradingMode.String()`, symbol and the closing side.
+  - `bracketActivationFailure(err)` builds the alert reason.
+- On an error each site keeps its WARN and adds `go s.emitBracketFailureAlert(context.WithoutCancel(ctx), order, …)`. `resizeBracket` still emits `order.bracket_updated` afterwards, with no early return.
+- `oppositeSide`, its two broker call sites and every non-ACTIVE `UpdateBracketStatus` call are unchanged.
+- TDD: the RED/GREEN results above.
+- Verification:
+  - Build: clean (`v-3.log`).
+  - The ACTIVE `UpdateBracketStatus` grep: nothing (`exit=1`, no match; `v-8.log`).
+  - `ActivateBracket(` count: `3` (`v-9.log`).
+  - Lint: `v-7.log`.
+- The config-wiring gate does not apply: the step declares no key.
+- Files modified: `services/xstockstrat-trading/internal/service/trading.go`
+- Deviations: the same Deviation Log entry ("Steps 18+19+20 — Verification blocks stop after their first line").
+
+### Step 20 — test: bracket-leg persistence, activation and reconciliation queries [done]
+- Atomic unit with Steps 18 and 19.
+- `trading_bracket_test.go`, `fakeBracketRepo`:
+  - Implements the six methods in memory. The leg map is keyed by `account|leg`. A write sequence stands in for `updated_at`. `putLeg` mirrors `ON CONFLICT DO NOTHING`.
+  - The retired filter reads `repository.RetiredLegStatuses`.
+  - `ListAdoptionCandidates` reads a `parents` map: no parent means no candidate, and the side comes from `closingSide`.
+  - Error hooks: `activateErr`, `listCandidatesErr` and `insertAdoptedErr`. `failingBracketScan` still compiles through embedding.
+- New `bracket_repo_test.go` (pgxmock):
+  - Begin, UPDATE, two INSERTs with `0.0, 0.0, LegStatusOpen, false`, then Commit.
+  - An empty take-profit id makes one INSERT.
+  - A failed second INSERT makes Rollback with no Commit, and the error is returned.
+  - `ListTrackedLegs` binds `RetiredLegStatuses`.
+  - `ListAdoptionCandidates` binds `[]int32{3, 4}`, flips the side and normalises the mode.
+  - `InsertAdoptedLeg` returns true, then false on conflict.
+  - `RecordLegObservation` and `AdvanceLegEmit` write only their own columns.
+- `trading_repo_test.go`:
+  - `TestKnownBrokerOrderIDs_IncludesTrackedLegAfterResize`: the trailing `bracket_legs` branch returns a blanked leg id (round-10 test 9).
+  - `TestNetFilledQtyBySymbol_AddsBracketLegsObservedQty`: a capturing matcher shows the `UNION ALL` leg branch reads `observed_filled_qty` with no status filter (round-10 test 8, pgxmock form; the sums are Step 21's).
+- New `trading_bracket_legs_test.go`:
+  - Alpaca and IBKR activation, each for long and short entries. Each writes two rows with zero cursors, OPEN, the parent's account, user, mode and symbol, and the closing side.
+  - IBKR stop-only activation writes one row.
+  - A resize keeps s1 and t1 and adds s2 and t2.
+  - An `ActivateBracket` failure at each of the three sites raises exactly one CRITICAL alert that names the cause. On the resize site the second `order.bracket_updated` emit still lands.
+- The existing `TestMaybeSubmitBracket_*`, `TestPollFills_PartialFillResizesActiveBracket` and `TestCreateBracket_FailureEmitsCriticalAlert` pass unchanged.
+- Fails-ledger rule (feature 347): the whole `service` package ran green under `-race` (`v-4.log`).
+- TDD: the RED/GREEN results above.
+- Coverage: `v-11.log` `total: (statements) 84.9%` `exit=0` (≥ 40%; `repository` and `service` are excluded from the figure).
+- `"NOT_OPEN_AT_ADOPTION"` grep: one line, the repository constant (`v-10.log`).
+- Files modified: `services/xstockstrat-trading/internal/repository/bracket_repo_test.go`, `services/xstockstrat-trading/internal/repository/trading_repo_test.go`, `services/xstockstrat-trading/internal/service/trading_bracket_test.go`, `services/xstockstrat-trading/internal/service/trading_bracket_legs_test.go`
+- Deviations: Deviation Log, "Steps 18+19+20 — Verification blocks stop after their first line" and "Step 20 — the pgxmock form of the mixed orders-plus-legs sum".
+- Context read: the execution sessions (2026-11-20 sdd-design approval to here) were read in full. The design-round sessions (lines 1-2874) were read at lines 1-33 and searched for `ActivateBracket` and `trading_mode`. The hits (filled_qty 0 on activation, empty ids skipped, a failed tx alerted and accepted, the join filling every parent-derived column) match this unit.
+- Open: `git diff --quiet origin/main-dev -- pnpm-lock.yaml` printed `rc=1`. The cause is `main-dev` commit `eb3839d9` (feature fix-orphaned-code), which changed the lockfile after the merge base `f802b184`. This branch has no commit touching `pnpm-lock.yaml`. Nothing in this unit is Node.
+
+## Session 2026-11-27 — sdd-execute sequential (sdd-batch-execute), Step 21
+
+Tooling (step 21): go1.27.0 ✓ · golangci-lint ✓ v2.14.0 (built with go1.27.0, at `/root/go/bin`, put first on `PATH` for the lint run) · `TRADING_DB_TEST_URL` ✗ (unset; no database started, per the HARD CONSTRAINTS)
+
+### Step 21 — test: real-Postgres proof for trading bracket-leg SQL (dbtest) [done]
+- New `dbtest_helpers_test.go` (`//go:build dbtest`):
+  - `testPool` reads `TRADING_DB_TEST_URL`. It skips locally and is fatal under `CI=true`, naming the `trading-db-test` job. It sets `lock_timeout` 500ms and registers `pool.Close` first, then cleans up `trading.orders`, `trading.order_brackets` and `trading.bracket_legs` by the `it-311-` prefix. The cleanups run in the reverse order: legs, brackets, orders, then the pool close.
+  - Also here: `execModes` (default and `QueryExecModeExec`), `dbtestID`, `seedParentOrder` (through `UpsertOrder`), `seedBracket` (through `CreateBracket`), the ALPACA=1 and IBKR=2 constants, and `legParent`.
+- New `bracket_legs_dbtest_test.go`: the 8 named `TestBracketLegsDB_*` cases, each run once per exec mode:
+  - activation rows;
+  - the `ON CONFLICT` duplicate guard, where the cursor stays at 4;
+  - an empty take-profit, checked as NULL with a raw SELECT;
+  - rollback, from a NUL in `Symbol`: a `PgError` with code 22021, the bracket keeping its pre-call status and `''` ids, and no leg rows;
+  - `ListTrackedLegs` ordering and the retired filter;
+  - `ListAdoptionCandidates` seeds (a)-(f) under `{3,4}` and `{3}`;
+  - `InsertAdoptedLeg`: true, then false with nothing changed, and a retired insert that drops a candidate;
+  - observation, then the emit cursor moving 4 then 10 and the leg retiring (`@AC-5` at the SQL layer).
+- New `trading_repo_legs_dbtest_test.go`:
+  - `KnownBrokerOrderIDs`: a broker id, `order_brackets`-only ids, resize-blanked ids held only in `bracket_legs`, and a retired id are all returned. An unknown id is not, the same ids under another account return nothing, and there is no `""` member.
+  - `NetFilledQtyBySymbol`: AAPL is `10 - 3 - 4 = 3`, with the retired, other-account and outside-symbol legs ignored. MSFT is held only by a leg and returns `-2`.
+- `trading_repo.go:17-18`: the false "(this service has no live-DB test harness)" was deleted, with no replacement.
+- TDD: red N/A locally — skipped without `TRADING_DB_TEST_URL`; the `trading-db-test` job (Step 22) is the proof. The mutation RED (removing the `bracket_legs` branch from `KnownBrokerOrderIDs` and `NetFilledQtyBySymbol`) needs a database and was not shown. GREEN, local layer only:
+  - `v-1.log`: `go vet -tags dbtest ./internal/repository/...` printed nothing.
+  - `v-2.log`: `-list` names all 10 cases.
+  - `v-3.log`: the `TRADING_DB_TEST_URL` grep printed `1`; `v-4.log`: the `NOT_OPEN_AT_ADOPTION` grep printed `0`.
+  - `v-5.log`: `exit 0` and `ok …/internal/repository`; all 20 subtests `--- SKIP` (count `20`).
+  - `v-6.log`: lint printed `0 issues.`.
+  - `v-7.log`: every package `ok`, `total: (statements) 84.9%`.
+- The config-wiring gate does not apply: the step declares no key.
+- Files modified: `services/xstockstrat-trading/internal/repository/dbtest_helpers_test.go`, `services/xstockstrat-trading/internal/repository/bracket_legs_dbtest_test.go`, `services/xstockstrat-trading/internal/repository/trading_repo_legs_dbtest_test.go`, `services/xstockstrat-trading/internal/repository/trading_repo.go`
+- Deviations: Deviation Log, "Step 21 — Verification block stops after its first line; the DB lines cannot run here" and "Step 21 — how Instructions 1-3 were met".
+- Step 22 needs to know: the job must set `TRADING_DB_TEST_URL` and apply every trading migration (`012` included). Its green run must show 0 `--- SKIP`. The first real run of the 22021 atomicity case is there; on a different code, use the step's non-UUID `OrderID` fallback.
+- Context read: this file was read in full (lines 1-3363) before the step.
+
+## Session 2026-11-27 — sdd-execute sequential (sdd-batch-execute), Step 22
+
+Tooling (step 22): go1.27.0 ✓ · golangci-lint ⬇ v2.14.0 (built with go1.27.0, at `/root/go/bin`, put first on `PATH` for the lint runs)
+
+### Step 22 — config: CI job `trading-db-test` and the lint build tag [done]
+- `.github/workflows/ci.yml`: added the `trading-db-test` job ("Trading DB test (TimescaleDB)") between `marketdata-db-test` and `markdown-lint`. It copies `portfolio-db-test` and uses the same comment line. Its `if:` has `xstockstrat-trading` in place of `xstockstrat-portfolio`, its `cache-dependency-path` is `services/xstockstrat-trading/go.sum`, and its test step sets `GOWORK=off`, `CI=true` and `TRADING_DB_TEST_URL`, then runs `go test -tags dbtest -race -count=1 ./internal/repository/...`. The timescaledb service, checkout, migrator build and apply-migrations steps are unchanged copies. `ci-gate` gained `- trading-db-test` in `needs:` and an echo line after `marketdata-db-test`. `services/xstockstrat-trading/.golangci.yml`: `run:` gained `build-tags: [dbtest]`, in the same form as portfolio's.
+- TDD: N/A (config). Baseline before the edit (`.sdd-logs/v-1.log`, `exit=1`) printed `0` and no URL line, four `go test -tags dbtest` lines and no `build-tags`. GREEN (`v-2.log`, `exit=1`, because line 6 hit the `cd` pattern) printed `3`, one URL line (`:1166`), six dbtest lines and `28: build-tags:`/`29- - dbtest`. It listed all 10 `TestBracketLegsDB_*`/`TestTradingRepoLegsDB_*` cases with `ok …/internal/repository`. Line 6 alone (`v-3.log`) printed `0 issues.`, `exit=0`, with the Step 21 dbtest files now linted. A YAML parse confirmed the job and the `ci-gate` needs entry.
+- Config-wiring gate (C-16, step typed `config`): `node scripts/check-config-wiring.mjs --declared-from …/product-spec.md` (`v-4.log`) gave `exit=0` with no output. The step adds no key.
+- The job's first green run, with 0 `--- SKIP`, happens only in CI. The integration PR must quote it (Instruction 4).
+- Files modified: `.github/workflows/ci.yml`, `services/xstockstrat-trading/.golangci.yml`
+- Deviations: Deviation Log, "Step 22 — Verification block stops before its last line; the job cannot run here".
+- Open: `git diff --quiet origin/main-dev -- pnpm-lock.yaml` still prints `rc=1`. As in Steps 18-20, the cause is `main-dev` commit `eb3839d9`. This branch's only lockfile commits are the two `main-dev` merges. This step is not Node.
+- Context read: this file was read in full (lines 1-3397) before the step.
+
+## Session 2026-11-27 — sdd-execute sequential (sdd-batch-execute), Steps 23+24
+
+Tooling (steps 23+24): go1.27.0 ✓ · golangci-lint ✓ v2.14.0 (built with go1.27.0, at `/root/go/bin`, put first on `PATH` for the lint runs)
+
+### Step 23 — service: bracket-leg fill observer [done]
+- Atomic unit with Step 24 (planned, **Lands with**). `pollFills` calls `s.pollBracketLegFills(ctx, brokerMap)` as its last statement, after `logTick`; `StartFillPoller` has no hunk and `polled`, `failed` and the tick record are untouched. New in `trading.go`: the constants `legGetOrderFallbackCap = 5` (A-3) and `legNotFoundRetireTicks = 3` (D-26), and `pollBracketLegFills`, `pollAccountLegs`, `recordLegNotFound`, `legOrderStatus` (`alpacaStatusToProto(strings.ToLower(…))`, A-4), `legRetireStatus`, `observeLeg`, `advanceLeg` and `emitLegFill`.
+  - Per tick: `ListTrackedLegs` (an error is one WARN and ends the tick), grouped by account in list order; an account missing from `brokerMap` is skipped. One `ListOrders` per account inside `alpacaCallContext` (A-7); `ErrInvalidCredentials` and any other error are a WARN and a skip, and nothing is retired.
+  - Listed legs are processed from the listed order. Absent legs get at most 5 `GetOrder` calls in `ListTrackedLegs` order: `ErrOrderNotFound` raises `not_found_ticks`, and the third retires the leg `UNKNOWN` with a WARN; another error is a WARN with no change; a success resets the count and processes the order.
+  - Every observed order writes `RecordLegObservation(observed_filled_qty = FilledQty, not_found_ticks = 0)`. `PARTIALLY_FILLED` above the cursor emits `order.partially_filled` and advances to OPEN; `FILLED` emits `order.filled` and advances to FILLED; `CANCELED`/`EXPIRED`/`REJECTED` emit a partial first when `FilledQty` is above the cursor (no retire if that emit fails), then retire with that status. `UNSPECIFIED` and `NEW` (held, unrecognised, IBKR `Submitted`) stay open.
+  - Events: stream key and `order_id` = the leg id; `user_id`, `trading_mode`, `account_id`, `symbol` from the row; `side` = `leg.Side.String()`; `fill_price`, `fees`; `qty` (filled) or `filled_qty` (partial) = the cumulative `FilledQty`. Synchronous `appendLedgerEvent` with key `bracket-leg:<account>:<leg>:<filled|partially_filled>:<qty>`. The row advances only on a nil return; after the first emit failure the tick skips every later leg emit, and observations are still written (D-15).
+  - It calls neither `applyBrokerOrderStatus` nor `maybeSubmitBracket`, and never writes `s.orders` or `trading.orders` (D-3, D-41). No new outbound edge.
+- TDD (unit): RED `.sdd-logs/v-1.log` `exit=1`, the right reason (the observer does not exist): `--- FAIL: TestLegPoll_EmitFailureHoldsCursorAndStopsTick` `attempts = 0, appended = 0; want 1 failed attempt`, `TestLegPoll_TerminalWithPartialFill/canceled_after_a_partial…` `events = [], want one order.partially_filled with filled_qty 3`, `TestLegPoll_GetOrderFallback/one_absent_leg_gets_one_GetOrder` `GetOrder calls = [], want [leg-1]`, then `FAIL github.com/xstockstrat/trading/internal/service 13.551s`. The package compiled, so every failure is an assertion. GREEN: Step 24 block `v-2.log` `ok github.com/xstockstrat/trading/internal/service 14.465s` (`-race`, whole package); `v-9.log` (`-v`, filtered) counts `53` `--- PASS` lines and 0 FAIL or SKIP: the 13 new `TestLegPoll_*` tests plus the unchanged `TestPollFills_*`, `TestLoopTickRecords`, `TestOrderWriters_ConcurrentCancelPollList_NoDataRace` and `TestPollFills_ThrottledAccountDoesNotStall_F347_AC34`.
+- Verification: lint `v-3.log` `0 issues.` `exit=0`; coverage `v-4.log` `total: (statements) 84.9%` `exit=0`, every package `ok` (≥ 40%; `service` is excluded); `StartFillPoller` count `v-6.log` `0`; `pollBracketLegFills` grep `v-7.log` `1878` (call after `logTick`) and `1890` (definition); the `applyBrokerOrderStatus|maybeSubmitBracket` count `v-8.log` `0`. The config-wiring gate does not apply: the step declares no key, is not typed `config` and has no migration.
+- Files modified: `services/xstockstrat-trading/internal/service/trading.go`
+- Deviations: Deviation Log, "Steps 23+24 — Verification blocks stop after their first line" and "Steps 23+24 — how the Instructions were met".
+- Steps 25-27 need to know: adoption goes inside `pollBracketLegFills`; `pollAccountLegs` is the per-account list point that adoption shares for tracked accounts (D-46). An adoption-only account is not in `byAccount` today, since grouping comes from `ListTrackedLegs` only.
+
+### Step 24 — test: leg observer and its ledger events [done]
+- Atomic unit with Step 23. `trading_bracket_test.go`: `fakeBroker` gains `listOrdersFn`, a `getOrderCalls` id list, a `listOrdersCalls` counter and `calls()`; `ListOrders` still panics without `listOrdersFn`. `trading_telemetry_test.go`: the `fill_poller idle`/`skipped` tick cases and `TestPollFills_TickRecordUsesInjectedClock` set `bracketRepo: &fakeBracketRepo{}`; no assertion changed and no nil guard was added to production code.
+- New `trading_bracket_leg_poll_test.go` (inline `legLedger` with per-attempt failure, `trackLeg`, `mustLegRow` over the existing `legRow`, `listing`):
+  - `@AC-4`: Alpaca `filled` and IBKR `Filled`, each one `order.filled` with stream key and `order_id` `leg-tp-1`, `side` `ORDER_SIDE_SELL`, `qty` 10, `fill_price` 110, the parent's account, mode and user, `fees`, source `xstockstrat-trading` (251 `@AC-10` EXTEND) and key `bracket-leg:acct-L:leg-tp-1:filled:10`; the row is FILLED 10; a second tick makes no list.
+  - `@AC-5`: partial 4 at 110 (row OPEN 4), the same partial again (no emit), filled 10 at 110, then a third tick: exactly two appends.
+  - D-19: a leg written by `ActivateBracket` and filled at first sight emits once; held and unrecognised statuses (`held`, `done_for_day`, `PreSubmitted`, `Submitted`, `new`, `accepted`, an unknown) stay open.
+  - D-28 keys across two accounts with the same leg id; one `ListOrders` per account per tick.
+  - D-15 emit failure; cancel with a partial (and its failed-emit case); expired with no fill.
+  - Fallback: one call for one absent leg; five of six, activated rows first and the adopted one skipped.
+  - Not found: three Alpaca not-founds retire UNKNOWN with one WARN; a success between resets; an IBKR ordinary error never retires.
+  - `ListOrders` errors (ordinary and `ErrInvalidCredentials`): one WARN, nothing retired, no `GetOrder`; a `ListTrackedLegs` error ends the tick; an account missing from the pool is not listed.
+  - 294 `@AC-6`: the tick record and the parent `GetOrder` calls are identical with and without tracked legs. 347 `@AC-34` passes unchanged.
+- `trading_order_race_test.go` and `trading_rate_limit_test.go` needed no edit: their services already carry a `fakeBracketRepo` (Deviation Log).
+- TDD: the RED/GREEN results above; `@AC-4` and `@AC-5` (ledger-event half) are green.
+- Files modified: `services/xstockstrat-trading/internal/service/trading_bracket_leg_poll_test.go`, `services/xstockstrat-trading/internal/service/trading_bracket_test.go`, `services/xstockstrat-trading/internal/service/trading_telemetry_test.go`
+- Deviations: the same Deviation Log entries (Steps 23+24).
+- Open: the A-10 residual (a leg fill reaching the analysis consumer when no P&L window is open; review item "check at Step 22, when the leg emit order is in code", old numbering) is not checked here: whether a leg fill can arrive after its position's `position.closed` was not examined. Target: Step 29's trading findings.
+- Open: `git diff --quiet origin/main-dev -- pnpm-lock.yaml` still prints `rc=1`, as at Step 22 (cause recorded there: `main-dev` commit `eb3839d9`); this unit is not Node.
+- Context read: the execution sessions (2026-11-20 sdd-design approval to here) were read in full. The design-round sessions (lines 1-2874, about 340 KB) were read at lines 1-33 and the round-11 Open Threads; they were not read line by line.
+
+## Session 2026-11-27 — sdd-execute sequential (sdd-batch-execute), Steps 25+26+27
+
+Tooling (steps 25+26+27): go1.27.0 ✓ · golangci-lint ✓ v2.14.0 (built with go1.27.0, at `/root/go/bin`, put first on `PATH` for the lint runs)
+
+### Step 25 — service: shared poll-throttle helper and adoption state [done]
+- Atomic unit with Steps 26 and 27 (planned, **Lands with**). The body of `shouldPollHaltedAccount` is now `pollAllowedLocked(last *map[string]time.Time, accountID, intervalMs, now)`, called with `haltedMu` held; it creates a nil map before writing. `shouldPollHaltedAccount` keeps its signature and calls it with `&s.haltedLastPolled` and `time.Now()`. New fields `adoptionLastListed` and `adoptionLastCandidates`, guarded by `haltedMu`, in memory only and nil (empty) at boot. `haltAccount`, `ResumeAccountSvc` and `reconcileTick` are unchanged (R-40).
+- TDD: one red→green cycle for the unit (below).
+- Files modified: `services/xstockstrat-trading/internal/service/trading.go`
+- Deviations: Deviation Log, "Steps 25+26+27 — Verification blocks stop after their first line" and "Steps 25+26+27 — how the Instructions were met".
+
+### Step 26 — service: adoption of pre-existing open legs [done]
+- Atomic unit with Steps 25 and 27. `pollBracketLegFills` first calls `ListAdoptionCandidates(ctx, {ACTIVE, CANCELING})`; an error is one WARN `bracket leg poll: list adoption candidates failed` and adopts nothing, and tracked accounts are still listed and observed. Tracked accounts share their one `ListOrders` (`listLegOrders`, the Step 23 call and WARNs moved unchanged) between `pollAccountLegs` and `adoptLegs`. Adoption-only accounts are gated by `adoptionListAllowed`: known-invalid credentials skip silently; the interval is `haltedPollInterval()` when halted, else `reconciliation.interval_ms` with `<= 0` read as 60000; a candidate id unseen at the last allowed list bypasses the cooldown; then the helper over `adoptionLastListed` with `s.clock()`, stamped and the candidate set stored before the call.
+- `adoptLegs` makes no `GetOrder` call and no emit: listed open at fill 0 → `OPEN`; listed open at fill > 0 → `BASELINE_RETIRED` with `observed_filled_qty = FilledQty`; listed terminal → `NOT_OPEN_AT_ADOPTION`; absent → tombstone only when the list is non-empty and (IBKR, or shorter than `broker.ListOrdersLimit`). Both quantities 0 otherwise. INFO `bracket leg poll: adoption tombstone` (`reason`, `account_id`, `leg_order_id`, `order_id`) per inserted tombstone; a failed `InsertAdoptedLeg` is one WARN per tick. No hunk in `StartFillPoller` or `reconcileTick`; `StartReconciliationPoller`'s local default now reads the new package constant `reconcileDefaultIntervalMs` (one line, behaviour unchanged). No config key added.
+- TDD (unit): RED `.sdd-logs/v-1.log` `exit=1`, the right reason (adoption absent; the package compiled, every failure is an assertion): e.g. `TestAdoption_AdoptedOpenAccountIsListedNextTickInsideCooldown` `ListOrders over 2 ticks = 0, want 2`, `TestAdoption_TrackedAccountAdoptsOnEveryTick` `no bracket_legs row for acct-A/leg-c`, `TestHaltedAndAdoptionThrottles_Independent/adoption_first` `ListOrders = 1, want 2`, then `FAIL github.com/xstockstrat/trading/internal/service 13.496s`. GREEN: Step 27 block `v-2.log` `ok github.com/xstockstrat/trading/internal/service 15.212s` (`-race`, whole package); `v-11.log` (`-v`, filter `Adoption|ThrottlesAndRecovers|Throttles_Independent|ReconcileTick_HaltedAccount|LegPoll`) counts `74` `--- PASS` lines and `0` FAIL or SKIP.
+- Verification: build clean (`v-3.log`, `v-4.log`); `ShouldPollHaltedAccount|ReconcileTick_HaltedAccount` `ok` (`v-5.log`); lint `0 issues.` (`v-6.log`); the `reconcileTick|StartFillPoller` count `0` (`v-9.log`, against a 444-line diff); the migrations `adoption`/`config` count `0` (`v-10.log`). The config-wiring gate does not apply: the step is not typed `config`, has no migration, and the product spec has no `## Config Key Changes` section; the two keys read are already seeded.
+- Files modified: `services/xstockstrat-trading/internal/service/trading.go`
+- Deviations: the same Deviation Log entries (Steps 25+26+27).
+
+### Step 27 — test: adoption classifier, complete-list gate and throttle [done]
+- Atomic unit with Steps 25 and 26. New `trading_bracket_adoption_test.go` (injected `adoptClock`, `floatCfg` over `MustSnapshotWatcher` with relative keys, `seedCandidate`, explicit broker type per fixture; reuses `newLegPollSvc`, `legLedger`, `listing`, `trackLeg`, `mustLegRow`, `legRow`, `legCount`, `captureLogs`, `logsWithMsg`): the round-8/9 cases (open at 0 incl. `held` and IBKR `Submitted`, open with fill → `BASELINE_RETIRED` with no append, CANCELED/FAILED brackets never candidates, second run a no-op, an adopted leg's later fill emits the full Step 23 payload, no candidates and no tracked rows → no list, candidate-query error), round-10 cases 1-7 (listed terminal, Alpaca 499 / 500, empty IBKR, an IBKR 600-row list, list error, insert error one WARN then retried, mixed account one list and no `GetOrder`) and round-11 cases 11-17, 19 and 20. The throttle tests count `ListOrders` over N ticks and advance the clock; none writes the maps. `trading_reconciliation_test.go`: `TestHaltedAndAdoptionThrottles_Independent` (case 18, both orders); `TestShouldPollHaltedAccount_ThrottlesAndRecovers` unchanged and green (`v-7.log`).
+- TDD: the RED/GREEN results above. Coverage `v-8.log` `total: (statements) 84.9%` `exit=0` (≥ 40%; `service` is excluded).
+- Files modified: `services/xstockstrat-trading/internal/service/trading_bracket_adoption_test.go`, `services/xstockstrat-trading/internal/service/trading_reconciliation_test.go`
+- Deviations: the same Deviation Log entries (Steps 25+26+27).
+- Open: the 2026-11-20 impl-spec review item "Steps 23-25 (D-50) … orchestrator assumption" (old numbering) was cleared by the operator's 2026-11-21 confirmation; its box in that session's Open Threads stays unticked because that entry is append-only history.
+- Open: `git diff --quiet origin/main-dev -- pnpm-lock.yaml` still prints `rc=1` (cause recorded at Step 22: `main-dev` commit `eb3839d9`); this unit is not Node.
+- Context read: the execution sessions (2026-11-20 sdd-design approval to here) were read in full. The design-round sessions (lines 1-2874) were not read line by line; `debate.md` rows D-40, D-42, D-46, D-48, D-49, D-50, R-7, R-10, R-12, R-35..R-40 and O-66..O-68 were read for this unit.
+
+## Session 2026-11-27 — sdd-execute sequential (sdd-batch-execute), Step 28
+
+Tooling (step 28): none needed (docs step; the Verification block is `ls` and `grep` only).
+
+### Step 28 — docs: cutover runbook [done]
+- New `docs/runbooks/position-fold-cutover.md` has 8 numbered sections. §1 holds the six O-61 confirmations as yes/no lines: the DO stop method (the four `${xstockstrat-portfolio.PRIVATE_DOMAIN}:50052` references are at `.do/app.dev.yaml:80,321,377,635`; `design.md` cites the older `:78`/`:319`), the homelab `docker compose stop`, the `gate deploy` exit code, Alpaca listing legs as top-level orders, trading while portfolio is stopped, and the unenforced freeze. The stop methods are the ones the operator ruled on 2026-11-21. §2 is the cutover step, per staging target. It records `T_stop` from the server clock (`SELECT now()`), the `portfolio.consumer_floors` value for `consumer = 'order_fill'`, the boot line `order fill floor loaded … stamped_now=true`, and the `ledger.events` `order.filled` count in `[T_stop, floor)`; it gives the SQL and a result block. §3 lists the accepted consequences. §4 is the D-44 floor delete. §5 is the D-47 production counts. §6 is parked-row redelivery (`outcome = 'parked'`, by key, then a restart). §7 is the tombstone undo (`status = 'NOT_OPEN_AT_ADOPTION'`). §8 is out of scope (OQ-2, `instance_count`).
+- The homelab clock check was partly resolved from the repo. `deploy/homelab/compose.yml:15,21` gives the direct (`:5432`) and pooled (`:6432`) DSNs the same `DB_HOST` and `DB_NAME`. The runbook asks the operator to confirm that the pooler forwards to the same server.
+- `docs/runbooks/CLAUDE.md`: index row added after `operator-db-access.md` (alphabetical). `merge-order.md`: new section "Integration-PR checklist: 311 position-fold cutover (2026-11-27, unenforced)" with the checklist item.
+- TDD: N/A (docs). Verification `.sdd-logs/v-1.log`, `exit=0`. It lists the runbook, the index row (`:14`) and the `T_stop` lines in `merge-order.md` (`:467`, `:472`). The `grep -P|^pip` count printed `0`, and all four of `consumer_floors`, `stamped_now`, `bracket_legs` and `consumer_applied_events` matched. The config-wiring gate does not apply: the step declares no key.
+- Files modified: `docs/runbooks/position-fold-cutover.md`, `docs/runbooks/CLAUDE.md`, `docs/roadmap/features/merge-order.md`
+- Deviations: none.
+- Open: the O-61 confirmations are now runbook lines (§1). The operator answers them before the cutover. They are still unanswered.
+- Context read: the execution sessions, from the 2026-11-20 sdd-design approval onward, and the four operator-ruling sessions were read in full. The design-round JSON state blocks (lines 42-2874) were not read line by line. `design.md` §4 and the O-61 list were read instead.
+
+## Session 2026-11-27 — sdd-execute sequential (sdd-batch-execute), Step 29
+
+Tooling (step 29): none needed (docs step; the Verification block is `grep` and `git diff` only).
+
+### Step 29 — docs: service documentation, findings and the CI table [done]
+- Portfolio `CLAUDE.md` `order.filled` row: the live fold is signed from `side`, exactly-once per `(consumer, user_id, account_id, order_id)` through `consumer_applied_events` above the `consumer_floors` boot floor; the other consumers still replay from 0; runbook link. `position-closed-contract.md`: the v1 "buying more" paragraph is replaced by the signed fold, the flip (closed for the old position, then opened for a fresh row with accumulators 0) and the named O-30 flip-short window residual. PORTFOLIO-3: the `order_fill` dedup and floor, with `positionsMu` and `instance_count: 1` still required for the other consumers.
+- Trading `CLAUDE.md`: a `trading.bracket_legs` bullet after `order_brackets`; the `order.filled` / `order.partially_filled` rows name the leg emit (leg id as `order_id` and stream key); the `reconciliation.interval_ms` row names the adoption cooldown (`<= 0` reads as 60000) and the halted interval. `reconciliation.md`: the bracket-leg residual now says tracked legs count through `observed_filled_qty`; forward-only (D-42) legs, `BASELINE_RETIRED` remainders and tombstones still do not.
+- Trading findings: (c) the `interval_ms <= 0` drift is a "Documentation that lies" row; (a) the parent-path IBKR status mapping, (b) `BrokerOrder.Fees` never set and (d) the analysis consumer receiving leg ids are "Latent bugs" rows. (d) records the A-10 residual as not checked (a leg fill after its position's `position.closed`). `ci-overview.md`: `trading-db-test` row after `marketdata-db-test`. Root `CLAUDE.md` untouched.
+- TDD: N/A (docs). Baseline `.sdd-logs/v-1.log` (`exit=0`) printed only `1` (the `buying more` count). GREEN `v-2.log` `exit=0`: `consumer_applied_events` at portfolio `CLAUDE.md:95` and `context-constitution.md:16`; `bracket_legs` at trading `CLAUDE.md:112` and `reconciliation.md:79`; `buying more` count `0`; findings rows `:32-34`; `ci-overview.md:29`; the root `CLAUDE.md` diff empty.
+- Final gate: `node scripts/check-config-wiring.mjs --final` (`v-3.log`) `exit=0`; two `REPORTED:` baseline lines (analysis `fundamentals.provider`, trading `platform/trading_state` readers-disagree), neither from this feature. All 29 steps done: status `in-progress` → `code-completed`.
+- Files modified: `services/xstockstrat-portfolio/CLAUDE.md`, `services/xstockstrat-portfolio/docs/position-closed-contract.md`, `services/xstockstrat-portfolio/docs/context-constitution.md`, `services/xstockstrat-trading/CLAUDE.md`, `services/xstockstrat-trading/docs/reconciliation.md`, `services/xstockstrat-trading/docs/context-constitution-findings.md`, `docs/patterns/ci-overview.md`
+- Deviations: none.
+- Open: the contract doc's "redelivered-post-close `existing == nil` edge" sentence was left as is (out of this step's instruction); under the signed fold a fill with no row opens a position, so that edge may no longer occur. The O-61 runbook confirmations, the integration PR's first `trading-db-test` run and the unenforced cutover checklist remain for integration.
+- Context read: the execution sessions (2026-11-20 sdd-design approval onward) and the operator-ruling sessions were read in full; the design-round JSON blocks (lines 34-2874) were searched for the flip and O-30 text, not read line by line.
+
+## Session 2026-11-27 — sdd-batch-execute promotion plan (awaiting operator confirm)
+
+```sdd-batch-promotion-plan
+## Promotion plan — fix-position-fold-correctness (feature 311)
+
+Source: /home/user/xstockstrat/docs/roadmap/features/311-fix-position-fold-correctness/acceptance.feature. I read the working-tree copy, which already carries the signed-off @AC-5 amendment (qty 10, D-38). I did not read it from origin/feature/fix-position-fold-correctness; I could not check that the branch copy matches.
+
+### Verdicts
+| @AC | target suite (path) | CREATE/APPEND | verdict | note |
+|---|---|---|---|---|
+| @AC-1 | services/xstockstrat-portfolio/acceptance/fix-position-fold-correctness.feature | CREATE | NEW | Subject is the portfolio position row after a restart of the order.filled consumer. |
+| @AC-2 | services/xstockstrat-portfolio/acceptance/fix-position-fold-correctness.feature | CREATE | NEW | Subject is the portfolio row qty with two portfolio processes. |
+| @AC-3 | services/xstockstrat-portfolio/acceptance/fix-position-fold-correctness.feature | CREATE | NEW | The live fold closes the row and emits portfolio.position.closed. This is distinct from the feature-251 GetPnL query-time folds in fix-getpnl-source-service.feature. |
+| @AC-4 | docs/sdd/business-rules/platform.feature | APPEND | NEW | Cross-service contract: trading emits a ledger fill event for a bracket leg, then portfolio GetPnL realizes it. See Notes. |
+| @AC-5 | docs/sdd/business-rules/platform.feature | APPEND | NEW | Same contract as @AC-4, and also asserts the position qty is 0. It is complementary to 251 @AC-17, not a duplicate; see Notes. |
+
+### Ready-to-write blocks
+
+--- /home/user/xstockstrat/services/xstockstrat-portfolio/acceptance/fix-position-fold-correctness.feature (CREATE) ---
+# Promoted from docs/roadmap/features/311-fix-position-fold-correctness/acceptance.feature at launch
+# (Constitution C-16). Source-feature provenance is carried on every scenario's `@feature-311` tag.
+# Durable business rules xstockstrat-portfolio already guarantees — a rule enters only by promotion
+# from a reviewed feature acceptance.feature, never by hand-authoring. These cover the live position
+# fold applying each order.filled fill exactly once and with the correct sign.
+
+Feature: xstockstrat-portfolio — the live position fold applies each fill exactly once, with the correct sign
+  Regression guard for clustered defect reports: the portfolio live position fold applies each fill
+  exactly once, with the correct sign, including bracket-leg exits.
+
+  # guards: docs/reports/2026-10-06-portfolio-fill-fold-not-exactly-once-defect.md
+  @AC-1 @regression @feature-311
+  Scenario: A portfolio restart does not re-apply already-folded fills
+    Given a broker-account position for "AAPL" with qty 10, cost_basis 1000 and realized_accum 250
+    And no account.positions.synced event arrives
+    When xstockstrat-portfolio restarts and its order.filled consumer resumes
+    Then the "AAPL" row still has qty 10, cost_basis 1000 and realized_accum 250
+
+  # guards: docs/reports/2026-10-06-portfolio-fill-fold-not-exactly-once-defect.md
+  @AC-2 @regression @feature-311
+  Scenario: Two concurrently running portfolio processes apply one fill once
+    Given two xstockstrat-portfolio processes consume the same ledger against the same database
+    And a broker-account position for "AAPL" with qty 10
+    When one order.filled event for a buy of 5 "AAPL" is appended
+    Then the "AAPL" row has qty 15
+
+  # guards: docs/reports/2026-10-21-portfolio-live-fold-sell-sign-loss-defect.md
+  @AC-3 @regression @feature-311
+  Scenario: A sell fill closes the position and seals realized P&L
+    Given a broker account that bought 10 "AAPL" at 100 via order.filled
+    When an order.filled event for a sell of 10 "AAPL" at 150 is folded before any positions sync
+    Then the "AAPL" position row is closed
+    And portfolio.position.closed is emitted with realized_pnl 500
+
+--- /home/user/xstockstrat/docs/sdd/business-rules/platform.feature (APPEND) ---
+  # Promoted from feature 311 (fix-position-fold-correctness). Cross-service: trading emits the bracket-leg fill
+  # to the ledger and portfolio folds it into positions and GetPnL realized.
+  # guards: docs/reports/2026-10-21-trading-bracket-leg-fills-missing-from-realized-pnl-defect.md
+  @AC-4 @regression @feature-311
+  Scenario: A bracket take-profit leg fill reaches the ledger and realized P&L
+    Given trading.risk.bracket_orders_enabled is true
+    And an auto-sized market buy of 10 "AAPL" at 100 with a stop price filled and recorded its legs in trading.order_brackets
+    When the take-profit leg fills at the broker for 10 "AAPL" at 110
+    Then the ledger holds a fill event for that leg with symbol "AAPL", side sell, qty 10, price 110, and the order's account, trading mode and user
+    And GetPnL realized for the round trip is 100
+
+  # guards: docs/reports/2026-10-21-trading-bracket-leg-fills-missing-from-realized-pnl-defect.md
+  # amended 2026-11-20 (C-15, ID kept; C-16 CHANGE signed off by the operator, design.md D-38): the full-fill
+  # event carries the leg total (qty 10) at the cumulative average price, not the remaining 6, so it agrees
+  # with feature 251 @AC-17 (an order.filled qty is the order total). "qty 4" is the partial's cumulative filled_qty.
+  @AC-5 @regression @feature-311
+  Scenario: A bracket leg that fills in two parts reaches the ledger as a partial then a full fill
+    Given trading.risk.bracket_orders_enabled is true
+    And an auto-sized market buy of 10 "AAPL" at 100 with a stop price filled and recorded its legs in trading.order_brackets
+    When the take-profit leg reports ORDER_STATUS_PARTIALLY_FILLED for 4 "AAPL" at 110, then ORDER_STATUS_FILLED for the remaining 6 at 110
+    Then the ledger holds an order.partially_filled event with qty 4 and an order.filled event with qty 10 at average fill price 110 for that leg
+    And the "AAPL" position quantity is 0
+    And GetPnL realized for the round trip is 100
+
+### Notes / ambiguities / conflicts
+- **No @FR tags in the source.** The source acceptance.feature carries only @AC-n and @regression, and product-spec.md has no FR-n identifiers. I did not invent @FR tags, because the promoter must not add them. The business-rules/CLAUDE.md convention asks for at least one @FR per scenario. The orchestrator should accept the missing @FR tags or ask for a human ruling. The tag order @AC-n @regression @feature-311 follows 251's pattern.
+- **Attribution call for @AC-4 and @AC-5 (platform vs trading).** Their Then clauses assert across two services:
+  - A trading-owned ledger emit: fill events for bracket legs, plus the partial and then full events.
+  - Portfolio-owned outputs: GetPnL realized and the position qty.
+  - No single service owns the end-to-end guarantee, so I routed both to platform.feature (cross-service contract).
+  - The alternative is services/xstockstrat-trading/acceptance/fix-position-fold-correctness.feature, since the defect is trading's missing emit. Choose that only if the humans want the rule kept service-local.
+- **@AC-5 vs 251 @AC-17** (/home/user/xstockstrat/services/xstockstrat-portfolio/acceptance/fix-getpnl-source-service.feature:103). That scenario folds a partial then a full order.filled of qty 10 into realized P&L. It is not an OVERLAP, because the subject here is the trading emit for a bracket leg plus the live position qty. The amended qty 10 makes the two agree. design.md also says 311 EXTENDs 251 @AC-17, with a two-account dedup-key test in that suite. That EXTEND is test-only and is not part of this promotion, since a rule enters only from this feature's own acceptance.feature.
+- **Other EXTEND and PRESERVE items in design.md.** These cover 206 @AC-1, 294 @AC-56 and 251 @AC-10 in other suites. They are not scenarios of this feature, so they are out of scope here and I changed nothing.
+- **No CONFLICT.**
+  - No existing suite contains @feature-311.
+  - The portfolio suite has no scenario for a restart not re-applying fills, for concurrent processes, or for a live-fold sell closing the position.
+  - Trading and platform have no bracket-leg ledger-fill scenario. Grep hits for "bracket" in trading's alpaca-adaptive-rate-limit and signal-map-instrumentation concern cancels, the watchdog and metrics, not leg fills.
+- **Creation and idempotency.** The portfolio suite file does not exist yet and must be CREATEd. The acceptance/ directory exists already. Re-running is idempotent: the @AC-n plus @feature-311 pair will then be DUP.
+
+### Coverage check
+- Source scenarios: 5 (@AC-1..@AC-5). Planned (NEW+DUP+OVERLAP): 5 (5 NEW, 0 DUP, 0 OVERLAP, 0 CONFLICT). Nothing skipped. Counts match.
+```
+
+## Session 2026-11-27 — O-61 preconditions: operator answers recorded by the orchestrator (verbatim)
+
+Runbook `docs/runbooks/position-fold-cutover.md` §1 (staging only; production never launched). Operator answers, 2026-11-27:
+
+| # | Precondition | Answer | Basis |
+|---|---|---|---|
+| 2 | Homelab stop method (`docker compose stop xstockstrat-portfolio`, nothing restarts it before the deploy) | **yes** — operator: "I accept them" | Repo: the compose file's only restart policy at service level is `unless-stopped`, which keeps a manually stopped container stopped. |
+| 4 | Alpaca returns bracket legs as top-level orders in every open state | **yes** — operator: "I'm fine with your call on #4" | `alpaca.go` lists `GET /v2/orders?status=all&limit=500` with no `nested`; Alpaca's docs return each leg as its own order without `nested=true`. The docs do not define `held` or state the default of `nested`; the 500-row truncation is covered by the Step 27 complete-list gate. |
+| 5 | Trading's behaviour while portfolio is stopped (risk check only warns, reconciliation skips, `flattenAndHalt` cannot flatten) | **accepted** — operator: "I accept them" | Staging only. |
+| 6 | The freeze and the stop-before-merge order are manual, enforced by no tool | **accepted** — operator: "I accept them" | Only the §2 recorded evidence shows an overlap. |
+| 1 | DO accepts a spec with the `xstockstrat-portfolio` service removed (four references remain at `.do/app.dev.yaml:80,321,377,635`) | **open** | Needs a `doctl apps propose` dry run by the operator. |
+| 3 | Homelab `gate deploy` exits non-zero when the VM rolls a release back | **open** | The `gate` script is on the VM, not in this repo; the workflow step runs under `bash -e`, so a non-zero exit would fail the job. Needs the VM script read. |
+
+The cutover does not start until #1 and #3 are answered "yes".
+
+## Session 2026-11-27 — O-61 #1 dry run, supplied by the operator (verbatim)
+
+The operator ran `doctl apps propose --app "$APP_ID" --spec spec-no-portfolio.yaml` against `xstockstrat-staging` (the live spec with only the `xstockstrat-portfolio` service removed; the four `${xstockstrat-portfolio.PRIVATE_DOMAIN}:50052` references left in place) and pasted the output:
+
+```
+• no
+  suggested app name xstockstrat-staging-2 · is static? no
+  static app usage 0 of 3 free · $/month 90.00 · $/month on higher tier n/a
+  $/month on lower tier n/a
+```
+
+Reading: DO returned a cost and name summary and no validation error for the spec. "suggested app name xstockstrat-staging-2" is the name-availability line (the name is already taken by the existing app), not an error. So DO's propose endpoint accepts the spec with the portfolio service removed. Limit of the evidence: `propose` validates the spec and does not deploy it, so it does not prove that the four dangling references resolve at deploy time. If the real deploy of that spec fails, DO leaves the running app unchanged and the stop is done another way (e.g. the references are replaced for the stop window); nothing is half-applied. Precondition #1: **yes**, with that limit. Precondition #3 stays open.
+
+## Session 2026-11-27 — O-61 #3, homelab `app-deploy` rollback exit code, supplied by the operator (verbatim)
+
+On the homelab staging VM the operator read the `gate` forced command, `/usr/local/bin/app-deploy`, and pasted the relevant output. The script starts with `set -euo pipefail`, and `die()` exits 2. The `deploy` action's health-failure branch (lines 78-100):
+
+```bash
+    switch_to "$rel"
+    if compose "$rel" up -d --pull never --remove-orphans --wait --wait-timeout "$wait_seconds"; then
+      echo "deployed $release"
+      ...
+    else
+      echo "release $release did not become healthy" >&2
+      if [[ -n "$previous" && -d "$previous" ]]; then
+        switch_to "$previous"
+        compose "$previous" up -d --pull never --remove-orphans --wait --wait-timeout "$wait_seconds" \
+          && echo "rolled back to $(basename "$previous")" >&2
+      fi
+      exit 1
+    fi
+```
+
+Reading: when the new release does not become healthy within `--wait-timeout`, the script rolls back to the previous release and then runs `exit 1` unconditionally: the `exit 1` sits after the `if [[ -n "$previous" ... ]]` block, so it runs whether or not the rollback succeeded, and also when there is no previous release. A failing rollback `compose ... && echo` does not abort (it is a `&&` list under `set -e`) and still reaches `exit 1`. The workflow step runs `gate deploy` under `bash -e` with `gate deploy` as the last command of the pipeline, so its exit status fails the CI step. An unattended rollback therefore cannot leave the job green. Precondition #3: **yes**. Not covered by this evidence: a release that never starts failing health within the timeout, i.e. a portfolio that crash-loops slower than `--wait-timeout`; §2's boot-log check (step 6) and the §2 per-database record are the guard for that.
+
+## O-61 status (all six answered)
+
+| # | Answer |
+|---|---|
+| 1 | yes (doctl propose accepted the spec; see the dry-run entry for its limit) |
+| 2 | yes |
+| 3 | yes |
+| 4 | yes |
+| 5 | accepted |
+| 6 | accepted |
+
+The cutover preconditions in `docs/runbooks/position-fold-cutover.md` §1 are met for staging. The cutover itself (§2) has not been run.

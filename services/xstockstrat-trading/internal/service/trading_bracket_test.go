@@ -3,6 +3,8 @@ package service
 import (
 	"context"
 	"fmt"
+	"slices"
+	"sort"
 	"sync"
 	"testing"
 	"time"
@@ -29,9 +31,12 @@ type fakeBroker struct {
 	cancelOrderFn       func(ctx context.Context, brokerOrderID string) error
 	getOrderFn          func(ctx context.Context, brokerOrderID string) (*broker.BrokerOrder, error)
 	replaceOrderFn      func(ctx context.Context, brokerOrderID string, req broker.OrderRequest) (*broker.BrokerOrder, error)
+	listOrdersFn        func(ctx context.Context) ([]broker.BrokerOrder, error)
 
 	mu               sync.Mutex
 	cancelOrderCalls []string
+	getOrderCalls    []string
+	listOrdersCalls  int
 }
 
 func (f *fakeBroker) SubmitOrder(ctx context.Context, req broker.OrderRequest) (*broker.BrokerOrder, error) {
@@ -59,6 +64,9 @@ func (f *fakeBroker) ReplaceOrder(ctx context.Context, brokerOrderID string, req
 }
 
 func (f *fakeBroker) GetOrder(ctx context.Context, brokerOrderID string) (*broker.BrokerOrder, error) {
+	f.mu.Lock()
+	f.getOrderCalls = append(f.getOrderCalls, brokerOrderID)
+	f.mu.Unlock()
 	if f.getOrderFn != nil {
 		return f.getOrderFn(ctx, brokerOrderID)
 	}
@@ -84,10 +92,21 @@ func (f *fakeBroker) SubmitBracketLegs(ctx context.Context, parentBrokerOrderID,
 	panic("fakeBroker.SubmitBracketLegs not implemented")
 }
 
-// ListOrders (feature 102) — not exercised by any of this file's bracket-state-machine
-// tests, so it panics like every other unused method on this fake.
+// ListOrders panics without listOrdersFn, so a test that reaches the leg observer's list by accident fails loudly.
 func (f *fakeBroker) ListOrders(ctx context.Context) ([]broker.BrokerOrder, error) {
+	f.mu.Lock()
+	f.listOrdersCalls++
+	f.mu.Unlock()
+	if f.listOrdersFn != nil {
+		return f.listOrdersFn(ctx)
+	}
 	panic("fakeBroker.ListOrders not implemented")
+}
+
+func (f *fakeBroker) calls() (lists int, gets []string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.listOrdersCalls, append([]string(nil), f.getOrderCalls...)
 }
 
 var _ broker.Broker = (*fakeBroker)(nil)
@@ -102,6 +121,17 @@ type fakeBracketRepo struct {
 	byOrder   map[string]*repository.OrderBracketRecord
 	nextID    int
 	createErr error
+
+	// trading.bracket_legs rows by fakeLegKey; legTouched is the write order standing in for updated_at.
+	legs       map[string]*repository.BracketLegRecord
+	legTouched map[string]int
+	legSeq     int
+	// parents are the trading.orders rows ListAdoptionCandidates joins, by order id.
+	parents map[string]*tradingv1.Order
+
+	activateErr       error
+	listCandidatesErr error
+	insertAdoptedErr  error
 }
 
 func (f *fakeBracketRepo) CreateBracket(ctx context.Context, rec *repository.OrderBracketRecord) error {
@@ -172,6 +202,142 @@ func (f *fakeBracketRepo) ListExpiredProtection(ctx context.Context, now time.Ti
 		}
 	}
 	return out, nil
+}
+
+func fakeLegKey(accountID, legID string) string { return accountID + "|" + legID }
+
+// putLeg mirrors ON CONFLICT (account_id, leg_order_id) DO NOTHING; the caller holds f.mu.
+func (f *fakeBracketRepo) putLeg(rec *repository.BracketLegRecord) bool {
+	key := fakeLegKey(rec.AccountID, rec.LegOrderID)
+	if f.legs == nil {
+		f.legs = map[string]*repository.BracketLegRecord{}
+		f.legTouched = map[string]int{}
+	}
+	if _, ok := f.legs[key]; ok {
+		return false
+	}
+	cp := *rec
+	f.legs[key] = &cp
+	f.touchLeg(key)
+	return true
+}
+
+func (f *fakeBracketRepo) touchLeg(key string) {
+	f.legSeq++
+	f.legTouched[key] = f.legSeq
+}
+
+func (f *fakeBracketRepo) ActivateBracket(ctx context.Context, id string, stopLegID, takeProfitLegID string, parent repository.BracketLegParent) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.activateErr != nil {
+		return f.activateErr
+	}
+	rec, ok := f.byID[id]
+	if !ok {
+		return fmt.Errorf("fakeBracketRepo: no bracket %s", id)
+	}
+	rec.Status = bracketStatusActive
+	rec.StopLegOrderID = stopLegID
+	rec.TakeProfitLegOrderID = takeProfitLegID
+	rec.FailReason = ""
+	for _, legID := range []string{stopLegID, takeProfitLegID} {
+		if legID == "" {
+			continue
+		}
+		f.putLeg(&repository.BracketLegRecord{
+			AccountID: parent.AccountID, LegOrderID: legID, OrderID: parent.OrderID, UserID: parent.UserID,
+			TradingMode: parent.TradingMode, Symbol: parent.Symbol, Side: parent.Side, Status: repository.LegStatusOpen,
+		})
+	}
+	return nil
+}
+
+func (f *fakeBracketRepo) ListTrackedLegs(ctx context.Context) ([]*repository.BracketLegRecord, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	var keys []string
+	for key, leg := range f.legs {
+		if !slices.Contains(repository.RetiredLegStatuses, leg.Status) {
+			keys = append(keys, key)
+		}
+	}
+	sort.Slice(keys, func(i, j int) bool {
+		a, b := f.legs[keys[i]], f.legs[keys[j]]
+		if a.Adopted != b.Adopted {
+			return !a.Adopted
+		}
+		return f.legTouched[keys[i]] < f.legTouched[keys[j]]
+	})
+	out := make([]*repository.BracketLegRecord, 0, len(keys))
+	for _, key := range keys {
+		cp := *f.legs[key]
+		out = append(out, &cp)
+	}
+	return out, nil
+}
+
+func (f *fakeBracketRepo) ListAdoptionCandidates(ctx context.Context, statuses []int32) ([]*repository.BracketLegRecord, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.listCandidatesErr != nil {
+		return nil, f.listCandidatesErr
+	}
+	var out []*repository.BracketLegRecord
+	for _, b := range f.byID {
+		parent, ok := f.parents[b.OrderID]
+		if !ok || !slices.Contains(statuses, b.Status) {
+			continue
+		}
+		for _, legID := range []string{b.StopLegOrderID, b.TakeProfitLegOrderID} {
+			if _, tracked := f.legs[fakeLegKey(b.AccountID, legID)]; legID == "" || tracked {
+				continue
+			}
+			out = append(out, &repository.BracketLegRecord{
+				AccountID: b.AccountID, LegOrderID: legID, OrderID: b.OrderID, UserID: parent.UserId,
+				TradingMode: parent.TradingMode.String(), Symbol: parent.Symbol, Side: closingSide(parent.Side),
+			})
+		}
+	}
+	sort.Slice(out, func(i, j int) bool {
+		return fakeLegKey(out[i].AccountID, out[i].LegOrderID) < fakeLegKey(out[j].AccountID, out[j].LegOrderID)
+	})
+	return out, nil
+}
+
+func (f *fakeBracketRepo) InsertAdoptedLeg(ctx context.Context, rec *repository.BracketLegRecord) (bool, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.insertAdoptedErr != nil {
+		return false, f.insertAdoptedErr
+	}
+	cp := *rec
+	cp.Adopted = true
+	return f.putLeg(&cp), nil
+}
+
+func (f *fakeBracketRepo) RecordLegObservation(ctx context.Context, accountID, legID string, observedFilledQty float64, notFoundTicks int) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	key := fakeLegKey(accountID, legID)
+	if leg, ok := f.legs[key]; ok {
+		leg.ObservedFilledQty = observedFilledQty
+		leg.NotFoundTicks = notFoundTicks
+		f.touchLeg(key)
+	}
+	return nil
+}
+
+func (f *fakeBracketRepo) AdvanceLegEmit(ctx context.Context, accountID, legID string, filledQty float64, status string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	key := fakeLegKey(accountID, legID)
+	if leg, ok := f.legs[key]; ok {
+		leg.FilledQty = filledQty
+		leg.Status = status
+		f.touchLeg(key)
+	}
+	return nil
 }
 
 var _ repository.BracketRepository = (*fakeBracketRepo)(nil)

@@ -181,6 +181,10 @@ type TradingService struct {
 	// trading.reconciliation.halted_poll_interval_ms. Set on halt so the cooldown starts at once.
 	haltedLastPolled map[string]time.Time
 	haltedMu         sync.Mutex
+	// adoptionLastListed / adoptionLastCandidates (guarded by haltedMu) throttle adoption-only leg lists.
+	// Never route adoption through haltedLastPolled: haltAccount pre-stamps it (R-40).
+	adoptionLastListed     map[string]time.Time
+	adoptionLastCandidates map[string]map[string]struct{}
 	// flattenInFlight dedups the protection-window watchdog's per-bracket flatten
 	// goroutines — a slow flatten must not be re-triggered by the next tick.
 	flattenInFlight   map[string]bool
@@ -1122,7 +1126,7 @@ func (s *TradingService) recomputeAndEmitOfflinePositions(ctx context.Context, a
 	}
 	// Emit account.positions.synced ONLY (never order.filled) — the disjointness invariant that keeps
 	// portfolio from double-folding. Run on the inbound request ctx for header propagation.
-	if err := s.appendLedgerEvent(ctx, "account.positions.synced", fmt.Sprintf("account:%s", accountID), userID, map[string]interface{}{
+	if err := s.appendLedgerEvent(ctx, "account.positions.synced", fmt.Sprintf("account:%s", accountID), userID, "", map[string]interface{}{
 		"account_id":          accountID,
 		"user_id":             userID,
 		"trading_mode":        tradingMode,
@@ -1905,6 +1909,283 @@ func (s *TradingService) pollFills(ctx context.Context) {
 		s.applyBrokerOrderStatus(ctx, order, entry, brokerOrder)
 	}
 	s.logTick(ctx, telemetry.LoopFillPoller, start, len(candidates), polled, failed)
+	s.pollBracketLegFills(ctx, brokerMap)
+}
+
+const (
+	// legGetOrderFallbackCap bounds GetOrder calls per account per tick for legs absent from a list.
+	legGetOrderFallbackCap = 5
+	// legNotFoundRetireTicks consecutive definitive not-founds retire a leg UNKNOWN.
+	legNotFoundRetireTicks = 3
+)
+
+// pollBracketLegFills emits the fills of tracked bracket legs. It must never touch s.orders,
+// trading.orders, applyBrokerOrderStatus or maybeSubmitBracket: a leg is not a trading order.
+func (s *TradingService) pollBracketLegFills(ctx context.Context, brokerMap map[string]brokerPoolEntry) {
+	candidates, err := s.bracketRepo.ListAdoptionCandidates(ctx, []int32{bracketStatusActive, bracketStatusCanceling})
+	if err != nil {
+		slog.WarnContext(ctx, "bracket leg poll: list adoption candidates failed", "error", err)
+	}
+	legs, err := s.bracketRepo.ListTrackedLegs(ctx)
+	if err != nil {
+		slog.WarnContext(ctx, "bracket leg poll: list tracked legs failed", "error", err)
+		return
+	}
+	accounts, byAccount := groupLegsByAccount(legs)
+	candAccounts, candByAccount := groupLegsByAccount(candidates)
+	emitBlocked, insertWarned := false, false
+	for _, accountID := range accounts {
+		entry, ok := brokerMap[accountID]
+		if !ok {
+			continue
+		}
+		listed, ok := s.listLegOrders(ctx, accountID, entry)
+		if !ok {
+			continue
+		}
+		s.pollAccountLegs(ctx, accountID, entry, byAccount[accountID], listed, &emitBlocked)
+		s.adoptLegs(ctx, entry, candByAccount[accountID], listed, &insertWarned)
+	}
+	for _, accountID := range candAccounts {
+		entry, ok := brokerMap[accountID]
+		if _, tracked := byAccount[accountID]; tracked || !ok || !s.adoptionListAllowed(accountID, candByAccount[accountID]) {
+			continue
+		}
+		if listed, ok := s.listLegOrders(ctx, accountID, entry); ok {
+			s.adoptLegs(ctx, entry, candByAccount[accountID], listed, &insertWarned)
+		}
+	}
+}
+
+func groupLegsByAccount(legs []*repository.BracketLegRecord) ([]string, map[string][]*repository.BracketLegRecord) {
+	var accounts []string
+	byAccount := make(map[string][]*repository.BracketLegRecord)
+	for _, leg := range legs {
+		if _, seen := byAccount[leg.AccountID]; !seen {
+			accounts = append(accounts, leg.AccountID)
+		}
+		byAccount[leg.AccountID] = append(byAccount[leg.AccountID], leg)
+	}
+	return accounts, byAccount
+}
+
+// listLegOrders is the account's one ListOrders of the tick, shared by observation and adoption.
+func (s *TradingService) listLegOrders(ctx context.Context, accountID string, entry brokerPoolEntry) ([]broker.BrokerOrder, bool) {
+	listCtx, cancelList := s.alpacaCallContext(ctx, entry)
+	listed, err := entry.client.ListOrders(listCtx)
+	cancelList()
+	if err != nil {
+		if errors.Is(err, broker.ErrInvalidCredentials) {
+			slog.WarnContext(ctx, "bracket leg poll: broker rejected credentials, skipping account", "account_id", accountID, "error", err)
+		} else {
+			slog.WarnContext(ctx, "bracket leg poll: broker ListOrders failed", "account_id", accountID, "error", err)
+		}
+		return nil, false
+	}
+	return listed, true
+}
+
+// adoptionListAllowed gates an adoption-only account's list: known-invalid credentials never list; a
+// candidate id unseen at the last allowed list bypasses the cooldown. Stamped before the call (D-50).
+func (s *TradingService) adoptionListAllowed(accountID string, candidates []*repository.BracketLegRecord) bool {
+	s.credStatusMu.Lock()
+	invalid := credentialsKnownInvalid(s.credStatus[accountID])
+	s.credStatusMu.Unlock()
+	if invalid {
+		return false
+	}
+	var intervalMs float64
+	if s.isAccountHalted(accountID) {
+		intervalMs = s.haltedPollInterval()
+	} else if intervalMs = s.cfgW.GetFloat("reconciliation.interval_ms", reconcileDefaultIntervalMs); intervalMs <= 0 {
+		intervalMs = reconcileDefaultIntervalMs
+	}
+	ids := make(map[string]struct{}, len(candidates))
+	for _, c := range candidates {
+		ids[c.LegOrderID] = struct{}{}
+	}
+	now := s.clock()
+	s.haltedMu.Lock()
+	defer s.haltedMu.Unlock()
+	for id := range ids {
+		if _, seen := s.adoptionLastCandidates[accountID][id]; !seen {
+			intervalMs = 0
+			break
+		}
+	}
+	if !pollAllowedLocked(&s.adoptionLastListed, accountID, intervalMs, now) {
+		return false
+	}
+	if s.adoptionLastCandidates == nil {
+		s.adoptionLastCandidates = make(map[string]map[string]struct{})
+	}
+	s.adoptionLastCandidates[accountID] = ids
+	return true
+}
+
+// adoptLegs classifies candidates against the account's successful list only, with no GetOrder call
+// and no emit (D-40, D-42). Absence tombstones only on a complete list (D-49).
+func (s *TradingService) adoptLegs(ctx context.Context, entry brokerPoolEntry, candidates []*repository.BracketLegRecord, listed []broker.BrokerOrder, insertWarned *bool) {
+	if len(candidates) == 0 {
+		return
+	}
+	byID := ordersByID(listed)
+	complete := len(listed) > 0 &&
+		(commonv1.BrokerType(entry.brokerType) == commonv1.BrokerType_BROKER_TYPE_IBKR || len(listed) < broker.ListOrdersLimit)
+	for _, c := range candidates {
+		rec := *c
+		rec.FilledQty, rec.ObservedFilledQty = 0, 0
+		reason := ""
+		o, isListed := byID[c.LegOrderID]
+		switch {
+		case isListed && legIsTerminal(legOrderStatus(o.Status)):
+			rec.Status, reason = repository.LegStatusNotOpenAtAdoption, "listed_terminal"
+		case isListed && o.FilledQty > 0:
+			rec.Status, rec.ObservedFilledQty = repository.LegStatusBaselineRetired, o.FilledQty
+		case isListed:
+			rec.Status = repository.LegStatusOpen
+		case complete:
+			rec.Status, reason = repository.LegStatusNotOpenAtAdoption, "absent"
+		default:
+			continue
+		}
+		inserted, err := s.bracketRepo.InsertAdoptedLeg(ctx, &rec)
+		if err != nil {
+			if !*insertWarned {
+				*insertWarned = true
+				slog.WarnContext(ctx, "bracket leg poll: insert adopted leg failed", "account_id", rec.AccountID, "leg_order_id", rec.LegOrderID, "error", err)
+			}
+			continue
+		}
+		if inserted && reason != "" {
+			slog.InfoContext(ctx, "bracket leg poll: adoption tombstone",
+				"reason", reason, "account_id", rec.AccountID, "leg_order_id", rec.LegOrderID, "order_id", rec.OrderID)
+		}
+	}
+}
+
+func ordersByID(listed []broker.BrokerOrder) map[string]*broker.BrokerOrder {
+	byID := make(map[string]*broker.BrokerOrder, len(listed))
+	for i := range listed {
+		byID[listed[i].BrokerOrderID] = &listed[i]
+	}
+	return byID
+}
+
+func (s *TradingService) pollAccountLegs(ctx context.Context, accountID string, entry brokerPoolEntry, legs []*repository.BracketLegRecord, listed []broker.BrokerOrder, emitBlocked *bool) {
+	byID := ordersByID(listed)
+	fallbacks := 0
+	for _, leg := range legs {
+		if o, ok := byID[leg.LegOrderID]; ok {
+			s.observeLeg(ctx, leg, o, emitBlocked)
+			continue
+		}
+		if fallbacks >= legGetOrderFallbackCap {
+			continue
+		}
+		fallbacks++
+		getCtx, cancelGet := s.alpacaCallContext(ctx, entry)
+		o, err := entry.client.GetOrder(getCtx, leg.LegOrderID)
+		cancelGet()
+		switch {
+		case errors.Is(err, broker.ErrOrderNotFound):
+			s.recordLegNotFound(ctx, leg)
+		case err != nil:
+			slog.WarnContext(ctx, "bracket leg poll: broker GetOrder failed", "account_id", accountID, "leg_order_id", leg.LegOrderID, "error", err)
+		default:
+			s.observeLeg(ctx, leg, o, emitBlocked)
+		}
+	}
+}
+
+func (s *TradingService) recordLegNotFound(ctx context.Context, leg *repository.BracketLegRecord) {
+	ticks := leg.NotFoundTicks + 1
+	if ticks < legNotFoundRetireTicks {
+		if err := s.bracketRepo.RecordLegObservation(ctx, leg.AccountID, leg.LegOrderID, leg.ObservedFilledQty, ticks); err != nil {
+			slog.WarnContext(ctx, "bracket leg poll: record leg observation failed", "account_id", leg.AccountID, "leg_order_id", leg.LegOrderID, "error", err)
+		}
+		return
+	}
+	slog.WarnContext(ctx, "bracket leg poll: leg retired UNKNOWN after repeated not-found",
+		"account_id", leg.AccountID, "leg_order_id", leg.LegOrderID, "order_id", leg.OrderID, "not_found_ticks", ticks)
+	if err := s.bracketRepo.AdvanceLegEmit(ctx, leg.AccountID, leg.LegOrderID, leg.FilledQty, repository.LegStatusUnknown); err != nil {
+		slog.WarnContext(ctx, "bracket leg poll: retire leg failed", "account_id", leg.AccountID, "leg_order_id", leg.LegOrderID, "error", err)
+	}
+}
+
+// legOrderStatus lower-cases first because IBKR passes its capitalised statuses through raw.
+func legOrderStatus(brokerStatus string) tradingv1.OrderStatus {
+	return alpacaStatusToProto(strings.ToLower(brokerStatus))
+}
+
+var legRetireStatus = map[tradingv1.OrderStatus]string{
+	tradingv1.OrderStatus_ORDER_STATUS_CANCELED: repository.LegStatusCanceled,
+	tradingv1.OrderStatus_ORDER_STATUS_EXPIRED:  repository.LegStatusExpired,
+	tradingv1.OrderStatus_ORDER_STATUS_REJECTED: repository.LegStatusRejected,
+}
+
+// legIsTerminal: held and unrecognised statuses (UNSPECIFIED, NEW) stay open (D-19).
+func legIsTerminal(status tradingv1.OrderStatus) bool {
+	return status == tradingv1.OrderStatus_ORDER_STATUS_FILLED || legRetireStatus[status] != ""
+}
+
+func (s *TradingService) observeLeg(ctx context.Context, leg *repository.BracketLegRecord, o *broker.BrokerOrder, emitBlocked *bool) {
+	if err := s.bracketRepo.RecordLegObservation(ctx, leg.AccountID, leg.LegOrderID, o.FilledQty, 0); err != nil {
+		slog.WarnContext(ctx, "bracket leg poll: record leg observation failed", "account_id", leg.AccountID, "leg_order_id", leg.LegOrderID, "error", err)
+	}
+	status := legOrderStatus(o.Status)
+	switch status {
+	case tradingv1.OrderStatus_ORDER_STATUS_PARTIALLY_FILLED:
+		if o.FilledQty > leg.FilledQty && s.emitLegFill(ctx, leg, o, "order.partially_filled", emitBlocked) {
+			s.advanceLeg(ctx, leg, o.FilledQty, repository.LegStatusOpen)
+		}
+	case tradingv1.OrderStatus_ORDER_STATUS_FILLED:
+		if s.emitLegFill(ctx, leg, o, "order.filled", emitBlocked) {
+			s.advanceLeg(ctx, leg, o.FilledQty, repository.LegStatusFilled)
+		}
+	case tradingv1.OrderStatus_ORDER_STATUS_CANCELED, tradingv1.OrderStatus_ORDER_STATUS_EXPIRED, tradingv1.OrderStatus_ORDER_STATUS_REJECTED:
+		cursor := leg.FilledQty
+		if o.FilledQty > cursor {
+			if !s.emitLegFill(ctx, leg, o, "order.partially_filled", emitBlocked) {
+				return
+			}
+			cursor = o.FilledQty
+		}
+		s.advanceLeg(ctx, leg, cursor, legRetireStatus[status])
+	}
+}
+
+func (s *TradingService) advanceLeg(ctx context.Context, leg *repository.BracketLegRecord, filledQty float64, status string) {
+	if err := s.bracketRepo.AdvanceLegEmit(ctx, leg.AccountID, leg.LegOrderID, filledQty, status); err != nil {
+		slog.WarnContext(ctx, "bracket leg poll: advance leg emit failed", "account_id", leg.AccountID, "leg_order_id", leg.LegOrderID, "error", err)
+	}
+}
+
+// emitLegFill appends synchronously under the leg's deterministic key; after one failure every later
+// leg emit in the tick is skipped. It reports whether the event was appended.
+func (s *TradingService) emitLegFill(ctx context.Context, leg *repository.BracketLegRecord, o *broker.BrokerOrder, eventType string, emitBlocked *bool) bool {
+	if *emitBlocked {
+		return false
+	}
+	payload := map[string]interface{}{
+		"order_id": leg.LegOrderID, "symbol": leg.Symbol, "fill_price": o.FilledAvgPrice,
+		"user_id": leg.UserID, "trading_mode": leg.TradingMode, "account_id": leg.AccountID,
+		"fees": o.Fees, "side": leg.Side.String(),
+	}
+	kind := strings.TrimPrefix(eventType, "order.")
+	if eventType == "order.filled" {
+		payload["qty"] = o.FilledQty
+	} else {
+		payload["filled_qty"] = o.FilledQty
+	}
+	key := fmt.Sprintf("bracket-leg:%s:%s:%s:%s", leg.AccountID, leg.LegOrderID, kind, strconv.FormatFloat(o.FilledQty, 'f', -1, 64))
+	if err := s.appendLedgerEvent(ctx, eventType, leg.LegOrderID, leg.UserID, key, payload); err != nil {
+		*emitBlocked = true
+		slog.WarnContext(ctx, "bracket leg poll: leg fill emit failed; skipping further leg emits this tick",
+			"account_id", leg.AccountID, "leg_order_id", leg.LegOrderID, "event_type", eventType, "error", err)
+		return false
+	}
+	return true
 }
 
 // logTick writes the loop's tick record unless every item that reached the fallible call failed.
@@ -2036,10 +2317,13 @@ func isTerminalOrderStatus(status tradingv1.OrderStatus) bool {
 	return false
 }
 
+// reconcileDefaultIntervalMs is reconciliation.interval_ms's code default.
+const reconcileDefaultIntervalMs = 60000.0
+
 // StartReconciliationPoller periodically compares open orders/positions against broker truth.
 // Interval is live-reloaded from trading.reconciliation.interval_ms.
 func (s *TradingService) StartReconciliationPoller(ctx context.Context) {
-	const defaultIntervalMs = 60000.0
+	const defaultIntervalMs = reconcileDefaultIntervalMs
 	currentInterval := time.Duration(defaultIntervalMs) * time.Millisecond
 	ticker := time.NewTicker(currentInterval)
 	defer ticker.Stop()
@@ -2994,12 +3278,21 @@ func (s *TradingService) shouldPollHaltedAccount(accountID string, intervalMs fl
 	now := time.Now()
 	s.haltedMu.Lock()
 	defer s.haltedMu.Unlock()
+	return pollAllowedLocked(&s.haltedLastPolled, accountID, intervalMs, now)
+}
+
+// pollAllowedLocked throttles one account's polls over last to intervalMs, stamping now whenever it
+// returns true; intervalMs <= 0 always polls. The caller holds haltedMu.
+func pollAllowedLocked(last *map[string]time.Time, accountID string, intervalMs float64, now time.Time) bool {
 	if intervalMs > 0 {
-		if last, seen := s.haltedLastPolled[accountID]; seen && now.Sub(last) < time.Duration(intervalMs)*time.Millisecond {
+		if t, seen := (*last)[accountID]; seen && now.Sub(t) < time.Duration(intervalMs)*time.Millisecond {
 			return false
 		}
 	}
-	s.haltedLastPolled[accountID] = now
+	if *last == nil {
+		*last = make(map[string]time.Time)
+	}
+	(*last)[accountID] = now
 	return true
 }
 
@@ -3635,6 +3928,25 @@ func oppositeSide(s tradingv1.OrderSide) string {
 	return "sell"
 }
 
+// closingSide is oppositeSide as an OrderSide: the side of a bracket leg protecting an entry.
+func closingSide(s tradingv1.OrderSide) tradingv1.OrderSide {
+	if s == tradingv1.OrderSide_ORDER_SIDE_SELL {
+		return tradingv1.OrderSide_ORDER_SIDE_BUY
+	}
+	return tradingv1.OrderSide_ORDER_SIDE_SELL
+}
+
+func bracketLegParent(order *tradingv1.Order) repository.BracketLegParent {
+	return repository.BracketLegParent{
+		AccountID: order.AccountId, OrderID: order.OrderId, UserID: order.UserId,
+		TradingMode: order.TradingMode.String(), Symbol: order.Symbol, Side: closingSide(order.Side),
+	}
+}
+
+func bracketActivationFailure(err error) string {
+	return fmt.Sprintf("bracket activation not recorded, legs untracked: %v", err)
+}
+
 // computeTakeProfitPriceFromRR is the pure take-profit formula. Direction-aware: BUY (long)
 // profits above entry, SELL (short) below. rr<=0 disables the leg (returns 0).
 func computeTakeProfitPriceFromRR(side tradingv1.OrderSide, stopPrice, entryPriceProxy, rr float64) float64 {
@@ -3736,8 +4048,9 @@ func (s *TradingService) createBracket(ctx context.Context, order *tradingv1.Ord
 	case commonv1.BrokerType_BROKER_TYPE_ALPACA:
 		// Bracket already attached atomically at entry SubmitOrder (PlaceOrder's own
 		// broker-submission statement) — just record the leg IDs the broker returned.
-		if err := s.bracketRepo.UpdateBracketStatus(ctx, rec.ID, bracketStatusActive, brokerOrder.StopLegOrderID, brokerOrder.TakeProfitLegOrderID, ""); err != nil {
+		if err := s.bracketRepo.ActivateBracket(ctx, rec.ID, brokerOrder.StopLegOrderID, brokerOrder.TakeProfitLegOrderID, bracketLegParent(order)); err != nil {
 			slog.WarnContext(ctx, "update bracket status failed", "order_id", order.OrderId, "error", err)
+			go s.emitBracketFailureAlert(context.WithoutCancel(ctx), order, bracketActivationFailure(err))
 		}
 		go s.emitLedgerEvent(context.WithoutCancel(ctx), "order.bracket_updated", order.OrderId, order.UserId,
 			bracketUpdatedPayload(order, brokerOrder.StopLegOrderID, brokerOrder.TakeProfitLegOrderID))
@@ -3753,8 +4066,9 @@ func (s *TradingService) createBracket(ctx context.Context, order *tradingv1.Ord
 			go s.emitBracketFailureAlert(context.WithoutCancel(ctx), order, fmt.Sprintf("bracket leg submission failed: %v", err))
 			return
 		}
-		if err := s.bracketRepo.UpdateBracketStatus(ctx, rec.ID, bracketStatusActive, resp.StopLegOrderID, resp.TakeProfitLegOrderID, ""); err != nil {
+		if err := s.bracketRepo.ActivateBracket(ctx, rec.ID, resp.StopLegOrderID, resp.TakeProfitLegOrderID, bracketLegParent(order)); err != nil {
 			slog.WarnContext(ctx, "update bracket status failed", "order_id", order.OrderId, "error", err)
+			go s.emitBracketFailureAlert(context.WithoutCancel(ctx), order, bracketActivationFailure(err))
 		}
 		go s.emitLedgerEvent(context.WithoutCancel(ctx), "order.bracket_updated", order.OrderId, order.UserId,
 			bracketUpdatedPayload(order, resp.StopLegOrderID, resp.TakeProfitLegOrderID))
@@ -3795,8 +4109,9 @@ func (s *TradingService) resizeBracket(ctx context.Context, order *tradingv1.Ord
 		go s.emitBracketFailureAlert(context.WithoutCancel(ctx), order, fmt.Sprintf("bracket resize failed: %v", err))
 		return
 	}
-	if err := s.bracketRepo.UpdateBracketStatus(ctx, existing.ID, bracketStatusActive, resp.StopLegOrderID, resp.TakeProfitLegOrderID, ""); err != nil {
+	if err := s.bracketRepo.ActivateBracket(ctx, existing.ID, resp.StopLegOrderID, resp.TakeProfitLegOrderID, bracketLegParent(order)); err != nil {
 		slog.WarnContext(ctx, "update bracket status (active, resize) failed", "order_id", order.OrderId, "error", err)
+		go s.emitBracketFailureAlert(context.WithoutCancel(ctx), order, bracketActivationFailure(err))
 	}
 	go s.emitLedgerEvent(context.WithoutCancel(ctx), "order.bracket_updated", order.OrderId, order.UserId,
 		bracketUpdatedPayload(order, resp.StopLegOrderID, resp.TakeProfitLegOrderID))
@@ -3998,13 +4313,16 @@ const (
 	offlineRecomputeTimeout = 30 * time.Second
 )
 
-// appendLedgerEvent appends an event, retrying only codes.Unavailable under one idempotency key, and
-// returns the last error. It never takes confirmLock: callers may hold it and the lock is non-reentrant.
-func (s *TradingService) appendLedgerEvent(ctx context.Context, eventType, streamKey, userID string, payload map[string]interface{}) error {
+// appendLedgerEvent appends an event, retrying only codes.Unavailable under one idempotency key (empty: a
+// fresh uuid), and returns the last error. It never takes confirmLock: callers may hold it (non-reentrant).
+func (s *TradingService) appendLedgerEvent(ctx context.Context, eventType, streamKey, userID, idempotencyKey string, payload map[string]interface{}) error {
 	p, err := structpb.NewStruct(payload)
 	if err != nil {
 		telemetry.RecordLedgerEmit(ctx, eventType, outcomeFailed)
 		return fmt.Errorf("build %s payload: %w", eventType, err)
+	}
+	if idempotencyKey == "" {
+		idempotencyKey = uuid.NewString()
 	}
 	req := &ledgerv1.AppendEventRequest{
 		EventType:      eventType,
@@ -4012,7 +4330,7 @@ func (s *TradingService) appendLedgerEvent(ctx context.Context, eventType, strea
 		StreamKey:      streamKey,
 		UserId:         userID,
 		Payload:        p,
-		IdempotencyKey: uuid.NewString(),
+		IdempotencyKey: idempotencyKey,
 	}
 	for attempt := 1; ; attempt++ {
 		emitCtx, cancel := context.WithTimeout(ctx, ledgerEmitTimeout)
@@ -4044,7 +4362,7 @@ func (s *TradingService) persistOrderBestEffort(ctx context.Context, order *trad
 // emitLedgerEvent is the fail-soft wrapper of appendLedgerEvent. Pass the order/account owner as userID for
 // user-owned events (background pollers have no inbound x-user-id); pass "" for platform-scoped events.
 func (s *TradingService) emitLedgerEvent(ctx context.Context, eventType, streamKey, userID string, payload map[string]interface{}) {
-	if err := s.appendLedgerEvent(ctx, eventType, streamKey, userID, payload); err != nil {
+	if err := s.appendLedgerEvent(ctx, eventType, streamKey, userID, "", payload); err != nil {
 		slog.WarnContext(ctx, "ledger emit failed", "event_type", eventType, "stream_key", streamKey, "error", err)
 	}
 }

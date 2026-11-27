@@ -676,9 +676,10 @@ func TestPollFills_TickRecordUsesInjectedClock(t *testing.T) {
 		return nil, errors.New("broker 503")
 	}}
 	svc := &TradingService{
-		now:     func() time.Time { return now },
-		cfgW:    &config.Watcher{},
-		brokers: map[string]brokerPoolEntry{"acc-6": {client: fb, brokerType: int32(commonv1.BrokerType_BROKER_TYPE_ALPACA)}},
+		now:         func() time.Time { return now },
+		cfgW:        &config.Watcher{},
+		bracketRepo: &fakeBracketRepo{},
+		brokers:     map[string]brokerPoolEntry{"acc-6": {client: fb, brokerType: int32(commonv1.BrokerType_BROKER_TYPE_ALPACA)}},
 		orders: map[string]*tradingv1.Order{"ord-6": {
 			OrderId: "ord-6", AccountId: "acc-6", BrokerOrderId: "bo-6", Status: tradingv1.OrderStatus_ORDER_STATUS_NEW,
 		}},
@@ -740,10 +741,10 @@ func tickCases() []tickCase {
 	alpaca := int32(commonv1.BrokerType_BROKER_TYPE_ALPACA)
 	return []tickCase{
 		{"fill_poller idle", telemetry.LoopFillPoller, func(*testing.T) {
-			(&TradingService{brokers: map[string]brokerPoolEntry{}, orders: map[string]*tradingv1.Order{}}).pollFills(context.Background())
+			(&TradingService{brokers: map[string]brokerPoolEntry{}, orders: map[string]*tradingv1.Order{}, bracketRepo: &fakeBracketRepo{}}).pollFills(context.Background())
 		}, true, "idle"},
 		{"fill_poller skipped", telemetry.LoopFillPoller, func(*testing.T) {
-			(&TradingService{brokers: map[string]brokerPoolEntry{}, orders: map[string]*tradingv1.Order{
+			(&TradingService{brokers: map[string]brokerPoolEntry{}, bracketRepo: &fakeBracketRepo{}, orders: map[string]*tradingv1.Order{
 				"ord-f": {OrderId: "ord-f", AccountId: "acc-f", BrokerOrderId: "bo-f", Status: tradingv1.OrderStatus_ORDER_STATUS_NEW},
 			}}).pollFills(context.Background())
 		}, true, "skipped"},

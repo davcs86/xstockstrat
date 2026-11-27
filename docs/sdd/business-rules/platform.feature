@@ -2838,3 +2838,27 @@ Feature: Platform-wide guarantees
     And when portfolio consumes an account.positions.synced, account.balance.synced or account.deregistered event with user_id ""
     Then the event is acked, logged and skipped
     And no portfolio row is written or purged under user_id "default"
+
+  # Promoted from feature 311 (fix-position-fold-correctness). Cross-service: trading emits the bracket-leg fill
+  # to the ledger and portfolio folds it into positions and GetPnL realized.
+  # guards: docs/reports/2026-10-21-trading-bracket-leg-fills-missing-from-realized-pnl-defect.md
+  @AC-4 @regression @feature-311
+  Scenario: A bracket take-profit leg fill reaches the ledger and realized P&L
+    Given trading.risk.bracket_orders_enabled is true
+    And an auto-sized market buy of 10 "AAPL" at 100 with a stop price filled and recorded its legs in trading.order_brackets
+    When the take-profit leg fills at the broker for 10 "AAPL" at 110
+    Then the ledger holds a fill event for that leg with symbol "AAPL", side sell, qty 10, price 110, and the order's account, trading mode and user
+    And GetPnL realized for the round trip is 100
+
+  # guards: docs/reports/2026-10-21-trading-bracket-leg-fills-missing-from-realized-pnl-defect.md
+  # amended 2026-11-20 (C-15, ID kept; C-16 CHANGE signed off by the operator, design.md D-38): the full-fill
+  # event carries the leg total (qty 10) at the cumulative average price, not the remaining 6, so it agrees
+  # with feature 251 @AC-17 (an order.filled qty is the order total). "qty 4" is the partial's cumulative filled_qty.
+  @AC-5 @regression @feature-311
+  Scenario: A bracket leg that fills in two parts reaches the ledger as a partial then a full fill
+    Given trading.risk.bracket_orders_enabled is true
+    And an auto-sized market buy of 10 "AAPL" at 100 with a stop price filled and recorded its legs in trading.order_brackets
+    When the take-profit leg reports ORDER_STATUS_PARTIALLY_FILLED for 4 "AAPL" at 110, then ORDER_STATUS_FILLED for the remaining 6 at 110
+    Then the ledger holds an order.partially_filled event with qty 4 and an order.filled event with qty 10 at average fill price 110 for that leg
+    And the "AAPL" position quantity is 0
+    And GetPnL realized for the round trip is 100

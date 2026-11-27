@@ -437,11 +437,16 @@ func (c *IBKRClient) GetOrder(ctx context.Context, brokerOrderID string) (*Broke
 			FilledQty float64 `json:"filledQuantity"`
 		} `json:"orders"`
 	}
-	if err := json.Unmarshal(respBody, &result); err != nil || len(result.Orders) == 0 {
+	if err := json.Unmarshal(respBody, &result); err != nil {
 		return nil, fmt.Errorf("ibkr GetOrder: parse response: %w", err)
 	}
-	o := result.Orders[0]
-	return &BrokerOrder{BrokerOrderID: o.OrderID, Status: o.Status, FilledQty: o.FilledQty, FilledAvgPrice: o.AvgPrice}, nil
+	// A miss must not wrap ErrOrderNotFound: this endpoint is the session order list, so absence proves nothing.
+	for _, o := range result.Orders {
+		if o.OrderID == brokerOrderID {
+			return &BrokerOrder{BrokerOrderID: o.OrderID, Status: o.Status, FilledQty: o.FilledQty, FilledAvgPrice: o.AvgPrice}, nil
+		}
+	}
+	return nil, fmt.Errorf("ibkr GetOrder: order %s not in response (%d orders)", brokerOrderID, len(result.Orders))
 }
 
 // ListOrders fetches every order IBKR knows for this account (explicit accountId query param

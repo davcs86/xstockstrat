@@ -466,3 +466,16 @@ Recorded as a prose note (315 debate.md D-11) so it does not gate either integra
 prose note, not a table row: the table gates a final integration PR until the other feature is `launched`. Whichever
 merges second rebases and regenerates the lock under 323 Step 4's protocol (`pnpm install --lockfile-only` with pnpm
 `9.15.9`, then `pnpm install --frozen-lockfile`); nobody resolves `pnpm-lock.yaml` by hand.
+
+## Integration-PR checklist: 311 position-fold cutover (2026-11-27, unenforced)
+
+`fix-position-fold-correctness` (311) has a stop-then-start cutover with no write fence
+(`docs/runbooks/position-fold-cutover.md`). Its integration PR body carries this checklist item, and no tool
+enforces it:
+
+- [ ] portfolio stopped on every enabled staging target, `T_stop` recorded, `main-dev` frozen
+
+Every enabled staging target means DO `xstockstrat-staging` and, while `HOMELAB_STAGING_ENABLED` is `true`, the
+homelab staging VM. A `main-dev` push that deploys while portfolio is stopped breaks the cutover: an old and a new
+portfolio can then overlap and apply a fill twice. Only the per-database result the runbook records (§2) shows
+this. Peer features need not wait. They must not merge to `main-dev` between `T_stop` and 311's green Deploy run.

@@ -536,6 +536,43 @@ func TestShouldPollHaltedAccount_ThrottlesAndRecovers(t *testing.T) {
 	}
 }
 
+// TestHaltedAndAdoptionThrottles_Independent: an adoption list does not consume the halted
+// reconcile slot, and a reconcile poll does not consume the adoption slot (feature 311, R-40).
+func TestHaltedAndAdoptionThrottles_Independent(t *testing.T) {
+	for _, order := range []string{"adoption first", "reconcile first"} {
+		t.Run(order, func(t *testing.T) {
+			var listOrdersCalls int
+			fb := &fakeReconciliationBroker{listOrdersFn: func(ctx context.Context) ([]broker.BrokerOrder, error) {
+				listOrdersCalls++
+				return []broker.BrokerOrder{}, nil
+			}}
+			svc := newTestReconciliationService(
+				map[string]brokerPoolEntry{adoptAcct: {client: fb, brokerType: ibkrType, userID: legUser}},
+				&fakeReconciliationPortfolioClient{}, &recordingLedgerClient{}, &fakeNotifyClient{}, noopAccountRepo{},
+			)
+			repo := &fakeBracketRepo{}
+			seedCandidate(repo, adoptAcct, "ord-1", bracketStatusActive, "leg-s1")
+			svc.bracketRepo = repo
+			svc.halted[adoptAcct] = true
+			clk := &adoptClock{t: time.Now()}
+			svc.now = clk.now
+
+			adopt := func() { svc.pollFills(context.Background()) }
+			reconcile := func() { svc.reconcileTick(context.Background(), 0, 1.1) }
+			first, second := adopt, reconcile
+			if order == "reconcile first" {
+				first, second = reconcile, adopt
+			}
+			first()
+			second()
+
+			if listOrdersCalls != 2 {
+				t.Errorf("ListOrders = %d, want 2 (each throttle allows its own first poll)", listOrdersCalls)
+			}
+		})
+	}
+}
+
 func TestReconcileTick_PartialFillWithinGraceWindow_NoFindingNoHalt(t *testing.T) {
 	svc := newTestReconciliationService(
 		map[string]brokerPoolEntry{"acct-1": {client: &fakeReconciliationBroker{
