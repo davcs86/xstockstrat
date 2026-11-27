@@ -159,3 +159,12 @@
 
 - **OPERATOR (design gate): "Run round 9"** — the round-8 prune fix (D-56) has not been through an
   adversarial pass. Round 9 started. Not approved.
+
+## Session 2026-11-27 — sdd-design round 9
+
+- Round 9 run, focused on the two-statement prune (D-56) and on any other statement with the
+  same "predicate on an older snapshot than the lock" shape. Both sides confirmed D-56 is
+  race-free and that O-74 was real; settle, reap and claim are safe. No mechanism changed.
+- One narrow substance item: the manual recovery SQL for a `blocked` parent needed an order and a
+  transaction (O-78 → D-58). The rest was wording and one unbuildable test description.
+- Both sides judge the debate converged. No Floor breach, no C-16 regression, no petition.

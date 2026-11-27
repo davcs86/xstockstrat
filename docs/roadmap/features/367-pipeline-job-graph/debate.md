@@ -2,7 +2,7 @@
 
 **State**: in-debate
 **Mode**: full (round cap lifted by operator override, context.md 2026-11-27)
-**Rounds run**: 8 (round 9 in progress)
+**Rounds run**: 9
 
 ## Rounds
 
@@ -16,6 +16,7 @@
 | 6 | 2026-11-27 | /sdd-design | 3 | 0 | 8 | 8 | 2 | yes |
 | 7 | 2026-11-27 | /sdd-design | 2 | 0 | 3 | 3 | 1 | yes |
 | 8 | 2026-11-27 | /sdd-design | 2 | 0 | 4 | 4 | 0 | yes |
+| 9 | 2026-11-27 | /sdd-design | 1 | 0 | 3 | 3 | 0 | yes |
 
 ## Settled Decisions
 
@@ -79,6 +80,7 @@
 | D-55 | 7 | The claim selects with `FOR NO KEY UPDATE SKIP LOCKED`. Two claimers still exclude each other because that lock conflicts with itself; a park's `FOR KEY SHARE` on a ready child no longer hides it. Only the prune keeps `FOR UPDATE`, which it needs so a delete conflicts with a park's key-share lock. Supersedes the lock strength of D-4 and the claim clause of D-52 (user reopen, P-6). | O-73; `@AC-2` | settled |
 | D-56 | 8 | A prune batch is two statements in one transaction: an unordered candidate `SELECT … FOR UPDATE SKIP LOCKED LIMIT 500` with the unfinished-parent guard, then `DELETE … WHERE job_id = ANY(<locked ids>)` that repeats the guard under a snapshot taken after the locks are held. Locked rows that fail the repeated guard are kept. Makes D-22's "the prune never deletes a child of an unfinished parent" true under READ COMMITTED; refines D-38 and D-52. | O-74; FR-4; `@AC-9` | settled |
 | D-57 | 8 | Park locks its parent `FOR NO KEY UPDATE`. The 300 s give-up is measured from the end of the handler task and checked before each queueing for the lane, when the lane is granted and before each retry sleep; a started try completes. Fence and deadline timers are cancelled in the handler task's done-callback. An attempt whose handler has ended and that is not `reporting` and whose pair a committed heartbeat omits writes nothing and counts `lost_heartbeat` once. A lost-lease or self-fence stop replaces a pending deadline stop, never the reverse. A handler that ends within the stop grace of a deadline stop is reported with the outcome it returned, or as `attempt_timeout` if it ended cancelled or with `AttemptStopped`. A park follows the report's rules. Refines D-21, D-22, D-53 and D-54. | O-75, O-76, O-77 | settled |
+| D-58 | 9 | The manual recovery SQL for a `blocked` parent runs in one transaction, edges deleted first, then the update; every recovery update is guarded by the job id and the expected state. The prune's candidate select is `FOR UPDATE OF j` with a `NOT EXISTS` sublink guard; settle's batch is one UPDATE statement under one snapshot. Park's child and edge inserts are `ON CONFLICT DO NOTHING` (restores D-23 in the text). The first of a lost lease or a self-fence is counted once. Refines D-22, D-38, D-45, D-56 and D-57. | O-78, O-79 | settled |
 
 ## Rejected Alternatives (locked)
 
@@ -186,6 +188,9 @@
 | O-75 | 8 | Park's "fence and lock the parent" has no lock mode; `FOR UPDATE` would deadlock with a grandparent's park that references the parent as a child (resolved by the database's deadlock detector as a retried park, not a wrong result). | no | closed @ round 8 (D-57) |
 | O-76 | 8 | The start of the 300 s give-up is undefined; started at the first failed report, a slot could be held far longer than the design claims. | no | closed @ round 8 (D-57) |
 | O-77 | 8 | Undetermined (phase, event) pairs in an attempt's life: timer cancellation at handler end; what a loss while waiting for the lane counts and writes; park parity with report; precedence between a deadline stop and a later self-fence or loss; "with its lease still valid" undefined under D-54; who counts an attempt after a lost lease; missing decision IDs in headings. | no | closed @ round 8 (D-57; text in design.md) |
+| O-78 | 9 | The documented manual recovery SQL for a `blocked` parent gave no order and no transaction: updating to `ready` first lets the parent be claimed and park with new edges, which the later edge delete removes; settle then wakes it over zero edges while its children are unfinished. `@AC-8`, `@AC-9`. | yes | closed @ round 9 (D-58) |
+| O-79 | 9 | Text-level gaps: the prune test for D-56 described an interleaving that cannot be built (the park blocks on the prune's lock); the prune's lock target and guard shape and settle's single-statement form were unstated; D-23's `ON CONFLICT DO NOTHING` had dropped out of the park bullet; counting of a lost lease or self-fence while the handler runs was lost in the restructure; `ParkRace` overstated; the 314 s case missing from one Open Risk. | no | closed @ round 9 (D-58; text in design.md) |
+| O-80 | 9 | A prune batch's cost grows with the edges its rows cascade, not with the 500-row batch size; a wide parent deleted before its children can exceed the 30 s block and roll the batch back. | no | closed @ round 9 (recorded under Open Risks) |
 
 ## Reopen Petitions
 
