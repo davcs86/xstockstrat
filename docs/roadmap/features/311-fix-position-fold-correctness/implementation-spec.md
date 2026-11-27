@@ -1176,7 +1176,7 @@ New logic is in an excluded package — no coverage threshold applies to it.
 
 ### Step 25 — service: shared poll-throttle helper and adoption state
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/service/trading.go` — modify
@@ -1212,7 +1212,7 @@ cd services/xstockstrat-trading && GOWORK=off golangci-lint run --modules-downlo
 
 ### Step 26 — service: adoption of pre-existing open legs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/service/trading.go` — modify
@@ -1269,7 +1269,7 @@ cd services/xstockstrat-trading && GOWORK=off golangci-lint run --modules-downlo
 
 ### Step 27 — test: adoption classifier, complete-list gate and throttle
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/service/trading_bracket_adoption_test.go` — create
@@ -1567,4 +1567,19 @@ _Populated by /sdd-execute as implementation proceeds._
 - **A failed `RecordLegObservation` or `AdvanceLegEmit`** is a WARN and processing continues: the emit is keyed, so a repeat after an unadvanced row is deduplicated by the ledger.
 - **Fixtures.** `trading_order_race_test.go` (`notCancelableSvc`) and `trading_rate_limit_test.go` (`newRateLimitHarness`) already set a `fakeBracketRepo`, so neither needed an edit and both are unchanged. The whole-package run found no other nil-`bracketRepo` `pollFills` fixture; the three in `trading_telemetry_test.go` were fixed.
 - **Reuse.** The new test file reuses `legRow` (`trading_bracket_legs_test.go`), `captureLogs`, `logsWithMsg` and `fakeLegKey`/`putLeg`; its ledger fake is inline (one consumer, C-13).
+- **Disposition**: these stay within the listed **Files** and the instructions' intent. No step body changed.
+
+### Steps 25+26+27 — Verification blocks stop after their first line (2026-11-27)
+- **Spec said**: Step 25 gives a three-line block, Step 26 a four-line block and Step 27 a four-line block. Each line starts `cd services/xstockstrat-trading && …` or names a repo-root-relative path, and Step 27's last line ends in a `# >= 40%` comment.
+- **Actual**: the same pattern as Steps 3-24. Inside the one subshell the first line's `cd` persists, so every later `cd` line fails with `cd: services/xstockstrat-trading: No such file or directory`. Run verbatim (the closing parenthesis on its own line, so the trailing comment cannot swallow it): Step 27's block (`.sdd-logs/v-2.log`) ran only the whole-package `go test -race`; Step 25's block (`v-3.log`) ran only `go build`; Step 26's block (`v-4.log`) ran `go build`, then its `git diff` line from inside the service directory (a vacuous `0`), its migrations grep (`No such file or directory`, `0`) and failed on the lint `cd`. Each block exited 1 for this reason alone.
+- **Disposition**: each block was run verbatim once. Then every line that had not run, or had run from the wrong directory, was run unchanged, alone, from the repo root, with its own log. All passed: the `ShouldPollHaltedAccount|ReconcileTick_HaltedAccount` run `ok` (`v-5.log`); lint v2.14.0, the line all three blocks share, `0 issues.` (`v-6.log`); the `ShouldPollHaltedAccount` run `ok` (`v-7.log`); the coverage line `total: (statements) 84.9%` with every package `ok` (`v-8.log`); the `reconcileTick|StartFillPoller` count `0` against a 444-line diff (`v-9.log`, `v-11.log`); the migrations `adoption`/`config` count `0` (`v-10.log`). The step bodies were not changed (F-09).
+
+### Steps 25+26+27 — how the Instructions were met (2026-11-27)
+- **Helper shape.** `pollAllowedLocked(last *map[string]time.Time, accountID, intervalMs, now)` runs with `haltedMu` held by its caller and takes the map by pointer, so it creates a nil map before writing; `shouldPollHaltedAccount` locks and calls it with `&s.haltedLastPolled` and `time.Now()`. The two adoption maps are not initialised in `NewTradingService`: they are created on first write, so they are empty at boot and struct-literal fixtures need no change.
+- **New-candidate bypass and stamp.** `adoptionListAllowed` computes the interval (halted, or `interval_ms` with `<= 0` read as 60000), then under `haltedMu` sets the interval to 0 when the current candidate set holds an id not in `adoptionLastCandidates`, calls the helper over `adoptionLastListed`, and on an allowed list stores the set. A bypassed list is stamped too, so the cooldown restarts from it.
+- **Shared list.** `pollAccountLegs`' `ListOrders` and its WARNs moved unchanged into `listLegOrders`, so a tracked account's one list feeds both observation and adoption, and an adoption-only account's list logs the same two WARNs. `ordersByID` and `groupLegsByAccount` are shared by observation and adoption (C-10).
+- **60000.** `StartReconciliationPoller`'s local `defaultIntervalMs` now takes its value from a package constant `reconcileDefaultIntervalMs`, which adoption also reads; its behaviour is unchanged. This is one line inside `StartReconciliationPoller`, which is neither `reconcileTick` nor `StartFillPoller` (D-50).
+- **Insert WARN.** "One WARN for the tick" is one WARN per `pollBracketLegFills` call across all accounts; the remaining candidates are still attempted, and each failed one is retried on its next evaluation.
+- **Tombstone log.** The INFO line is written only when `InsertAdoptedLeg` reports a new row, so a conflict does not log twice.
+- **Round-11 case 18** is `TestHaltedAndAdoptionThrottles_Independent` in `trading_reconciliation_test.go`, both orders on one halted account; `TestShouldPollHaltedAccount_ThrottlesAndRecovers` is unchanged.
 - **Disposition**: these stay within the listed **Files** and the instructions' intent. No step body changed.

@@ -181,6 +181,10 @@ type TradingService struct {
 	// trading.reconciliation.halted_poll_interval_ms. Set on halt so the cooldown starts at once.
 	haltedLastPolled map[string]time.Time
 	haltedMu         sync.Mutex
+	// adoptionLastListed / adoptionLastCandidates (guarded by haltedMu) throttle adoption-only leg lists.
+	// Never route adoption through haltedLastPolled: haltAccount pre-stamps it (R-40).
+	adoptionLastListed     map[string]time.Time
+	adoptionLastCandidates map[string]map[string]struct{}
 	// flattenInFlight dedups the protection-window watchdog's per-bracket flatten
 	// goroutines — a slow flatten must not be re-triggered by the next tick.
 	flattenInFlight   map[string]bool
@@ -1888,11 +1892,42 @@ const (
 // pollBracketLegFills emits the fills of tracked bracket legs. It must never touch s.orders,
 // trading.orders, applyBrokerOrderStatus or maybeSubmitBracket: a leg is not a trading order.
 func (s *TradingService) pollBracketLegFills(ctx context.Context, brokerMap map[string]brokerPoolEntry) {
+	candidates, err := s.bracketRepo.ListAdoptionCandidates(ctx, []int32{bracketStatusActive, bracketStatusCanceling})
+	if err != nil {
+		slog.WarnContext(ctx, "bracket leg poll: list adoption candidates failed", "error", err)
+	}
 	legs, err := s.bracketRepo.ListTrackedLegs(ctx)
 	if err != nil {
 		slog.WarnContext(ctx, "bracket leg poll: list tracked legs failed", "error", err)
 		return
 	}
+	accounts, byAccount := groupLegsByAccount(legs)
+	candAccounts, candByAccount := groupLegsByAccount(candidates)
+	emitBlocked, insertWarned := false, false
+	for _, accountID := range accounts {
+		entry, ok := brokerMap[accountID]
+		if !ok {
+			continue
+		}
+		listed, ok := s.listLegOrders(ctx, accountID, entry)
+		if !ok {
+			continue
+		}
+		s.pollAccountLegs(ctx, accountID, entry, byAccount[accountID], listed, &emitBlocked)
+		s.adoptLegs(ctx, entry, candByAccount[accountID], listed, &insertWarned)
+	}
+	for _, accountID := range candAccounts {
+		entry, ok := brokerMap[accountID]
+		if _, tracked := byAccount[accountID]; tracked || !ok || !s.adoptionListAllowed(accountID, candByAccount[accountID]) {
+			continue
+		}
+		if listed, ok := s.listLegOrders(ctx, accountID, entry); ok {
+			s.adoptLegs(ctx, entry, candByAccount[accountID], listed, &insertWarned)
+		}
+	}
+}
+
+func groupLegsByAccount(legs []*repository.BracketLegRecord) ([]string, map[string][]*repository.BracketLegRecord) {
 	var accounts []string
 	byAccount := make(map[string][]*repository.BracketLegRecord)
 	for _, leg := range legs {
@@ -1901,17 +1936,11 @@ func (s *TradingService) pollBracketLegFills(ctx context.Context, brokerMap map[
 		}
 		byAccount[leg.AccountID] = append(byAccount[leg.AccountID], leg)
 	}
-	emitBlocked := false
-	for _, accountID := range accounts {
-		entry, ok := brokerMap[accountID]
-		if !ok {
-			continue
-		}
-		s.pollAccountLegs(ctx, accountID, entry, byAccount[accountID], &emitBlocked)
-	}
+	return accounts, byAccount
 }
 
-func (s *TradingService) pollAccountLegs(ctx context.Context, accountID string, entry brokerPoolEntry, legs []*repository.BracketLegRecord, emitBlocked *bool) {
+// listLegOrders is the account's one ListOrders of the tick, shared by observation and adoption.
+func (s *TradingService) listLegOrders(ctx context.Context, accountID string, entry brokerPoolEntry) ([]broker.BrokerOrder, bool) {
 	listCtx, cancelList := s.alpacaCallContext(ctx, entry)
 	listed, err := entry.client.ListOrders(listCtx)
 	cancelList()
@@ -1921,12 +1950,100 @@ func (s *TradingService) pollAccountLegs(ctx context.Context, accountID string, 
 		} else {
 			slog.WarnContext(ctx, "bracket leg poll: broker ListOrders failed", "account_id", accountID, "error", err)
 		}
+		return nil, false
+	}
+	return listed, true
+}
+
+// adoptionListAllowed gates an adoption-only account's list: known-invalid credentials never list; a
+// candidate id unseen at the last allowed list bypasses the cooldown. Stamped before the call (D-50).
+func (s *TradingService) adoptionListAllowed(accountID string, candidates []*repository.BracketLegRecord) bool {
+	s.credStatusMu.Lock()
+	invalid := credentialsKnownInvalid(s.credStatus[accountID])
+	s.credStatusMu.Unlock()
+	if invalid {
+		return false
+	}
+	var intervalMs float64
+	if s.isAccountHalted(accountID) {
+		intervalMs = s.haltedPollInterval()
+	} else if intervalMs = s.cfgW.GetFloat("reconciliation.interval_ms", reconcileDefaultIntervalMs); intervalMs <= 0 {
+		intervalMs = reconcileDefaultIntervalMs
+	}
+	ids := make(map[string]struct{}, len(candidates))
+	for _, c := range candidates {
+		ids[c.LegOrderID] = struct{}{}
+	}
+	now := s.clock()
+	s.haltedMu.Lock()
+	defer s.haltedMu.Unlock()
+	for id := range ids {
+		if _, seen := s.adoptionLastCandidates[accountID][id]; !seen {
+			intervalMs = 0
+			break
+		}
+	}
+	if !pollAllowedLocked(&s.adoptionLastListed, accountID, intervalMs, now) {
+		return false
+	}
+	if s.adoptionLastCandidates == nil {
+		s.adoptionLastCandidates = make(map[string]map[string]struct{})
+	}
+	s.adoptionLastCandidates[accountID] = ids
+	return true
+}
+
+// adoptLegs classifies candidates against the account's successful list only, with no GetOrder call
+// and no emit (D-40, D-42). Absence tombstones only on a complete list (D-49).
+func (s *TradingService) adoptLegs(ctx context.Context, entry brokerPoolEntry, candidates []*repository.BracketLegRecord, listed []broker.BrokerOrder, insertWarned *bool) {
+	if len(candidates) == 0 {
 		return
 	}
+	byID := ordersByID(listed)
+	complete := len(listed) > 0 &&
+		(commonv1.BrokerType(entry.brokerType) == commonv1.BrokerType_BROKER_TYPE_IBKR || len(listed) < broker.ListOrdersLimit)
+	for _, c := range candidates {
+		rec := *c
+		rec.FilledQty, rec.ObservedFilledQty = 0, 0
+		reason := ""
+		o, isListed := byID[c.LegOrderID]
+		switch {
+		case isListed && legIsTerminal(legOrderStatus(o.Status)):
+			rec.Status, reason = repository.LegStatusNotOpenAtAdoption, "listed_terminal"
+		case isListed && o.FilledQty > 0:
+			rec.Status, rec.ObservedFilledQty = repository.LegStatusBaselineRetired, o.FilledQty
+		case isListed:
+			rec.Status = repository.LegStatusOpen
+		case complete:
+			rec.Status, reason = repository.LegStatusNotOpenAtAdoption, "absent"
+		default:
+			continue
+		}
+		inserted, err := s.bracketRepo.InsertAdoptedLeg(ctx, &rec)
+		if err != nil {
+			if !*insertWarned {
+				*insertWarned = true
+				slog.WarnContext(ctx, "bracket leg poll: insert adopted leg failed", "account_id", rec.AccountID, "leg_order_id", rec.LegOrderID, "error", err)
+			}
+			continue
+		}
+		if inserted && reason != "" {
+			slog.InfoContext(ctx, "bracket leg poll: adoption tombstone",
+				"reason", reason, "account_id", rec.AccountID, "leg_order_id", rec.LegOrderID, "order_id", rec.OrderID)
+		}
+	}
+}
+
+func ordersByID(listed []broker.BrokerOrder) map[string]*broker.BrokerOrder {
 	byID := make(map[string]*broker.BrokerOrder, len(listed))
 	for i := range listed {
 		byID[listed[i].BrokerOrderID] = &listed[i]
 	}
+	return byID
+}
+
+func (s *TradingService) pollAccountLegs(ctx context.Context, accountID string, entry brokerPoolEntry, legs []*repository.BracketLegRecord, listed []broker.BrokerOrder, emitBlocked *bool) {
+	byID := ordersByID(listed)
 	fallbacks := 0
 	for _, leg := range legs {
 		if o, ok := byID[leg.LegOrderID]; ok {
@@ -1975,6 +2092,11 @@ var legRetireStatus = map[tradingv1.OrderStatus]string{
 	tradingv1.OrderStatus_ORDER_STATUS_CANCELED: repository.LegStatusCanceled,
 	tradingv1.OrderStatus_ORDER_STATUS_EXPIRED:  repository.LegStatusExpired,
 	tradingv1.OrderStatus_ORDER_STATUS_REJECTED: repository.LegStatusRejected,
+}
+
+// legIsTerminal: held and unrecognised statuses (UNSPECIFIED, NEW) stay open (D-19).
+func legIsTerminal(status tradingv1.OrderStatus) bool {
+	return status == tradingv1.OrderStatus_ORDER_STATUS_FILLED || legRetireStatus[status] != ""
 }
 
 func (s *TradingService) observeLeg(ctx context.Context, leg *repository.BracketLegRecord, o *broker.BrokerOrder, emitBlocked *bool) {
@@ -2165,10 +2287,13 @@ func isTerminalOrderStatus(status tradingv1.OrderStatus) bool {
 	return false
 }
 
+// reconcileDefaultIntervalMs is reconciliation.interval_ms's code default.
+const reconcileDefaultIntervalMs = 60000.0
+
 // StartReconciliationPoller periodically compares open orders/positions against broker truth.
 // Interval is live-reloaded from trading.reconciliation.interval_ms.
 func (s *TradingService) StartReconciliationPoller(ctx context.Context) {
-	const defaultIntervalMs = 60000.0
+	const defaultIntervalMs = reconcileDefaultIntervalMs
 	currentInterval := time.Duration(defaultIntervalMs) * time.Millisecond
 	ticker := time.NewTicker(currentInterval)
 	defer ticker.Stop()
@@ -3113,12 +3238,21 @@ func (s *TradingService) shouldPollHaltedAccount(accountID string, intervalMs fl
 	now := time.Now()
 	s.haltedMu.Lock()
 	defer s.haltedMu.Unlock()
+	return pollAllowedLocked(&s.haltedLastPolled, accountID, intervalMs, now)
+}
+
+// pollAllowedLocked throttles one account's polls over last to intervalMs, stamping now whenever it
+// returns true; intervalMs <= 0 always polls. The caller holds haltedMu.
+func pollAllowedLocked(last *map[string]time.Time, accountID string, intervalMs float64, now time.Time) bool {
 	if intervalMs > 0 {
-		if last, seen := s.haltedLastPolled[accountID]; seen && now.Sub(last) < time.Duration(intervalMs)*time.Millisecond {
+		if t, seen := (*last)[accountID]; seen && now.Sub(t) < time.Duration(intervalMs)*time.Millisecond {
 			return false
 		}
 	}
-	s.haltedLastPolled[accountID] = now
+	if *last == nil {
+		*last = make(map[string]time.Time)
+	}
+	(*last)[accountID] = now
 	return true
 }
 
