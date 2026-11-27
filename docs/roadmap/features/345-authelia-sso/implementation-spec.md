@@ -689,7 +689,7 @@ cd services/xstockstrat-config && pnpm run lint && pnpm run test:coverage && pnp
 
 ### Step 15 — service: manage-users.py set-auth-mode and unlink-sso
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `scripts/manage-users.py`
 **Files**:
 - `scripts/manage-users.py` — modify

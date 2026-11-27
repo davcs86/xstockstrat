@@ -865,3 +865,9 @@
 - TDD: AC-35 red (no grant): "@AC-35 authorizes ui…" and "@AC-35 the UI peer reads…" fail (exit 1) → green: lint 0, `test:coverage` 449/449 (exit 0), c8 ≥ 40 (94.35 %).
 - Files modified: `services/xstockstrat-config/src/__tests__/secretCallerAuthz.test.ts`, `services/xstockstrat-config/src/__tests__/secretsAndScope.test.ts`
 - Deviations: none
+
+### Step 15 — service: manage-users.py set-auth-mode and unlink-sso [done]
+- `set-auth-mode <value> --environment --reason`: value checked before any connection (exit 2), `DATABASE_URL` required (exit 1, no `.env` fallback), prints redacted host + database and both environments' rows before/after, one always-notifying CTE (D-108), 0 rows → `local` ok / `both`/`oidc` "seed migration not applied" exit 1; help names break-glass and rollback. `unlink-sso <email> [--issuer] [--force]`: exact email lookup, confirm unless `--force`, `DELETE … RETURNING issuer`, 0 rows → exit 1, prints the relink sentence; never prints a subject. Usage docstring lists both.
+- Verification: `ruff check` and `ruff format --check` clean; `--help` lists `set-auth-mode` and `unlink-sso`. TDD: recorded under Step 16.
+- Files modified: `scripts/manage-users.py`
+- Deviations: none (the commands sit above the existing `if __name__ == "__main__"` guard so Typer registers them).
