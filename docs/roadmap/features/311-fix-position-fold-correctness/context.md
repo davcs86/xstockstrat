@@ -3092,3 +3092,20 @@ Up-front confirmation: the operator approved the plan with this record (verbatim
 - Tooling: none needed (migration step).
 - Files modified: `services/xstockstrat-trading/migrations/012_bracket_legs.up.sql`, `services/xstockstrat-trading/migrations/012_bracket_legs.down.sql`
 - Deviations: the Verification block exits 1 when it passes (Deviation Log, Step 2).
+
+## Session 2026-11-27 — sdd-execute sequential (sdd-batch-execute), Steps 3+4
+
+Tooling (steps 3+4): go1.27.0 ✓ · golangci-lint ⬇ v2.14.0 (built with go1.27.0, at `/root/go/bin`; the host `/usr/local/bin` copy is v2.5.0, so the lint runs put `/root/go/bin` first on `PATH`)
+
+### Step 3 — service: portfolio fill-apply repository seam and floor [done]
+- Atomic unit with Step 4 (planned, **Lands with**). Created `fill_apply_repo.go`: `ConsumerOrderFill`, `ErrFillAlreadyApplied`, `txBeginner` (asserted on `r.db`), `FillKey`, `AppliedFill`, `PositionKey`, `LockedPosition`, `PositionValues`, `FoldWrite` (`FoldUpsert`/`FoldDelete`/`FoldFlip`), `FoldOutcome`, `FoldFn func(*LockedPosition) FoldOutcome`, `FillResult{Prior, Outcome}`, and the methods `FillApplied`, `ApplyFill`, `ClearPendingClosed`, `ParkFill` and `EnsureFillFloor`. `ApplyFill` runs in one tx: applied INSERT (0 rows means `ErrFillAlreadyApplied`), `pg_advisory_xact_lock(hashtextextended('user|symbol|mode|account', 0))`, `FOR UPDATE` read, fold, absolute upsert / delete / delete+insert, optional `pending_closed` UPDATE bound as `string`, then COMMIT. `queryRower` and `portfolio_repo.go` are unchanged.
+- Step 9 needs to know: `FoldFn` returns no error. A flip's fresh row goes through the same absolute upsert after the delete, with `opened_at = NOW()`. A zero `FoldWrite` is rejected with an error.
+- TDD (unit): RED `.sdd-logs/v-1.log`, `exit=1`, `undefined: FillKey` … `FAIL github.com/xstockstrat/portfolio/internal/repository [build failed]` → GREEN: `v-5.log` `ok github.com/xstockstrat/portfolio/internal/repository 1.054s` (`-race`), with 10 cases passing (`v-7.log`: `10`). Verification: `v-2.log` build+vet ran clean; lint `v-3.log` `0 issues.` `exit=0`; `Begin` grep `v-4.log` printed nothing (`exit=1`, no match). The config-wiring gate does not apply, because the step declares no key.
+- Files modified: `services/xstockstrat-portfolio/internal/repository/fill_apply_repo.go`
+- Deviations: the Verification blocks stop after their first line (Deviation Log, Steps 3+4).
+
+### Step 4 — test: fill-apply repository (pgxmock) [done]
+- Atomic unit with Step 3. Created `fill_apply_repo_test.go` with 10 ordered-expectation pgxmock tests covering the nine listed asserts, plus a no-position-row case. The flip case also proves the order delete, insert, then `pending_closed` UPDATE (matched only as a Go `string`), all before Commit.
+- TDD: the RED/GREEN results above. Coverage line `v-6.log`: `total: (statements) 79.1%`, `exit=0` (≥ 40%; `repository` is excluded from the figure).
+- Files modified: `services/xstockstrat-portfolio/internal/repository/fill_apply_repo_test.go`
+- Deviations: the same Deviation Log entry (Steps 3+4).

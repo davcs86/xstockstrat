@@ -171,7 +171,7 @@ grep -ci 'insert into' services/xstockstrat-trading/migrations/012_bracket_legs.
 
 ### Step 3 — service: portfolio fill-apply repository seam and floor
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/repository/fill_apply_repo.go` — create
@@ -219,7 +219,7 @@ grep -n 'Begin' services/xstockstrat-portfolio/internal/repository/portfolio_rep
 
 ### Step 4 — test: fill-apply repository (pgxmock)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/repository/fill_apply_repo_test.go` — create
@@ -1443,3 +1443,8 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Spec said**: the block's last command, `grep -ci 'insert into' …012_bracket_legs.up.sql`, should print `# 0`.
 - **Actual**: it prints `0`, and `grep -c` exits 1 when its count is 0, so the block exits 1 exactly when this check passes (the same pattern as Step 1). Every expected value matched: both files are listed, the `012_` count is 2 and the count is 0.
 - **Disposition**: judged on the printed values, not on the exit status. The block ran verbatim, and the step body was not changed (F-09). This is an offline migration check: no database was started, and the live apply and rollback are deferred to CI and deploy.
+
+### Steps 3+4 — Verification blocks stop after their first line (2026-11-27)
+- **Spec said**: Step 3 and Step 4 each give a multi-line block whose lines each start `cd services/xstockstrat-portfolio && …` or name a repo-root-relative path.
+- **Actual**: inside the one subshell the first line's `cd` persists, so every later line fails with `cd: services/xstockstrat-portfolio: No such file or directory` (and Step 3's `grep` cannot find its path). Run verbatim, Step 3's block ran only `go build` and `go vet -tags dbtest`; Step 4's block ran only the filtered `go test -race`. Both exited non-zero for this reason alone.
+- **Disposition**: each block was run verbatim once, then every line that had not run was run unchanged, alone, from the repo root, with its own log. All passed: `golangci-lint` v2.14.0 printed `0 issues.`, the `Begin` grep printed no line (`portfolio_repo.go` unchanged) and the coverage line printed `total: 79.1%`. The step bodies were not changed (F-09). Step 9's block has the same pattern, so it needs the same per-line run; other steps' blocks were not checked.
