@@ -952,3 +952,9 @@
 - TDD: recorded under Step 29. Verification: typecheck exit 0, lint exit 0, the `safeRedirect` grep hits the page import/call and the new module.
 - Files modified: `services/xstockstrat-ui/src/lib/{safeRedirect,ssoRefusals}.ts` (new), `services/xstockstrat-ui/src/app/auth/login/page.tsx`
 - Deviations: none
+
+### Step 29 — test: safeRedirect and the refusal-mirror contract [done]
+- `safeRedirect.test.ts` (allow-list, fallbacks, `/trader/../..//evil.com` pinned to its current pass-through value, D-54) and `ssoRefusals.test.ts` (`SSO_REFUSALS` deep-equals the vector `refusals`, D-123).
+- TDD: red (before Step 28): `Cannot find module './safeRedirect'` / `'./ssoRefusals'` → green: 13 passed; full `pnpm run test:coverage` 91 files, 865 passed / 2 skipped, `src/lib/**` 82.97 % lines; typecheck and lint exit 0.
+- Files modified: `services/xstockstrat-ui/src/lib/{safeRedirect,ssoRefusals}.test.ts` (new)
+- Deviations: none

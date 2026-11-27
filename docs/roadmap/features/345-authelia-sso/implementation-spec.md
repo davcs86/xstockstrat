@@ -1187,7 +1187,7 @@ grep -n "safeRedirect" src/app/auth/login/page.tsx src/lib/safeRedirect.ts
 
 ### Step 29 — test: safeRedirect and the refusal-mirror contract
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/safeRedirect.test.ts` — create
