@@ -86,22 +86,32 @@ land as tests in Step 9, not as scenario edits.
 ## Spec-time decisions to confirm at `/sdd-review impl-spec`
 
 These are places where discovery forced a choice design.md did not spell out. None reopens a settled decision
-or a rejected alternative.
+or a rejected alternative. Operator rulings of 2026-11-21 (context.md, "operator rulings on the four spec-time
+choices"): decisions 1, 3 and 4 are **confirmed as specced**; decision 2 is **overridden** (see it below).
+Decisions 5 and 6 were not put to the operator and stay open for `/sdd-review impl-spec`.
 
-1. **(B) is two commits, not one.** design.md asks for seed, bounds, reader and tests in one commit. That is
+1. **(B) is two commits, not one.** *(Confirmed by the operator, 2026-11-21.)* design.md asks for seed, bounds, reader and tests in one commit. That is
    five steps, above the four-step cap of `step-constraints.md` §C. The seam is the bounds registry entry
    (unit B1, Steps 5 + 6): it passes its own Verification alone and lands first, so no commit ever holds the
    seeded key without its write bounds. The design's gate, `check-config-wiring.mjs … --final`, stays on unit B2.
-2. **The `resolveOffMs` wrapper needs three `scripts/config-wiring.json` registry entries** (one forwarder, two
-   receivers). Prototyped at spec time on a scratch copy of `36aed60b`: without them the checker reports
-   `bar_hold.go:resolveOffMs:dynamic-read` and turns `stream.bar_ingest_backoff_ms` into `seeded-unread`; with
-   them `stream.bar_ingest_backoff_ms` is clean again and the new key resolves (Step 10). These are registry
-   entries, not `findings` baseline entries (fails.md 2026-11-10 fix-marketdata-dead-symbol-ingest — config).
-3. **The miss line goes through `warnUnlessDone`.** design.md lists the (A) sites and does not list the miss
+2. **`resolveBarsMissBackoff` is a parallel reader in `bars_miss.go`, with exactly one `scripts/config-wiring.json`
+   receiver entry; there is no `resolveOffMs` wrapper.** *(Overridden by the operator: 2026-11-21 "Use the parallel
+   reader fallback"; 2026-11-26 "bars_miss.go, one receiver entry".)* The earlier spec added a `resolveOffMs`
+   wrapper plus one forwarder and two receiver entries. That is dropped; design.md O-15's "otherwise a parallel
+   reader" branch is taken, and `resolveBarIngestBackoff` and `bar_hold.go` are not touched. The gate attributes a
+   read through `registry.receivers["<file>:<receiver>"]` (`scripts/check-config-wiring.mjs:547-552`); a
+   `cfg.GetInt(barsMissBackoffKey, …)` in `bars_miss.go` is `unattributed` without an entry, so the one entry
+   `"services/xstockstrat-marketdata/internal/service/bars_miss.go:cfg": "marketdata"` is added. Prototyped on a
+   scratch copy of `origin/main-dev` @ `2b2dec92` (gate files byte-identical to `36aed60b`), with the key's two
+   seed rows in the scratch stored set: `node scripts/check-config-wiring.mjs --final` exit 0 and `node --test
+   scripts/config-wiring.test.mjs` 75/75 pass. Accepted costs: about eight lines duplicated from
+   `resolveBarIngestBackoff` (below jscpd's 100-token floor, `.jscpd.json:4`; the O-15 exception to design.md's
+   C-18 line), and one more edit to a file `345-authelia-sso` also edits.
+3. **The miss line goes through `warnUnlessDone`.** *(Confirmed by the operator, 2026-11-21.)* design.md lists the (A) sites and does not list the miss
    WARN (`:360`). After (B) it sits in `liveRefetch`. Left as a plain WARN, a client cancel on an implicit miss
    would still log one WARN per cancelled call, which is the noise `@AC-1` removes. Step 10 logs it with
    `warnUnlessDone`, so a done ctx gets Debug and a live ctx keeps the WARN.
-4. **`UpdatePositionBracket` moves from `r.pool.Exec` to `r.db.Exec`** (`portfolio_repo.go:379`). design (C)
+4. **`UpdatePositionBracket` moves from `r.pool.Exec` to `r.db.Exec`** *(Confirmed by the operator, 2026-11-21.)* (`portfolio_repo.go:379`). design (C)
    asks for the bracket test to reuse `cancelingDB`. That fake reaches the repo only through `r.db`
    (`NewPortfolioRepoWithDB`, `portfolio_repo.go:50-52`), and `r.pool` is nil there, so the handler panics before
    it can log. In production `db` is the pool (`:46`), so behaviour is identical.
@@ -184,8 +194,9 @@ or a rejected alternative.
     `scripts/config-wiring-stored.json`. Whichever feature merges last regenerates it again (item 6).
 - **Shared files with peers (file-level only, no key or number clash; impl-spec review 2026-11-20).**
   - `scripts/config-wiring.json`: `345-authelia-sso` also adds registry entries
-    (`docs/roadmap/features/345-authelia-sso/implementation-spec.md:751`). The keys are disjoint; on a merge
-    conflict keep both sets and re-run Step 10's two config-wiring commands.
+    (`docs/roadmap/features/345-authelia-sso/implementation-spec.md:751`). This feature adds one receiver entry,
+    `bars_miss.go:cfg`. The keys are disjoint; on a merge conflict keep both sets and re-run Step 10's two
+    config-wiring commands.
   - `services/xstockstrat-portfolio/internal/repository/portfolio_repo.go`: `323-fix-orphaned-code`
     (`product-spec.md:46`, `r.pool` at `:217,241,341`) and `311-fix-position-fold-correctness`
     (`product-spec.md:67`, `:66`) name other lines of this file. Step 4 changes line `:379` only.
@@ -202,7 +213,7 @@ or a rejected alternative.
 
 ### Step 1 — test: marketdata cancel-quiet regression tests (AC-1)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/service/cancel_quiet_test.go` — create
@@ -298,7 +309,7 @@ Dependencies.
 
 ### Step 2 — service: `warnUnlessDone` at the cancel-caused marketdata WARN sites
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/service/marketdata_service.go` — modify
@@ -356,7 +367,7 @@ Plus Step 1's Verification (tests, coverage, lint), which is the unit's green ru
 
 ### Step 3 — test: portfolio cancel-quiet tests (deregistration, bracket, balance)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/service/portfolio_sync_cancel_test.go` — modify (append tests)
@@ -426,7 +437,7 @@ All pass with Step 4 applied; total ≥ 40%. New logic is in excluded packages (
 
 ### Step 4 — service: portfolio cancel-quiet in the deregistration, bracket and balance consumers
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/service/portfolio_service.go` — modify
@@ -488,7 +499,7 @@ Plus Step 3's Verification (tests, coverage, lint), which is the unit's green ru
 
 ### Step 5 — test: `SetConfig` bounds for `marketdata` / `bars.miss_backoff_ms`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/__tests__/setConfigScalarBounds.test.ts` — modify (one row)
@@ -525,7 +536,7 @@ All pass with Step 6 applied.
 
 ### Step 6 — service: `SCALAR_BOUNDS_REGISTRY` entry for `marketdata.bars.miss_backoff_ms`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/grpc/configServiceImpl.ts` — modify
@@ -564,7 +575,7 @@ node scripts/check-config-wiring.mjs --final   # still exit 0: a bounds entry is
 
 ### Step 7 — test: seed-migration shape test for `bars.miss_backoff_ms`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/__tests__/barsMissBackoffSeedMigration.test.ts` — create
@@ -622,19 +633,22 @@ All pass with Step 8 applied.
 
 ### Step 8 — migration: seed `marketdata` / `bars.miss_backoff_ms` (config `056`, provisional)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
-- `services/xstockstrat-config/migrations/056_marketdata_bars_miss_backoff.up.sql` — create
-- `services/xstockstrat-config/migrations/056_marketdata_bars_miss_backoff.down.sql` — create
+- `services/xstockstrat-config/migrations/057_marketdata_bars_miss_backoff.up.sql` — create
+- `services/xstockstrat-config/migrations/057_marketdata_bars_miss_backoff.down.sql` — create
 - `scripts/config-wiring-stored.json` — modify (regenerated, never hand-edited)
 
 **Reviewers**: DBA — Migration NNN numbering (no gaps, no conflicts), up+down pair present, run-order compliance with `scripts/db-migrate.sh`; xstockstrat-config owner — Config key naming, environment (`production`/`staging`) / global-per-user scoping, WatchConfig stream stability
 
-**Codebase Evidence** (`36aed60b`):
+**Codebase Evidence** (re-grounded 2026-11-26 on the merged tree `a68b1294` = feature tip `7a3692fd` + `origin/main-dev` `f802b184`):
 - Trunk tail of `services/xstockstrat-config/migrations/`: `054_marketdata_delisting_confirmation_days`,
-  `055_analysis_live_enrich_ttl_reseed`. `053` is absent on every ref. `git log --all` finds no `056`–`058`
-  (§ Step Dependencies, merge checklist).
+  `055_analysis_live_enrich_ttl_reseed`, `056_analysis_live_only_cycle_max_days` (feature 366
+  opportunity-live-only-rotation, `540f8ff7`). `056` is taken; the next free number is `057`.
+- Merge checklist command 2 (§ Step Dependencies) also finds `056_mcp_deadline_budget` on the unmerged
+  `fix-mcp-deadline-budget` branch (`270e850d`); it sits at the trunk tail's number, so it renumbers on merge and
+  may take `057` if it merges first. No ref carries `057`/`058`; command 3 (`miss_backoff_ms`) returns nothing.
 - Row shape to follow (design D-5 / O-10): `048_webhook_fanout_callback_keys.up.sql:4-43` and its single-key
   twin `054_marketdata_delisting_confirmation_days.up.sql:4-13` — ten columns, relative key, sentinel
   `updated_by`, two environments, `user_id` `NULL`, `ON CONFLICT (namespace, key, environment,
@@ -642,8 +656,8 @@ All pass with Step 8 applied.
 - Down shape: `054_…down.sql:4-10` — a `DELETE` filtered by namespace, key, environment, `user_id IS NULL`,
   the sentinel and the seeded `value_data`.
 - Never modelled on `042` (FQN key) or `047` (latched DELETE) — D-5.
-- `scripts/config-wiring-stored.json` records every seeded row with its file name (for example `:2596-2597`
-  for `054`) and an `inputs_sha256` over all config migrations; `--final` fails `STALE-STORED` on a mismatch
+- `scripts/config-wiring-stored.json` records every seeded row with its file name (for example `:2621` and
+  `:2633` for `054`, `:965` and `:977` for `056`) and an `inputs_sha256` over all config migrations; `--final` fails `STALE-STORED` on a mismatch
   (`scripts/check-config-wiring.mjs:714`, `freshness`).
 - Header comment convention: `-- Migration: <file>` / `-- Service: xstockstrat-config, feature <slug>. …`
   (`054_…up.sql:1-2`).
@@ -656,7 +670,8 @@ All pass with Step 8 applied.
 
 **Instructions**:
 1. Re-run the merge checklist (§ Step Dependencies) and take the number as max(`origin/main-dev`) + 1. It is
-   `056` at spec time. The file content carries no number outside its header comment line.
+   `057` after the `f802b184` merge (`056` was `max + 1` at spec time and is now taken by feature 366). The
+   file content carries no number outside its header comment line.
 2. Up: one `INSERT` of two rows (`staging`, `production`):
    `('marketdata', 'bars.miss_backoff_ms', 'int', '1800000', <description>, '1800000', 'xstockstrat-marketdata',
    'system:config-migration-feature-fix-marketdata-miss-path-noise', <env>, NULL)`, ending with the
@@ -679,11 +694,12 @@ All pass with Step 8 applied.
 
 **Verification** (offline, no database):
 ```bash
-ls services/xstockstrat-config/migrations/056_marketdata_bars_miss_backoff.up.sql \
-   services/xstockstrat-config/migrations/056_marketdata_bars_miss_backoff.down.sql
+ls services/xstockstrat-config/migrations/057_marketdata_bars_miss_backoff.up.sql \
+   services/xstockstrat-config/migrations/057_marketdata_bars_miss_backoff.down.sql
 ls services/xstockstrat-config/migrations | sort | tail -2   # this pair is the highest number
+ls services/xstockstrat-config/migrations | grep -c '^057_'   # 2: no other 057 pair on the merged tree
 # read both: the up's two-row INSERT is reversed by the down's sentinel- and value-filtered DELETE
-grep -c "056_marketdata_bars_miss_backoff.up.sql" scripts/config-wiring-stored.json   # 2 (staging, production)
+grep -c "057_marketdata_bars_miss_backoff.up.sql" scripts/config-wiring-stored.json   # 2 (staging, production)
 node scripts/check-config-wiring.mjs --keys marketdata.bars.miss_backoff_ms --final   # exit 0, with Step 10 applied
 ```
 On the local-Postgres route the generator applies every config migration's `up` on a scratch database, one
@@ -695,7 +711,7 @@ on either route: Step 7's test pins its SQL text, and the rollback itself runs i
 
 ### Step 9 — test: GetBars miss-path negative-cache tests (AC-2) and the retargeted structural test
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/service/bars_miss_test.go` — create
@@ -801,13 +817,14 @@ coverage threshold applies to it.
 
 ### Step 10 — service: GetBars miss-path negative cache (`bars_miss.go`, `liveRefetch`, `barsFetch`, reader)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/service/bars_miss.go` — create
 - `services/xstockstrat-marketdata/internal/service/marketdata_service.go` — modify
-- `services/xstockstrat-marketdata/internal/service/bar_hold.go` — modify (`resolveBarIngestBackoff` body; add `resolveOffMs`)
-- `scripts/config-wiring.json` — modify (`registry.forwarders` + `registry.receivers`; no `findings` entry)
+- `scripts/config-wiring.json` — modify (`registry.receivers`: exactly one entry, `bars_miss.go:cfg`; no forwarder, no `findings` entry)
+
+`bar_hold.go` is **not** modified (spec-time decision 2, O-15).
 
 **Reviewers**: xstockstrat-marketdata owner — OHLCV ingestion integrity, TimescaleDB hypertable partitioning, Alpaca feed idempotency
 
@@ -833,15 +850,21 @@ coverage threshold applies to it.
   → `0`, else milliseconds. Constants `barIngestBackoffKey` / `defaultBarIngestBackoffMs` `:9-10`. Its one
   caller: `marketdata_service.go:1412`. `<= 0` clears state: `planBarRequest` `bar_hold.go:50-53`.
 - `intGetter` `marketdata_service.go:138`.
-- `scripts/config-wiring.json` registry: forwarder precedent
-  `"services/xstockstrat-marketdata/internal/service/marketdata_service.go:resolvePositiveInt": {"keyArg": 1}`;
-  receiver precedents `"…/bar_hold.go:cfg": "marketdata"` and `"…/marketdata_service.go:resolvePositiveInt":
-  "marketdata"`. The checker resolves a forwarder call's key argument through same-package constants
-  (`scripts/check-config-wiring.mjs` `resolveIdent` `:375`, `extractRegexReads` `:457`) and skips the forwarder's own
-  `cfg.GetInt(key, def)` (`:486`).
-- Spec-time prototype on a scratch copy of `36aed60b` (wrapper + new reader + the three registry entries):
-  `stream.bar_ingest_backoff_ms` has no finding and the new key reports only `read-unseeded`, which Step 8's
-  seed removes. Without the receiver entries both reads report `unattributed`.
+- Wiring gate (`scripts/check-config-wiring.mjs` and `scripts/config-wiring.json` are unchanged between `36aed60b`
+  and `2b2dec92`): `GETTER_RE` `:266` matches a `.GetInt(` call; `extractRegexReads` `:457` records `{file,
+  receiver}` and resolves a constant key argument through same-package constants (`resolveIdent` `:375`);
+  `attribute` `:547-552` looks up `registry.receivers["<file>:<receiver>"]`; `join` `:580` reports a read with no
+  entry as `unattributed` (`:588`), which is gated unless baselined (`GATED_UNLESS_BASELINED` `:691`).
+- Registry precedent: receiver entries `"…/marketdata/internal/service/bar_hold.go:cfg": "marketdata"`
+  (`scripts/config-wiring.json:115`) and `"…/asset_servability.go:cfg": "marketdata"` (`:114`), one per file whose
+  reader takes a `cfg` parameter. `registry.receivers` is alphabetical; `bars_miss.go:cfg` goes directly after `:115`.
+- Spec-time prototype on a scratch copy of `origin/main-dev` @ `2b2dec92` (the key's two seed rows added to the
+  scratch `scripts/config-wiring-stored.json`):
+  - reader in a new `bars_miss.go`, no entry: `seeded-unread` plus `bars_miss.go:cfg:bars.miss_backoff_ms:unattributed`;
+  - the same reader plus the one entry `bars_miss.go:cfg`: `--final` exit 0, `--keys marketdata.bars.miss_backoff_ms`
+    exit 0, `node --test scripts/config-wiring.test.mjs` 75/75 pass;
+  - not exercised: the real generated stored set (no `migrate` binary there, so the stored rows were hand-added to
+    the scratch copy only) and `go build` (modules not downloadable offline).
 
 **Lands with**: `Step 7, Step 8, Step 9`
 
@@ -852,27 +875,22 @@ coverage threshold applies to it.
 **Instructions**:
 1. **State.** Add `missMu sync.Mutex` and `lastEmptyFetch map[string]time.Time` to `MarketDataService` beside
    `staleMu` / `lastStaleCheck` (`:59-60`), and initialise the map in the constructor literal beside `:246`.
-2. **`bar_hold.go`.** Add `resolveOffMs(cfg intGetter, key string, def int64) time.Duration` with the current
-   body of `resolveBarIngestBackoff` (nil cfg → `def`; `<= 0` → `0`; else milliseconds), and make
-   `resolveBarIngestBackoff` return `resolveOffMs(cfg, barIngestBackoffKey, defaultBarIngestBackoffMs)`. Its
-   signature, the `:1412` caller and `bar_hold_test.go` stay byte-identical (O-15).
-3. **`scripts/config-wiring.json`.** Add to `registry.forwarders`:
-   `"services/xstockstrat-marketdata/internal/service/bar_hold.go:resolveOffMs": {"keyArg": 1}`. Add to
-   `registry.receivers`: `"services/xstockstrat-marketdata/internal/service/bar_hold.go:resolveOffMs":
-   "marketdata"` and `"services/xstockstrat-marketdata/internal/service/bars_miss.go:resolveOffMs":
-   "marketdata"`. Keep the file's existing formatting and ordering.
-   - **Check first.** Run `node scripts/check-config-wiring.mjs --final` and `node --test
-     scripts/config-wiring.test.mjs` right after instructions 2 and 3, before writing `bars_miss.go`. The only
-     finding allowed at that point is the new key's `seeded-unread` (its reader arrives in instruction 4);
-     `stream.bar_ingest_backoff_ms` must be clean. Anything else red means the fallback.
-   - **Fallback (O-15 "otherwise").** If `check-config-wiring.mjs --final` or `node --test
-     scripts/config-wiring.test.mjs` cannot be made green with the wrapper, revert instructions 2 and 3, give
-     `resolveBarsMissBackoff` its own body in `bars_miss.go` reading `cfg.GetInt(barsMissBackoffKey, …)`, add
-     only the receiver `"…/bars_miss.go:cfg": "marketdata"`, and record the deviation.
+2. **`scripts/config-wiring.json`.** Add exactly one entry to `registry.receivers`, directly after the
+   `bar_hold.go:cfg` line (`:115`), keeping the file's format and alphabetical order:
+   `"services/xstockstrat-marketdata/internal/service/bars_miss.go:cfg": "marketdata"`. No forwarder, no
+   `findings` entry, no other change. Do not add a `resolveOffMs` helper (spec-time decision 2).
+3. **Gate check, right after instructions 2 and 4's reader** (Steps 5, 6 and 8 applied, the stored set
+   regenerated): run `node scripts/check-config-wiring.mjs --final` and `node --test
+   scripts/config-wiring.test.mjs`. Both must be green; the new key has a seed and a read, so there is no
+   `seeded-unread` and no `unattributed`. If either is red, stop and report (P-03).
 4. **`bars_miss.go`** (new, package `service`):
-   - constants `barsMissBackoffKey = "bars.miss_backoff_ms"` and `defaultBarsMissBackoffMs int64 = 1800000`;
-   - `resolveBarsMissBackoff(cfg intGetter) time.Duration` returning `resolveOffMs(cfg, barsMissBackoffKey,
-     defaultBarsMissBackoffMs)`;
+   - constants in a `const (` block: `barsMissBackoffKey = "bars.miss_backoff_ms"` and
+     `defaultBarsMissBackoffMs int64 = 1800000`;
+   - `func resolveBarsMissBackoff(cfg intGetter) time.Duration` with the body shape of `resolveBarIngestBackoff`
+     (`bar_hold.go:35-44`) but its own key and default: `cfg == nil` → the default;
+     `cfg.GetInt(barsMissBackoffKey, defaultBarsMissBackoffMs)` otherwise; `<= 0` → `0`; else milliseconds. The
+     parameter must be named `cfg` and the read written `cfg.GetInt(` so instruction 2's entry attributes it.
+     Doc comment at most two lines: `<= 0` disables the back-off (off, not default), unlike `resolvePositiveInt`;
    - `type barsFetch struct { bars []*marketdatav1.Bar; token string; confirmedEmpty bool }`;
    - `func (s *MarketDataService) missFetchDue(key string, window time.Duration, now time.Time) bool` — takes
      `missMu`; when `window <= 0` it clears `lastEmptyFetch` and returns true (D-4, mirroring
@@ -916,9 +934,11 @@ coverage threshold applies to it.
 cd services/xstockstrat-marketdata && GOWORK=off go build ./... && GOWORK=off go vet ./internal/service/
 node scripts/check-config-wiring.mjs --keys marketdata.bars.miss_backoff_ms --final   # exit 0, no output for marketdata
 node --test scripts/config-wiring.test.mjs
+git diff origin/main-dev -- scripts/config-wiring.json | grep '^[-+] ' | grep -v '^+      "services/xstockstrat-marketdata/internal/service/bars_miss.go:cfg": "marketdata",$'   # no output: exactly one added line, nothing removed
+grep -c 'resolveOffMs' services/xstockstrat-marketdata/internal/service/*.go | grep -v ':0$'   # no output: no wrapper
 grep -n 'refetch && liveFetchAllowed(snap, req.Symbol)' services/xstockstrat-marketdata/internal/service/marketdata_service.go   # one line
 grep -n 'missMu' services/xstockstrat-marketdata/internal/service/*.go | grep -v _test.go   # struct field + missFetchDue + noteMissResult only
-git diff origin/main-dev -- services/xstockstrat-marketdata/internal/service/bar_hold.go | grep '^[-+]func'   # only "+func resolveOffMs"
+git diff --stat origin/main-dev -- services/xstockstrat-marketdata/internal/service/bar_hold.go   # empty: untouched (O-15)
 ```
 Plus the Verification of Steps 7, 8 and 9, which together are the unit's green run.
 
@@ -926,7 +946,7 @@ Plus the Verification of Steps 7, 8 and 9, which together are the unit's green r
 
 ### Step 11 — docs: key table, GetBars / cancel-stop invariants, registered keys, product-spec corrections
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`, `xstockstrat-portfolio` (service docs); `docs/patterns/`; feature directory
 **Files**:
 - `services/xstockstrat-marketdata/CLAUDE.md` — modify
@@ -951,8 +971,9 @@ Plus the Verification of Steps 7, 8 and 9, which together are the unit's green r
   parked) … and only the bracket and balance consumers keep `ackAlways` (best-effort)".
   `services/xstockstrat-portfolio/CLAUDE.md:97` only points to PORTFOLIO-3 — not edited.
 - `docs/patterns/config-governance.md`: `## Per-Feature Registered Keys` is "Append-only … Newest first"
-  (`:146-148`); the first entry is `### feature 330` at `:152`; single-key marketdata precedent `### feature
-  352` at `:166-179`. The generic sentinel row `system:config-migration-feature-<slug>` is at `:143`.
+  (`:146-148`); re-grounded 2026-11-26 on the merged tree `a68b1294`: the first entry is now `### feature 366 —
+  opportunity-live-only-rotation` at `:152` (`### feature 330` moved to `:173`); single-key marketdata precedent
+  `### feature 352` at `:187-200`. The generic sentinel row `system:config-migration-feature-<slug>` is at `:143`.
 - `product-spec.md:17-19` lists "the `ackAlways` consumers draining at shutdown (balance sync, bracket update,
   order-fill)".
 - `product-spec.md` § Fix Scope (`:60-64`): "DB migrations anticipated: **no**" (`:63`) and "Config key changes
@@ -988,12 +1009,14 @@ Plus the Verification of Steps 7, 8 and 9, which together are the unit's green r
    balance consumers keep `ackAlways` and log a write failure at Debug when ctx is done. Add the new guard
    tests to its pointer list.
 5. `docs/patterns/config-governance.md`: add `### feature 317 — fix-marketdata-miss-path-noise
-   (`xstockstrat-marketdata` / `xstockstrat-config`)` directly above `:152`, shaped like the feature-352 entry:
+   (`xstockstrat-marketdata` / `xstockstrat-config`)` directly above the current first entry (`### feature 366`
+   at `:152` on the merged tree; re-check the first `### feature` heading under `## Per-Feature Registered Keys`
+   after any later `origin/main-dev` merge), shaped like the feature-352 entry (`:187-200`):
    one paragraph (what the window does; full-dotted `SCALAR_BOUNDS_REGISTRY` entry; seeded `1800000` in staging
    and production, global, `int`, insert-if-absent, by config migration `marketdata_bars_miss_backoff` with the
    actor sentinel `system:config-migration-feature-fix-marketdata-miss-path-noise`; the down deletes only a
    global row that still carries the sentinel and still holds `1800000`; no `scripts/config-wiring.json`
-   baseline entry, three registry entries for the `resolveOffMs` forwarder; approval: owner + config team) and
+   baseline entry, one `registry.receivers` entry `bars_miss.go:cfg` for the reader; approval: owner + config team) and
    one table row: `marketdata.bars.miss_backoff_ms` | int | `1800000` | `[0,21600000]`; never clamped on read |
    reader `resolveBarsMissBackoff` (`bars_miss.go`), read live on each implicit first-page miss; `<= 0`
    disables the back-off and clears its state.
@@ -1021,3 +1044,85 @@ grep -n "bars.miss_backoff_ms\|marketdata_bars_miss_backoff" docs/roadmap/featur
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+### Deviation 1 — Steps 1+2: Verification lines run from the repo root, each in its own subshell (2026-11-27)
+
+- **Spec said**: the Step 1 / Step 2 `**Verification**` blocks, as written, each line starting `cd services/xstockstrat-marketdata`.
+- **Actual**: run in one shell, the first `cd` makes every later `cd services/xstockstrat-marketdata` fail and the
+  final `grep` path resolve inside the service dir, and the trailing `# …` comments would swallow a closing `)`.
+  Each line was run unchanged, in its own subshell from the repo root, chained with `&&`, the comments ending
+  their own lines. `golangci-lint` was the pinned v2.14.0 (`$(go env GOPATH)/bin`, put first on `PATH`; the
+  `/usr/local/bin` copy is 2.5.0 built with go1.25.1).
+- **Disposition**: CI-equivalent fallback — commands and judgment unchanged; only the shell framing.
+- **Anchors**: line numbers moved after the BRANCH SYNC (e.g. `fetchAndCacheBars` `:410` → `:418`,
+  `ingestRecentBarsForTimeframe` `:1410` → `:1434`); every symbol and message was found, so this is not a deviation (F-04).
+
+### Deviation 2 — Steps 3+4: union Verification shell framing; supplementary RED/count runs (2026-11-27)
+
+- **Spec said**: the Step 3 and Step 4 `**Verification**` blocks, each line run as written.
+- **Actual**: the same framing as Deviation 1. Each line ran unchanged, in its own subshell from the repo root, and
+  the lines were chained with `&&`. The pinned `golangci-lint` v2.14.0 came first on `PATH`. Step 4's
+  `r\.pool\.Exec` "no match" grep ran as `! grep …`, so a match fails the chain; its trailing `# …` comments were
+  dropped. Two runs were added beyond the Verification. Step 3's bracket nil-pointer panic (the predicted RED)
+  aborts the test binary before the balance tests, so a second RED run covered `TestProcessBalanceSync_*` alone.
+  A `-v` re-run of Step 3's first line counted the executed tests (28 PASS, 0 FAIL).
+- **Disposition**: CI-equivalent fallback. The commands and the judgment are unchanged; only the shell framing
+  differs, plus diagnostic runs.
+- **Anchors**: lines moved after BRANCH SYNC (e.g. `processAccountDeregistered` `:1569` → `:1590`,
+  `processBracketUpdate` `:1725` → `:1746`, `processBalanceSync` `:1773` → `:1794`). Every symbol was found, so
+  this is not a deviation (F-04).
+
+### Deviation 3 — Steps 5+6: union Verification shell framing; Node 24 on PATH (2026-11-27)
+
+- **Spec said**: the Step 5 and Step 6 `**Verification**` blocks, each line run as written.
+- **Actual**: the same framing as Deviation 1. Run in one shell, line 1's `cd services/xstockstrat-config` makes the
+  repo-relative `grep` paths, the second `cd` and `node scripts/check-config-wiring.mjs --final` fail. Each line ran
+  unchanged in its own subshell from the repo root, chained with `&&`; the trailing `# …` comments were dropped.
+  The run used `PATH=/opt/node24/bin:$PATH` (root `CLAUDE.md` pins Node 24; the PATH default is v22).
+- **Disposition**: CI-equivalent fallback. The commands and the judgment are unchanged; only the shell framing.
+- **Anchors**: the neighbour registry entry moved from `configServiceImpl.ts:163` to `:165`; the test row anchor
+  `:283` is unchanged. Every symbol was found, so this is not a deviation (F-04).
+
+### Deviation 4 — Steps 7+8+9+10: stored-set route, shell framing, RED staging, one flaky re-run (2026-11-27)
+
+- **Spec said**: Step 8 instruction 4 regenerates `scripts/config-wiring-stored.json` against a scratch Postgres
+  (local route or CI artifact, preflight recorded before Step 7). The four Verification blocks run as written.
+- **Actual**:
+  - Stored set. The operator authorized the local route on 2026-11-26 (Option A, "Throwaway Docker Postgres here"):
+    a throwaway local PostgreSQL 16 the main session provisioned, plus `psql` 16 and `migrate` on `PATH`.
+    `python3 scripts/config-wiring-stored.py` was run once, for generation only; this agent started no database.
+    The output was committed unedited. Its diff is the two `057_marketdata_bars_miss_backoff.up.sql` rows and a new
+    `inputs_sha256`. The migration's live apply and rollback stay with CI.
+  - One commit. After the Step 7 blocker, the operator re-confirmed that Steps 7-10 land as one commit. The four
+    steps cannot pass apart: the seed without its reader is `seeded-unread` under `--final`, the
+    `fetchAndCacheBars` return change breaks the test helper's compile, and Step 7 is RED until Step 8's files exist.
+  - Number. The migration keeps `057`, as specced, on the operator's instruction. `057` is also claimed by
+    314 and 321; whichever feature merges first keeps it.
+  - Shell framing. The union of the four Verification blocks ran as one `&&` chain, each line in its own subshell
+    from the repo root (the Deviation 1 framing). Lines expected to print nothing ran as `test -z "$(…)"` so that
+    any output fails the chain, and the trailing `# …` comments were dropped. Step 9's first line added `-v`
+    to count the tests it ran. `PATH` put Node 24 and the pinned `golangci-lint` v2.14.0 first.
+  - RED staging. Run K=2 was a package-wide compile failure. For a per-test RED (run K=3), the
+    `marketdata_service.go` part of Step 10 (state, `barsFetch` return, the `GetBars` call) was applied first, and
+    throwaway stubs of the new symbols went in `bars_miss_stub.go`. That file was deleted before `bars_miss.go` was
+    written.
+  - Re-runs. Run K=4 failed SA4000 on a line in the new test file, which was then fixed. Run K=5 failed
+    `TestGateway_RateLimit_AC1` in `internal/fmp` on timing ("window starting at call 4 holds 6 requests, want <= 5").
+    No member of this unit touches that package, and the same test passed in K=4 and K=6. K=6 passed the whole
+    chain.
+- **Disposition**: CI-equivalent fallback for the framing; the operator authorized the stored-set route. The
+  commands and the judgment are unchanged.
+- **Anchors**: lines moved after BRANCH SYNC (`GetBars` `:271` → `:279`, the guard `:354` → `:362`,
+  `fetchAndCacheBars` `:410` → `:428`). Every symbol was found, so this is not a deviation (F-04). The
+  `scripts/config-wiring.json` neighbour `bar_hold.go:cfg` is still at `:115`.
+
+### Deviation 5 — Step 11: Verification shell framing; doc-check exit captured alone (2026-11-27)
+
+- **Spec said**: the Step 11 `**Verification**` block, run as written.
+- **Actual**: the block ran verbatim inside `( … )` with the closing paren on its own line, so the trailing `# …`
+  comments could not swallow it (run K=1). The block's exit status is only its last grep's, so
+  `node scripts/check-config-wiring.mjs --doc-check` was also run alone (K=2, exit 0, no output). `PATH` put
+  Node 24 first. Two small consistency edits inside the step's own Files, beyond the literal instructions:
+  MARKETDATA-3's "re-read failure logs a WARN" gains the done-ctx Debug note, and the `alpaca-integration.md`
+  `GetBars` bullet names the bar-ingest early return, so neither text contradicts Steps 2 and 10.
+- **Disposition**: CI-equivalent fallback for the framing; the commands and the judgment are unchanged.

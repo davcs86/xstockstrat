@@ -183,6 +183,22 @@ ordering at the write edge. Approval: owner + config team; DBA + config owner fo
 |---|---|---|---|---|---|---|
 | `agent` | `extract.call_budget_seconds` | float | `35` | `app/tools.py:_extract_call_budget_s` (via `_agent_policy`) | `[5,35]` | Non-finite or `≤ 0` → `35`. On expiry `extract_email_content` returns a `PARTIAL` result and `extract_website_content` raises `DEADLINE_EXCEEDED` (`docs/runbooks/mcp-tools.md`). |
 
+### feature 317 — fix-marketdata-miss-path-noise (`xstockstrat-marketdata` / `xstockstrat-config`)
+
+The window of marketdata's `GetBars` miss back-off: after an implicit first-page miss whose live fetch came
+back empty (no error, ctx live), that `(symbol,timeframe)` is not live-fetched again for this many ms, and
+later empty refetches log at Debug instead of WARN. The key has a full-dotted `SCALAR_BOUNDS_REGISTRY` entry
+in `xstockstrat-config` (`configServiceImpl.ts`) and is **seeded** `1800000` (staging + production, global,
+stored as `int`, insert-if-absent) by config migration `marketdata_bars_miss_backoff`, with the number-free
+actor sentinel `system:config-migration-feature-fix-marketdata-miss-path-noise`; the down deletes only a
+global row that still carries that sentinel and still holds `1800000`, so a value an operator has changed
+survives a rollback. No `scripts/config-wiring.json` baseline entry; one `registry.receivers` entry
+`bars_miss.go:cfg` attributes the reader. Approval: owner + config team.
+
+| Key | Type | Default | Bounds | Notes |
+|---|---|---|---|---|
+| `marketdata.bars.miss_backoff_ms` | int | `1800000` | `[0,21600000]`; never clamped on read | Reader `resolveBarsMissBackoff` (`bars_miss.go`), read live on each implicit first-page miss; `<= 0` disables the back-off and clears its state. |
+
 ### feature 366 — opportunity-live-only-rotation (`xstockstrat-config` / `xstockstrat-analysis`)
 
 The cycle bound of the live-only opportunity rotation: each compute evaluates the next

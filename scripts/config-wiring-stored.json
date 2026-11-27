@@ -2761,6 +2761,30 @@
             "consuming_service": "xstockstrat-marketdata"
         },
         {
+            "key": "bars.miss_backoff_ms",
+            "file": "058_marketdata_bars_miss_backoff.up.sql",
+            "global": true,
+            "is_secret": false,
+            "namespace": "marketdata",
+            "value_type": "int",
+            "description": "Marketdata GetBars miss window: milliseconds a servable symbol with no stored bars is not live-fetched again by GetBars after a live fetch returned none. Read live on each miss. A value of 0 or less disables the back-off, so every miss fetches and warns. Explicit-range reads always fetch.",
+            "environment": "production",
+            "default_value": "1800000",
+            "consuming_service": "xstockstrat-marketdata"
+        },
+        {
+            "key": "bars.miss_backoff_ms",
+            "file": "058_marketdata_bars_miss_backoff.up.sql",
+            "global": true,
+            "is_secret": false,
+            "namespace": "marketdata",
+            "value_type": "int",
+            "description": "Marketdata GetBars miss window: milliseconds a servable symbol with no stored bars is not live-fetched again by GetBars after a live fetch returned none. Read live on each miss. A value of 0 or less disables the back-off, so every miss fetches and warns. Explicit-range reads always fetch.",
+            "environment": "staging",
+            "default_value": "1800000",
+            "consuming_service": "xstockstrat-marketdata"
+        },
+        {
             "key": "classification.enabled",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
@@ -5185,5 +5209,5 @@
             "consuming_service": "xstockstrat-ui"
         }
     ],
-    "inputs_sha256": "436445e5805e8a3060144a428a349387ef6a0238765702e3b9bbca1a8aa1846a"
+    "inputs_sha256": "cda705880f9fce17c0b815c1c304cb226f878015e3689c4dfbd94cdaf5c939d1"
 }
