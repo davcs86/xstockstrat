@@ -319,3 +319,12 @@ Carried from design.md § Open Risks; each needs an owner at `/sdd-spec` or late
   only (D-61): the prune batch is the repository module's `prune_batch` function; the
   runner-versus-heartbeat test is an engine test. No mechanism changed.
 - **OPERATOR: loop the impl-spec review until all warnings are addressed.**
+
+## Session 2026-11-27 — sdd-review impl-spec (advisory, round 2: overlap)
+
+- Overlap scan round 2: the 367 ↔ 345 entry was a Blocking Dependencies table row with
+  `Resolved = No`, which would make `/sdd-execute` warn 367's integration PR until 345 launches,
+  contradicting the operator's "neither waits". Converted to a non-blocking prose section in
+  `merge-order.md` (the file's existing form for config-seed-number overlaps), naming merge-time
+  renumbering as the accepted remedy and adding `scripts/config-wiring-stored.json`. No other
+  collision; the rest is rebase-only.
