@@ -729,3 +729,9 @@ Effect: use the defaults recorded in this file and in the implementation spec fo
 - Atomic unit Steps 1+2+3. Created the sweep and preview verbatim from the spec, replacing the skeleton placeholders. Verification green: marker blocks diff empty, forbidden-token counts 0/0, lint 0 errors; Step 1 suite and Step 2 pglast block green (above). Config-key wiring gate not applicable (no config key declared or seeded; no migration). Verification ran with Node 24 (`/opt/node24/bin` first on PATH), the pinned version.
 - Files modified: `scripts/config-heal/mcp-credential-orphan-sweep.sql`, `scripts/config-heal/mcp-credential-orphan-sweep-preview.sql`
 - Deviations: none
+
+### Step 4 — docs: operator runbook section for the sweep [done]
+- Operator gate answers (binding, operator-approved 2026-11-27, relayed by the orchestrator): (a) target databases are **staging only** — DO dev (cluster `xstockstrat`, database `xstockstrat-staging`) and homelab `xstockstrat-staging`; DO prod and any homelab production database are listed as "not swept: production out of scope (never launched; standing operator ruling)"; (b) cadence is the spec default, on demand and before each `main-dev` → `main` promotion ("B2 use defaults", session above). Added `## Operator sweep: orphaned \`mcp_credential\` secrets (feature 328)` to `docs/runbooks/config-rollout.md` between § Config Inventory and § Recovery: dirty 041, with the seven spec items in order. TDD: N/A (docs).
+- The `operator-db-access.md:59-64` (homelab `xstockstrat-production` database) vs `config-rollout.md:303-304` ("the homelab has no production instance") disagreement is logged as doc drift in the root `docs/context-constitution-findings.md` (operator-directed, separate commit); not resolved here.
+- Files modified: `docs/runbooks/config-rollout.md`
+- Deviations: operator-directed findings row outside the step's Files (see Deviation Log)

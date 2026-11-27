@@ -546,7 +546,7 @@ New logic is SQL outside any service package; the coverage threshold is enforced
 
 ### Step 4 — docs: operator runbook section for the sweep
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/runbooks/`
 **Files**:
 - `docs/runbooks/config-rollout.md` — modify
@@ -953,3 +953,8 @@ git grep -n -i -E "orphan|secret-first" -- . ':!docs/roadmap/features' ':!docs/r
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+### Step 4 — operator-directed findings row outside the step's Files (2026-11-27)
+- **Planned**: modify `docs/runbooks/config-rollout.md` only.
+- **Actual**: the runbook section as specced, with the operator-confirmed staging-only target table (DO dev and homelab `xstockstrat-staging` swept; DO prod and any homelab production listed as not swept). Per the operator's binding decision, one row is also added to the root `docs/context-constitution-findings.md` § Documentation that lies, logging the `operator-db-access.md:59-64` vs `config-rollout.md:303-304` homelab-production disagreement as unresolved doc drift. It is committed alone, after the step commit.
+- **Disposition**: operator-directed (2026-11-27); out-of-scope change announced at the checkpoint.
