@@ -773,3 +773,9 @@ Feature: xstockstrat-indicators — the sandbox reports its failure class, memor
 ### Coverage check
 - Source scenarios: 4 (@AC-1 to @AC-4). Planned: 4 (NEW 4, DUP 0, OVERLAP 0, CONFLICT 0). Every @AC-* is accounted for and none were skipped.
 ```
+
+## Session 2026-11-27 — operator rulings on OQ1 (production waived) and merging the integration PR, recorded by the orchestrator (verbatim)
+
+Operator answers (2026-11-27): to "waive prod": "waive prod" — the production half of OQ1 (and any production procedure for 310) is WAIVED under the standing ruling "leave production out. It's never been out/launched."; to "310: should I merge PR #1617 once CI is green and OQ1 is settled?": "B5 yes".
+
+Effect: OQ1 reduces to the dev/staging check of indicators.formulas (operator-run; query and steps in the 2026-11 operator runbook). PR #1617 may be squash-merged once its CI is green and the operator reports the dev/staging OQ1 check done. D-14 (first post-deploy sandbox memory self-test log line) is staging-only.
