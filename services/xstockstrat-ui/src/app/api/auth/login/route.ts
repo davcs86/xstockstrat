@@ -29,6 +29,11 @@ async function postHandler(req: NextRequest) {
   } catch (err) {
     // Connect code only — never the email or password.
     const code = ConnectError.from(err).code;
+    // Identity refuses password login in auth.mode oidc (D-106).
+    if (code === Code.PermissionDenied) {
+      recordAuthEvent('login_disabled');
+      return NextResponse.json({ error: 'login_disabled' }, { status: 403 });
+    }
     if (code === Code.Unauthenticated) {
       recordAuthEvent('login_failed');
       serverLog.warn('[login] credentials rejected', { code: Code[code] });

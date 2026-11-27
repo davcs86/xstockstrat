@@ -1496,7 +1496,7 @@ grep -n "helpers/auth" src/app/api/auth/logout/route.test.ts src/lib/auth.test.t
 
 ### Step 38 — service: Revoke deadline and the oidc password 403
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/identity.ts` — modify
