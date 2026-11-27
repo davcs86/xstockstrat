@@ -392,7 +392,7 @@ test "$(grep -c "def .*fixture\|from .conftest\|conftest" services/xstockstrat-a
 
 ### Step 4 — service: stamp the owner on the `ingest.signal.ingested` ledger event
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/app/handlers/servicer.py` — modify

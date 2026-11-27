@@ -1508,6 +1508,7 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
                         source_service="xstockstrat-ingest",
                         stream_key=f"signal:{signal.source}:{signal.symbol}",
                         payload=payload,
+                        user_id=owner,
                     ),
                     metadata=propagation_meta,
                 )

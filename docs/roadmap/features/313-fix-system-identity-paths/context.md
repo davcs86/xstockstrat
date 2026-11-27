@@ -1217,3 +1217,14 @@ Steps fixed: 2, 3, 4, 5, 6, 7, 8. Re-run Step 2 onward with the updated blocks v
 
 - [x] Step 3 RED on the pre-Step-2 tree. Closed by Step 3 (see above).
 - [ ] Carried: Verification `exit=` reflects only the last line (Steps 4-8), `@AC-3` PRESERVE comment file placement (operator), `**kw` spy rename risk (Step 7), two-header residual (Step 6), analysis findings `:24`/`:32` stale after Steps 2-3 (no step), merge-order row for 313/309.
+
+## Session 2026-11-27 — sdd-execute sequential (sdd-batch-execute), step 4
+
+- Tooling (step 4): uv ✓ 0.11.32 · `uv sync --extra dev` in `services/xstockstrat-ingest` ⬇ (the `.venv` resolved Python 3.12.3, not the 3.13 pin, as in Steps 2-3) · ruff ✓ 0.16.9 (host) · pytest ✓ (service `.venv`, put first on `PATH` for each run). Hook check hook=0.
+
+### Step 4 — service: stamp the owner on the `ingest.signal.ingested` ledger event [done]
+- Added `user_id=owner,` after `payload=payload,` in the `ingest.signal.ingested` `AppendEventRequest` of `_ingest_external_signal` (re-grepped anchor: `event_type=` at `servicer.py:1507`). `metadata=propagation_meta`, the other `AppendEventRequest` sites (`servicer.py:648`, `app/admin_audit.py:29`) and both callers are unchanged; no `x-user-id` entry built.
+- TDD (no `**Covers**`; AC-1's test is Step 5). RED: Verification `.sdd-logs/v-1.log` `exit=1` (ruff `All checks passed!`, `58 files already formatted`, `246 passed`; the final `user_id=owner` count check failed). A behaviour probe outside the repo (`_ingest_external_signal(..., owner="user-a")` with no `propagation_meta`, the loop shape, via the `test_signal_ownership.py` helpers; not committed) failed with `AssertionError: assert '' == 'user-a'`. GREEN: `.sdd-logs/v-2.log` `exit=0`: `All checks passed!`, `58 files already formatted`, `246 passed`; the probe passed (`1 passed`). Full suite `pytest --cov=app --cov-fail-under=40`: `622 passed`, `Total coverage: 87.68%`.
+- Config-key wiring gate: not applicable (no config key).
+- Files modified: `services/xstockstrat-ingest/app/handlers/servicer.py`
+- Deviations: none
