@@ -1300,7 +1300,7 @@ grep -rn "'evaluation_failed'" src | grep -v "src/lib/readinessCue.ts"   # expec
 
 ### Step 22 — test: Playwright assertion for the `evaluation_failed` readiness-card arm
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/trader/position-detail.spec.ts` — modify
@@ -1796,3 +1796,37 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Disposition**: CI-equivalent fallback for `tsc`. The e2e failures are pre-existing or
   environmental, shown against the baseline. No file outside Step 21's **Files** is committed.
   Step 22 still adds the permanent Playwright tests, its own RED and the mutation run as specced.
+
+### Step 22: targeted RED and mutation runs, stale linked proto dist and baseline-failing tests (2026-11-27)
+
+- **Expected**: Instruction 5 takes RED with `SignalReadiness.tsx` at the pre-Step-21 commit and runs a
+  mutation that drops `&& noConditions`. The Verification block (`lint`, `tsc --noEmit`, the spec,
+  `test:coverage`, three greps) passes as written.
+- **Actual**:
+  - RED: `SignalReadiness.tsx` was checked out at `1f8d6635` and restored before GREEN. The two new tests
+    were run alone (`-g "readiness card"`, `--project=chromium --no-deps --timeout=240000`). The
+    positive test gave `getByTestId('readiness-evaluation-failed')` `element(s) not found`, with the
+    card reading "This strategy has no entry conditions to evaluate." The negative test passed, as the
+    step states (`1 failed, 1 passed`).
+  - Mutation (`evalFailed && noConditions` → `evalFailed`, reverted without committing): the negative
+    test failed on `getByTestId('signal-readiness').getByText('2/3 conditions')` `element(s) not found`
+    (`1 failed, 1 passed`). After the revert both passed (`2 passed`).
+  - The verbatim block exited 0, but that status comes from its last grep.
+    - Lint passed, with warnings in untouched files only.
+    - vitest: `Tests  748 passed | 2 skipped (750)`, `Statements   : 81.13%`.
+    - All three greps hit.
+    - `tsc` reported `BackfillSymbolOutcome.INCOMPLETE` in two untouched files (stale linked proto
+      dist). Against this branch's dist, through a `paths` override under `.sdd-logs/`, it exited 0 and
+      compiled `position-detail.spec.ts`.
+    - The Playwright warmup timed out at 10 s (`64 did not run`).
+  - A re-run with only `--timeout=240000` added gave `5 failed, 60 passed`. All three feature-308 tests
+    passed. None of the failures is in a test this step touches:
+    - the two AAPL `Single Position page` tests and `@AC-5 INCOMPLETE-only partial`, already shown
+      failing at the pre-Step-19 baseline (Steps 19-21);
+    - `feature 139` mobile tabbed panel, already shown failing at `HEAD` (Step 21);
+    - `the readiness strategy picker excludes non-live strategies (feature 083/125)`
+      (`getByRole('option', { name: 'Live Test Strategy' })` not visible). Run alone with the spec
+      file at `HEAD`, without this step's edit, it fails the same way (`1 failed`), so it was already
+      failing in this worktree.
+- **Disposition**: CI-equivalent fallback for `tsc`. The e2e failures are pre-existing or
+  environmental, shown against the baseline. No file outside Step 22's **Files** is committed.

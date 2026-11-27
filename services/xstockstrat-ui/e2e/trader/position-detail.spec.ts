@@ -6,6 +6,7 @@ import {
   MYSZ_EVALUATION_FAILED_OPPORTUNITY,
   STRATEGY_DEF_LIVE,
   UI_CHART_HISTORY_VALUES,
+  symbolReadiness,
 } from '../fixtures';
 import { backfillJob, incompleteSymbolResult } from '../fixtures/backfillJobs';
 import { historyBarsWire, indicatorSeriesWire } from '../fixtures/indicatorHistory';
@@ -1233,6 +1234,48 @@ test.describe('Signal-detail evaluation failed (feature 308)', () => {
     await expect(header).toBeVisible({ timeout: 30000 });
     await expect(header).toContainText('evaluation failed');
     await expect(page.getByTestId('detail-formula-unreadable')).toHaveCount(0);
+  });
+
+  test('readiness card shows the evaluation-failed notice for an empty row', async ({ page }) => {
+    await addAuthCookie(page);
+    await watchlist(page, 'MYSZ', 'strat-live-001');
+    await routeEvaluationFailedRow(page);
+    await page.route('**/xstockstrat.analysis.v1.AnalysisService/EvaluateReadiness', (route) =>
+      fulfillJson(route, {
+        readiness: [
+          {
+            ...symbolReadiness('MYSZ'),
+            conviction: 0,
+            passingConditions: 0,
+            totalConditions: 0,
+            conditions: [],
+          },
+        ],
+      }),
+    );
+    await page.goto('/trader/positions/MYSZ?strategy=strat-live-001');
+
+    const notice = page.getByTestId('readiness-evaluation-failed');
+    await expect(notice).toBeVisible({ timeout: 30000 });
+    await expect(notice).toContainText('Evaluation failed for MYSZ');
+    await expect(page.getByTestId('readiness-formula-unreadable')).toHaveCount(0);
+    await expect(page.getByText('conditions to evaluate')).toHaveCount(0);
+  });
+
+  test('readiness card keeps real conditions when the row is evaluation-failed', async ({
+    page,
+  }) => {
+    await addAuthCookie(page);
+    await watchlist(page, 'MYSZ', 'strat-live-001');
+    await routeEvaluationFailedRow(page);
+    await page.route('**/xstockstrat.analysis.v1.AnalysisService/EvaluateReadiness', (route) =>
+      fulfillJson(route, { readiness: [symbolReadiness('MYSZ')] }),
+    );
+    await page.goto('/trader/positions/MYSZ?strategy=strat-live-001');
+
+    await expect(readinessCard(page).getByText('2/3 conditions')).toBeVisible({ timeout: 30000 });
+    await expect(page.getByTestId('readiness-evaluation-failed')).toHaveCount(0);
+    await expect(page.getByTestId('readiness-formula-unreadable')).toHaveCount(0);
   });
 });
 

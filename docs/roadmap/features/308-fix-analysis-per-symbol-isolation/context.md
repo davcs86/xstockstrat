@@ -931,3 +931,28 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 
 ### Open Threads
 - [ ] `position-detail.spec.ts` `feature 139` section-nav tests fail on the host harness in this worktree with and without Step 21 (one also passed in a full-spec run during Step 19). CI's Docker e2e is the arbiter; triage separately from 308 if they fail there.
+
+## Session 2026-11-27 — sdd-execute sequential (sdd-batch-execute), step 22
+
+- Tooling: pnpm 9.15.9 ✓ · chromium ✓ (`/opt/pw-browsers`) · hook check hook=0. No install was run. Lockfile gate: `git diff --quiet origin/main-dev -- pnpm-lock.yaml` rc=0.
+- Discovery: the advisory digest read the main checkout's pre-re-spec spec, which ends at Step 17. At `origin/feature/fix-analysis-per-symbol-isolation@bd49aa7d`, Step 22 exists and everything it needs is in place: `routeEvaluationFailedRow`, `fulfillJson`, `watchlist` and `readinessCard` in `position-detail.spec.ts`, `symbolReadiness` (re-exported through `e2e/fixtures/index.ts`), the Step 16 catalog row at `INVENTORY.md:45`, and Step 21's arm (`evalFailed && noConditions`, `readiness-evaluation-failed`) at `SignalReadiness.tsx:102-103`.
+
+### Step 22 — test: Playwright assertion for the `evaluation_failed` readiness-card arm [done]
+- `position-detail.spec.ts` adds `symbolReadiness` to the `'../fixtures'` import and two tests to the `Signal-detail evaluation failed (feature 308)` describe, both using `watchlist` and `routeEvaluationFailedRow` with `EvaluateReadiness` overridden through `page.route`:
+  - empty row (`{ ...symbolReadiness('MYSZ'), conviction: 0, passingConditions: 0, totalConditions: 0, conditions: [] }`): `readiness-evaluation-failed` is visible with `Evaluation failed for MYSZ`, and `readiness-formula-unreadable` and `getByText('conditions to evaluate')` each have count 0;
+  - negative case (`symbolReadiness('MYSZ')`, 2/3): `2/3 conditions` is visible inside `signal-readiness`, and the two notice ids each have count 0.
+- `INVENTORY.md`: both tests added to the consumer column of the Step 16 row. No new fixture (C-12).
+- TDD:
+  - RED (`.sdd-logs/v-1.log`, `SignalReadiness.tsx` at the pre-Step-21 commit `1f8d6635`, restored before GREEN): `getByTestId('readiness-evaluation-failed')` `element(s) not found`, with the card reading "This strategy has no entry conditions to evaluate." (`1 failed, 1 passed`; the negative test is not red before Step 21, as specced).
+  - Mutation (`.sdd-logs/v-2.log`, arm reduced to `evalFailed`, reverted without committing): the negative test failed on `getByTestId('signal-readiness').getByText('2/3 conditions')` `element(s) not found` (`1 failed, 1 passed`).
+  - GREEN (`.sdd-logs/v-3.log`): `2 passed (36.2s)`.
+- Verification:
+  - The verbatim block (`.sdd-logs/v-4.log`) printed exit=0, but that status comes from the last grep. Lint passed (warnings in untouched files only); vitest `Tests  748 passed | 2 skipped (750)`, `Statements   : 81.13%`; all three greps hit.
+  - tsc failed on `BackfillSymbolOutcome.INCOMPLETE` (stale linked proto dist). Against this branch's dist it exited 0 and compiled `position-detail.spec.ts` (`.sdd-logs/v-5.log`).
+  - The warmup timed out at 10 s. A re-run with `--timeout=240000` gave `5 failed, 60 passed` (`.sdd-logs/v-6.log`), with all three feature-308 tests passing. Failures: the two AAPL tests, `@AC-5 INCOMPLETE-only` and `feature 139` seen in Steps 19-21, plus `feature 083/125` strategy picker, which fails the same way alone with the spec file at `HEAD` (`.sdd-logs/v-9.log`).
+- Config-wiring gate: not applicable (no config key, no migration).
+- Files modified: `services/xstockstrat-ui/e2e/trader/position-detail.spec.ts`, `services/xstockstrat-ui/e2e/fixtures/INVENTORY.md`
+- Deviations: targeted RED and mutation runs, the stale linked proto dist and baseline-failing tests (Deviation Log "Step 22").
+
+### Open Threads
+- [ ] `position-detail.spec.ts` `the readiness strategy picker excludes non-live strategies (feature 083/125)` fails on the host harness in this worktree with and without this step's edit (it passed in Step 21's full run). CI's Docker e2e is the arbiter; triage separately from 308 if it fails there.
