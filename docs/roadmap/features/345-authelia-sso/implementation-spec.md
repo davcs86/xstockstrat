@@ -1716,7 +1716,7 @@ cd services/xstockstrat-ui && pnpm run typecheck && pnpm run lint && pnpm run te
 
 ### Step 44 — service: Login page per mode and the SSO sign-in form
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/auth/login/page.tsx` — modify
