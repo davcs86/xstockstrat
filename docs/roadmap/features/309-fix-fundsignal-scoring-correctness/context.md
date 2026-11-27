@@ -805,6 +805,10 @@ Re-spec applied (`implementation-spec.md`): Steps 16-18 removed from the step li
 ## Session 2026-11-27 — sdd-batch-execute promotion plan (awaiting operator confirm)
 
 ```sdd-batch-promotion-plan
+> CORRECTED 2026-11-27 by the orchestrator under the operator ruling "Do not promote AC-4 (Recommended)": promote @AC-1, @AC-2,
+> @AC-3 (analysis suite) and @AC-5 (ingest suite) only. @AC-4 is NOT promoted: the retraction migration was dropped, so it has no mechanism
+> or test; it stays in acceptance.feature (C-15) and is closed by the recorded zero-row evidence. @AC-1 gate cleared: the 246 @AC-3 and
+> 201 @AC-8 amendments are on the branch. Everything else is unchanged.
 ## Promotion plan — fix-fundsignal-scoring-correctness (feature 309)
 
 Source: docs/roadmap/features/309-fix-fundsignal-scoring-correctness/acceptance.feature. I read it from the working tree, not from origin/feature/fix-fundsignal-scoring-correctness, because I have no git access. The caller should confirm the working-tree copy matches the branch. Affected suites checked: xstockstrat-analysis, xstockstrat-ingest, and docs/sdd/business-rules/platform.feature. No `@feature-309` tag exists anywhere yet, so this is a first promotion.
@@ -815,7 +819,7 @@ Source: docs/roadmap/features/309-fix-fundsignal-scoring-correctness/acceptance.
 | @AC-1 | services/xstockstrat-analysis/acceptance/fix-fundsignal-scoring-correctness.feature | CREATE | NEW (gated, see Notes 1) | Subject is the producer's ExecuteFormula input, which lives in analysis. Related to `@AC-3 @feature-246` and `@AC-8 @feature-201`, both amended by this feature. |
 | @AC-2 | services/xstockstrat-analysis/acceptance/fix-fundsignal-scoring-correctness.feature | CREATE | NEW | Subject is the direction on the emitted signal. No existing small-cross-section rule found. |
 | @AC-3 | services/xstockstrat-analysis/acceptance/fix-fundsignal-scoring-correctness.feature | CREATE | NEW | Subject is `compute_signal_score` in the analysis screener and backtest. No existing explicit-zero-conviction rule found. |
-| @AC-4 | services/xstockstrat-ingest/acceptance/fix-fundsignal-scoring-correctness.feature | CREATE | NEW | Subject is `ingest.newsletter_signals.valid_until` and QuerySignals. No existing retraction rule found. |
+| @AC-4 | (not promoted) | — | NOT PROMOTED (operator ruling 2026-11-27) | The retraction migration was dropped (empty frozen list); @AC-4 has no mechanism, step or test and is closed by the recorded zero-row evidence. C-15 exception, recorded in context.md and the PR. |
 | @AC-5 | services/xstockstrat-ingest/acceptance/fix-fundsignal-scoring-correctness.feature | CREATE | NEW | Subject is the mcp_client ingest of conviction 0.0. It is distinct from `@AC-4 @feature-166` (conviction 0.72), so it is not a DUP or OVERLAP. See Notes 3. |
 
 ### Ready-to-write blocks
@@ -860,23 +864,11 @@ Feature: fix-fundsignal-scoring-correctness (bug fix)
 --- /home/user/xstockstrat/services/xstockstrat-ingest/acceptance/fix-fundsignal-scoring-correctness.feature (CREATE) ---
 # Promoted from docs/roadmap/features/309-fix-fundsignal-scoring-correctness/acceptance.feature at launch
 # (Constitution C-16). Source-feature provenance is carried on every scenario's `@feature-309` tag.
-# Durable business rules xstockstrat-ingest guarantees: pre-246 fabricated fundamentals signals are not
-# active, and an explicit mcp_client conviction of 0.0 is stored as 0 — a rule enters only by promotion,
-# never by hand-authoring.
+# Durable business rules xstockstrat-ingest guarantees: an explicit mcp_client conviction of 0.0 is stored
+# as 0 — a rule enters only by promotion, never by hand-authoring.
 
 Feature: fix-fundsignal-scoring-correctness (bug fix)
-  Regression guard for clustered defect reports: pre-246 fabricated signals are no longer active, and
-  explicit zero conviction stays zero on ingest.
-
-  # guards: docs/reports/2026-10-21-ingest-fundsignal-fabricated-signals-not-retracted-defect.md
-  @AC-4 @regression @feature-309
-  Scenario: Pre-246 fabricated fundamentals signals for data-less symbols are no longer active
-    Given ingest.newsletter_signals holds a row with user_id "system", source "fundamentals", symbol "SPY", conviction 0.5 and a future valid_until
-    And "SPY" is confirmed data-less in the marketdata fundamentals cache
-    When the retraction runs for that environment
-    Then the row's valid_until is no later than the retraction time
-    And QuerySignals with an active window no longer returns it
-    And a real computed 0.5 signal for a symbol with fundamentals data stays active
+  Regression guard: explicit zero conviction stays zero on ingest.
 
   # guards: docs/reports/2026-10-21-analysis-zero-conviction-read-as-neutral-defect.md
   # extends: services/xstockstrat-ingest/acceptance/mcp-client-signal-source.feature @AC-4 @feature-166 (design.md § Business Rules Touched)
@@ -907,3 +899,7 @@ Feature: fix-fundsignal-scoring-correctness (bug fix)
 - Source scenarios: 5 (@AC-1 through @AC-5). Planned (NEW+DUP+OVERLAP): 5 NEW, 0 DUP, 0 OVERLAP. @AC-1 is gated on note 1.
 - Every @AC-* is accounted for and none were skipped. Two files are created: 3 scenarios in analysis and 2 in ingest. Neither directory needs creating, since `acceptance/` already exists for both services.
 ```
+
+## Session 2026-11-27 — C-16 promotion ruling recorded by the orchestrator (verbatim)
+
+Question: with the retraction migration dropped, what happens to @AC-4 ("pre-246 fabricated signals no longer active: When the retraction runs...") at promotion? Operator answer: **"Do not promote AC-4 (Recommended)"** — promote @AC-1, @AC-2, @AC-3 and @AC-5 only; record @AC-4 as a C-15 exception closed by the zero-row evidence (DO staging and homelab staging, 2026-11-27), not by a guarded scenario. The `sdd-batch-promotion-plan` block above was corrected accordingly before the gate was approved.
