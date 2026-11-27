@@ -644,3 +644,10 @@ Effect: the C-14 agent scope addition (the agent-surface scope the design propos
 - Tooling: `uv sync --extra dev` in services/xstockstrat-analysis (worktree-local .venv). Config-key wiring gate: not applicable (no config key, not a config step).
 - Files modified: `services/xstockstrat-analysis/app/engine/entry_backfill.py`
 - Deviations: none
+
+### Step 2 — test: the backfill selection follows `LIVE_ENABLED_PREDICATE_SQL` [done]
+- Added `test_ac2_selects_through_the_live_enabled_predicate` and `test_ac2_narrowed_predicate_selects_nothing` to `TestRunOnce` (inline rows via `_strategy_row`/`_fake_live_loop`/`_cfg`/`_order`, no new fixture home; module import `from app.repositories import strategies` so the monkeypatched constant is read at call time).
+- TDD: AC-2 red (Step 1 literal temporarily restored in the working tree, then discarded with `git checkout -- app/engine/entry_backfill.py`): `assert "live_enabled = TRUE AND active = TRUE AND strategy_id <> 's1'" in 'SELECT * FROM analysis.strategies WHERE live_enabled = TRUE AND active = TRUE'` failed, `1 failed, 1 passed, 22 deselected`, exit=1 → green: `2 passed, 22 deselected`, `1828 passed`, `Total coverage: 91.88%`, `All checks passed!`, `143 files already formatted`, exit=0. The conftest grep shows only the existing `19:from tests.conftest import RecordingStub, real_live_loop`.
+- Tooling: `uv sync --extra dev` in services/xstockstrat-analysis (worktree-local .venv). Config-key wiring gate: not applicable.
+- Files modified: `services/xstockstrat-analysis/tests/test_entry_backfill.py`
+- Deviations: none

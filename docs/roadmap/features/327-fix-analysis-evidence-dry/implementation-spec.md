@@ -158,7 +158,7 @@ ruff check . && ruff format --check .
 
 ### Step 2 — test: the backfill selection follows `LIVE_ENABLED_PREDICATE_SQL`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_entry_backfill.py` — modify
