@@ -264,3 +264,13 @@ Up-front confirmation: the operator approved the plan with this record (binding,
 
 Question (Step 13 blocker, operator-only stored-state check): who runs the live read-back of `trading/broker.timeout_ms` and `trading/order_intent.stale_multiplier` on DO staging and homelab staging, plus the `config.config_audit` rows?
 Operator answer: **"Defer Step 13"** — Step 13 stays `pending` and the feature stays `in-progress`, with the draft gate held until just before the integration PR leaves draft. Pass condition unchanged: `timeout_ms` is an int >= 10000 and `stale_multiplier` >= 4.0; a reverted value is re-applied through SetConfig, never a migration. Production is out of scope (standing ruling).
+
+## Session 2026-11-27 — correction to the preceding Step 13 ruling, recorded by the orchestrator (verbatim)
+
+The preceding "Defer Step 13" entry was selected by mistake (operator, same session). It is superseded. Operator's intended answer: **"You authorize me"** — the main session reads `trading/broker.timeout_ms` and `trading/order_intent.stale_multiplier` with the read-only `get_config` tool on the `xstockstrat_staging` and `xstockstrat_homelab_staging` MCP servers (staging only, no writes, production out of scope); the `config.config_audit` rows are read by the operator with `scripts`-free read-only SQL (A8).
+
+Read-back taken 2026-11-27T03:13Z by the main session (get_config namespace `trading`, global scope):
+- DO staging (`xstockstrat_staging`, environment=staging, config version `d6b3f8be0d742264`): `broker.timeout_ms` = 10000 (int), `order_intent.stale_multiplier` = 4.0 (float).
+- Homelab staging (`xstockstrat_homelab_staging`, environment=staging, config version `d6b3f8be0d742264`): `broker.timeout_ms` = 10000 (int), `order_intent.stale_multiplier` = 4.0 (float).
+- Pass condition (`timeout_ms` int >= 10000, `stale_multiplier` >= 4.0): met on both, each at the boundary. Both deployments report the same opaque version, which is consistent with identical content; it is not proof that the two stores are independent.
+- Outstanding: the `config.config_audit` rows (operator-run read-only query A8 on each database). Step 13 is not marked done until they are recorded.
