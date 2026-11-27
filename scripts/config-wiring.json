@@ -2,14 +2,7 @@
   "policy": {
     "envReadUnseeded": "blocking"
   },
-  "findings": [
-    {
-      "namespace": "trading",
-      "key": "broker.paper",
-      "kind": "read-unseeded",
-      "owner": "defect 2026-11-06-trading-broker-paper-env-derived-default-unseedable"
-    }
-  ],
+  "findings": [],
   "registry": {
     "forwarders": {
       "services/xstockstrat-analysis/app/config/watcher.py:int_positive": {

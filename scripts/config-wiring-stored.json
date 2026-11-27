@@ -4537,6 +4537,30 @@
             "consuming_service": "xstockstrat-trading"
         },
         {
+            "key": "broker.paper",
+            "file": "057_trading_broker_paper_per_environment.up.sql",
+            "global": true,
+            "is_secret": false,
+            "namespace": "trading",
+            "value_type": "bool",
+            "description": "Paper or live for this deployment: true stamps new orders and registers new broker accounts as paper, false as live. Seeded per environment (staging true, production false); with no row trading resolves paper unless APPLICATION_ENV is production. Read live. Accounts already registered keep routing by their own stored mode, so changing this value does not re-route them.",
+            "environment": "production",
+            "default_value": "false",
+            "consuming_service": "xstockstrat-trading"
+        },
+        {
+            "key": "broker.paper",
+            "file": "057_trading_broker_paper_per_environment.up.sql",
+            "global": true,
+            "is_secret": false,
+            "namespace": "trading",
+            "value_type": "bool",
+            "description": "Paper or live for this deployment: true stamps new orders and registers new broker accounts as paper, false as live. Seeded per environment (staging true, production false); with no row trading resolves paper unless APPLICATION_ENV is production. Read live. Accounts already registered keep routing by their own stored mode, so changing this value does not re-route them.",
+            "environment": "staging",
+            "default_value": "true",
+            "consuming_service": "xstockstrat-trading"
+        },
+        {
             "key": "broker.timeout_ms",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
@@ -5161,5 +5185,5 @@
             "consuming_service": "xstockstrat-ui"
         }
     ],
-    "inputs_sha256": "171dc776a579da4384dc040ff3dcc5bc31dbab5aa998b6649fa59c21f3f551de"
+    "inputs_sha256": "2220896f1f433dc3d986309c0ec4ec79fba50552793d7647082c4c20caadcf37"
 }

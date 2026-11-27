@@ -2833,10 +2833,10 @@ func (s *TradingService) GetTradingEnvironment(_ context.Context) *tradingv1.Get
 	}
 }
 
-// environmentIsPaper resolves whether this deployment routes to paper trading.
-// Priority: live config key trading.broker.paper > TRADING_MODE env default.
+// environmentIsPaper is the sole reader of trading.broker.paper; with no stored row
+// only APPLICATION_ENV=production resolves live.
 func (s *TradingService) environmentIsPaper() bool {
-	return s.cfgW.GetBool("broker.paper", s.cfg.TradingMode == "paper")
+	return s.cfgW.GetBool("broker.paper", s.cfg.ApplicationEnv != "production")
 }
 
 // validateAndRecordCredential validates credentials and persists the resulting status (best-effort).
@@ -3861,13 +3861,12 @@ func (s *TradingService) checkTradingStateForReplace(order *tradingv1.Order, req
 }
 
 // resolveTradingMode determines the effective trading mode.
-// Priority: explicit request field > live config key > env var default.
+// Priority: explicit request field > trading.broker.paper > APPLICATION_ENV.
 func (s *TradingService) resolveTradingMode(requested commonv1.TradingMode) commonv1.TradingMode {
 	if requested != commonv1.TradingMode_TRADING_MODE_UNSPECIFIED {
 		return requested
 	}
-	paper := s.cfgW.GetBool("broker.paper", s.cfg.TradingMode == "paper")
-	if paper {
+	if s.environmentIsPaper() {
 		return commonv1.TradingMode_TRADING_MODE_PAPER
 	}
 	return commonv1.TradingMode_TRADING_MODE_LIVE

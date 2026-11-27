@@ -200,3 +200,33 @@ Up-front confirmation: the operator approved the plan with this record (binding,
 - Deviations: RED captured by transiently reverting Step 4's bind (Deviation Log "Step 5 — RED captured…").
 - TDD: AC-3 red (bind reverted to `false`, uncommitted): "argument 16 expected [bool - true] does not match actual [bool - false]" and "requires_approval bind = false, want true" → green: `ok internal/repository`, `ok internal/service`, full suite all `ok`, `total: 85.0%` (>= 40%), `golangci-lint` `0 issues.`, C-13 count `2`. Verbose re-run: 3 subtests + the PlaceOrder test PASS. Mutation: adding `requires_approval = EXCLUDED.requires_approval` to `DO UPDATE SET` fails the PENDING_APPROVAL subtest; reverted.
 - Impl-spec review warning "add a PARTIALLY_FILLED row (expect false)" not applied (Step 5 Instruction 1 names three statuses) — still unaddressed.
+
+## Session 2026-11-27 — sdd-execute sequential (sdd-batch-execute), unit Steps 6+7+8+9
+
+- Tree: detached at `origin/feature/fix-trading-config-plumbing@1eeae5cd`. Discovery: `environmentIsPaper` `trading.go:2836-2840` (GetBool `:2839`), callers `:1080`, `:2713`, `:2747`, `:2827` (`GetTradingEnvironment` `:2825`); `resolveTradingMode` `:3863-3874` (GetBool `:3869`); `cfg.TradingMode` read only at those two lines. Config migrations: `origin/main-dev` max `056`, so `057` stands (`057` is on 314's branch only). `scripts/config-wiring.json` held the single `broker.paper` read-unseeded entry; `config-wiring.test.mjs:618` the `findings.length > 0` assertion.
+- Stored-set route (Open Thread "Before Step 6"): route (a), an operator-authorized throwaway local PostgreSQL 16 provisioned by the main session (go-ahead 2026-11-26), `migrate` v4.17.1 and `psql` 16 on PATH. Generator only; no database started by this agent; verification offline. Deviation Log "Steps 6+7+8+9 — stored set regenerated…".
+- Tooling (steps 6–9): go1.27 ✓ · golangci-lint ✓ v2.14.0 (`/root/go/bin`, prepended to PATH) · pnpm ✓ (linked main-checkout node_modules) · node v22 · python3 ✓ · hook check hook=0.
+
+### Step 6 — service: `broker.paper` has one reader and an `APPLICATION_ENV` fallback [done]
+- Atomic unit Steps 6+7+8+9. `environmentIsPaper` falls back to `s.cfg.ApplicationEnv != "production"` and is the sole `broker.paper` reader; `resolveTradingMode` calls it. `Config.TradingMode`, `NewWatcher` and deployment files untouched (D-19).
+- Files modified: `services/xstockstrat-trading/internal/service/trading.go`
+- Deviations: none
+- Verification: one `"broker.paper"` hit (`:2839`), no `cfg.TradingMode` hit, `environmentIsPaper()` at `:1080`, `:2713`, `:2747`, `:2827`, `:3869`; TRADING_MODE lines unchanged; deployment diff empty; `go build`/`go vet` clean.
+
+### Step 7 — test: paper/live resolution follows `APPLICATION_ENV` and the stored row (AC-4) [done]
+- Atomic unit Steps 6+7+8+9. Added `TestEnvironmentIsPaper_F321_AC4` (seven table rows on three surfaces plus the explicit-request row), literal enums.
+- Files modified: `services/xstockstrat-trading/internal/service/trading_paper_env_test.go`
+- Deviations: none
+- TDD: AC-4 red: the four no-row rows failed, e.g. "production, TRADING_MODE paper, no row: environmentIsPaper() = true, want false" / "GetTradingEnvironment().TradingMode = TRADING_MODE_PAPER, want TRADING_MODE_LIVE" → green: `ok internal/service`; full suite all `ok` (the eleven `&config.Config{}` harnesses stay green in PAPER), `total: 85.0%` (>= 40%), `golangci-lint` `0 issues.`
+
+### Step 8 — migration: seed `trading` / `broker.paper` per environment (config `057`) [done]
+- Atomic unit Steps 6+7+8+9. `057_trading_broker_paper_per_environment.{up,down}.sql`: two-tuple insert-if-absent (staging `true`, production `false`, sentinel `system:config-migration-feature-321`); the down deletes only the sentinel rows still at their seeded per-environment value. Stored set regenerated (2 rows, new `inputs_sha256`).
+- Files modified: `services/xstockstrat-config/migrations/057_trading_broker_paper_per_environment.up.sql`, `.down.sql`, `scripts/config-wiring-stored.json`
+- Deviations: operator-authorized scratch database for the generator (Deviation Log).
+- TDD: N/A (migration). Offline check: pair is the highest number; down reverses up by inspection; stored-JSON count `2`; catalog.tsv / trading config diff empty. Config-key wiring gate (step-time, `--declared-from product-spec.md --declared-migration 057_…up.sql`): exit=0, no findings printed.
+
+### Step 9 — test: per-environment seed and a clean wiring gate (AC-4) [done]
+- Atomic unit Steps 6+7+8+9. Added `brokerPaperSeedMigration.test.ts` (4 cases); removed the `broker.paper` baseline entry (`"findings": []`); `config-wiring.test.mjs:618` now `assert.ok(Array.isArray(findings), 'findings must be an array')`.
+- Files modified: `services/xstockstrat-config/src/__tests__/brokerPaperSeedMigration.test.ts`, `scripts/config-wiring.json`, `scripts/config-wiring.test.mjs`
+- Deviations: none
+- TDD: AC-4 red: "expected exactly one *_trading_broker_paper_per_environment.up.sql, got []" (4 subtests failed) → green: config suite `# tests 409 / # pass 409 / # fail 0`, coverage `All files 92.31` lines (>= 40), lint 0 errors; `config-wiring.test.mjs` 75/75; `--final` `exit 0` with `broker.paper` count `0` (only the two pre-existing `REPORTED:` readers-disagree lines); `--doc-check` + `check-watcher-copies: all groups byte-identical`; C-13 fixture grep none.

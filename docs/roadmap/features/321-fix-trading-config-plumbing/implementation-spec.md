@@ -485,7 +485,7 @@ grep -rn "type rowCapture\|upsertRequiresApprovalArg =" --include='*_test.go' . 
 
 ### Step 6 — service: `broker.paper` has one reader and an `APPLICATION_ENV` fallback
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/service/trading.go` — modify
@@ -558,7 +558,7 @@ Lint and the test run are in Step 7.
 
 ### Step 7 — test: paper/live resolution follows `APPLICATION_ENV` and the stored row (AC-4)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/service/trading_paper_env_test.go` — create
@@ -626,7 +626,7 @@ GOWORK=off golangci-lint run --modules-download-mode=mod
 
 ### Step 8 — migration: seed `trading` / `broker.paper` per environment (config `056`, provisional)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/migrations/057_trading_broker_paper_per_environment.up.sql` — create
@@ -712,7 +712,7 @@ route). The `down` is not executed locally: Step 9 pins its SQL text, and the ro
 
 ### Step 9 — test: per-environment seed and a clean wiring gate (AC-4)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/__tests__/brokerPaperSeedMigration.test.ts` — create
@@ -1008,3 +1008,8 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Spec said**: "RED before Step 4" for both AC-3 tests, but Step 4 is already committed (`2ffd368d`) when Step 5 runs.
 - **Actual**: the `trading_repo.go` bind was set back to `false` in the worktree, the Verification block run RED (both new tests fail on the bound value), then the file restored with `git checkout` before the GREEN run. Not committed; `trading_repo.go` is unchanged by this step.
 - **Disposition**: RED-capture method only; no scope or behavior change.
+
+### Steps 6+7+8+9 — stored set regenerated on an operator-authorized scratch database (2026-11-27)
+- **Spec said**: Step 8 Instruction 5 regenerates `scripts/config-wiring-stored.json` with `DATABASE_URL=<scratch postgres> python3 scripts/config-wiring-stored.py`; § Step Dependencies requires the route to be confirmed first, and SKILL.md never lets the execute agent start a database.
+- **Actual**: the operator authorized (go-ahead of 2026-11-26) a local throwaway PostgreSQL 16 that the main session provisioned and kept running; this agent started or stopped no database. The generator ran once against it (route (a)); `scripts/scratch_db.py` created and dropped its own scratch DB. The output is committed unedited: two `broker.paper` rows (`057_…up.sql`, staging `true` / production `false`) and a new `inputs_sha256`. Migration number re-checked: `origin/main-dev` tail is `056_analysis_live_only_cycle_max_days`, so `057` stands (`057` also exists on feature 314's branch only, not on main-dev). Verification stayed offline; the database was used for artifact generation only.
+- **Disposition**: operator-authorized generation route; no scope or behavior change.
