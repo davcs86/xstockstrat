@@ -785,3 +785,16 @@ Effect: the C-14 agent scope addition (the agent-surface scope the design propos
 - Files modified: `services/xstockstrat-analysis/tests/test_update_grade_guard.py`
 - Deviations: none
 - Open item (pre-existing, not changed here): a row whose `definition_json` lacks `user_id` (a migrated row that carries its owner only on the column) changes hash on its first rename. The guard then pops, which is today's behaviour.
+
+### Step 15 — docs: ANALYSIS-3, ANALYSIS-7, `scoring.md` and the recorded limitations [done]
+- Instruction 5 precondition: the O-18 acknowledgement is on record ("Session 2026-11-27 — operator ruling …", "B1 approve"). Every symbol the docs name was re-grepped on the tree first (`_evidence_fingerprint`, `_formula_digest`, `_UNREADABLE`, `_FormulaRead`, `_FormulaVersionUnknown`, `_FORMULA_VERSION_WARNING`/`_UNKNOWN_MSG`, `latest_formula_fingerprint`, `locked_hash`, `entry_backfill.py:65` `list_live_enabled()`, the two Python-side gate checks, `readiness.py#is_readiness_row_fresh`).
+- ANALYSIS-3: the "Fingerprint blind spot" sentence is replaced by the formula-aware evidence fingerprint rule. Its Evidence/Example anchors are now symbol names without line numbers.
+- ANALYSIS-7: the "four sites / re-types the SQL literal" sentence now says that entry-backfill reads through `list_live_enabled`, and that the two Python-side checks are the only mirrors that do not use the constant. The row's other anchors are unchanged.
+- `scoring.md` changes:
+  - The "Fingerprint eligibility" bullet is rewritten for the composite fingerprint.
+  - "Recompute triggers" describes the locked-row hash-changed guard, both new `ScoreStrategy` outcomes and the `RunBacktest` run warning.
+  - A new `## Known limitations (feature 327)` section at the end of the file lists the seven limitations from instruction 4.
+- TDD: N/A (docs). Baseline (`.sdd-logs/v-1.log`, exit=1): `16:… **Fingerprint blind spot:**`, `20:… re-types the SQL literal`, `37:  UPDATE (which first **unconditionally clears**`. Green (`.sdd-logs/v-2.log`, exit=0): the three no-match greps printed nothing. The other two printed `16:| **ANALYSIS-3** …`, `20:| **ANALYSIS-7** …`, `58:… "formula version unavailable —`, `69:… "evidence not recorded: formula version unavailable — rerun"` and `114:## Known limitations (feature 327)`.
+- Config-key wiring gate: not applicable (no config key).
+- Files modified: `services/xstockstrat-analysis/docs/context-constitution.md`, `services/xstockstrat-analysis/docs/scoring.md`
+- Deviations: none

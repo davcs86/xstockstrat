@@ -702,7 +702,7 @@ ruff check . && ruff format --check .
 
 ### Step 15 — docs: ANALYSIS-3, ANALYSIS-7, `scoring.md` and the recorded limitations
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/docs/context-constitution.md` — modify
