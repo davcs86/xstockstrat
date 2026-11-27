@@ -624,7 +624,7 @@ ruff check . && ruff format --check .
 
 ### Step 13 — service: ManageStrategy UPDATE pops the grade only when the definition hash changes
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/handlers/servicer.py` — modify
@@ -662,7 +662,7 @@ ruff check . && ruff format --check .
 
 ### Step 14 — test: a rename during a `GetFormula` outage keeps the grade
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_update_grade_guard.py` — create

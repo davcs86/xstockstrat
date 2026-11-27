@@ -3450,9 +3450,11 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             union.CopyFrom(_row_to_strategy_definition(pre))
             union.components.extend(definition.components)
             formula_outputs = await self._fetch_formula_outputs(union, propagation_meta)
+            locked_hash: list[str] = []
 
             async def _apply(current, _defn=definition, _mask=mask_paths, _has=has_mask):
                 old_json = current["definition_json"] or {}
+                locked_hash[:] = [_definition_fingerprint(old_json)]
                 if _has:
                     merged_json = _merge_definition_json(old_json, _defn, _mask)
                     # Rebuild through the shared row→proto mapper (single source of the overlay),
@@ -3500,11 +3502,15 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                     f"strategy '{definition.strategy_id}' not found",
                 )
                 return
-            # A definition change usually changes the fingerprint, so clear the stale in-memory
-            # grade FIRST, then best-effort recompute; the UPDATE never fails on a recompute error.
+            # Clear the grade first only when the hash of the row update_locked locked differs from
+            # the written one: a rename must keep the grade when the recompute cannot run.
             sid = definition.strategy_id
+            changed = not locked_hash or locked_hash[0] != _definition_fingerprint(
+                row["definition_json"]
+            )
             async with self._lock_for(caller_user_id, sid):
-                self._strategies.pop((caller_user_id, sid), None)
+                if changed:
+                    self._strategies.pop((caller_user_id, sid), None)
                 try:
                     await self._recompute_headline_locked(
                         caller_user_id, sid, row, meta=propagation_meta

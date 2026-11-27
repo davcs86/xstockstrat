@@ -766,3 +766,22 @@ Effect: the C-14 agent scope addition (the agent-surface scope the design propos
 - TDD: red as in Step 11. Green, Step 12 Verification (`.sdd-logs/v-4.log`, exit=0): `10 passed, 6 deselected`, `30 passed`, the conftest grep printed no lines, `1902 passed`, `Total coverage: 91.99%`, `All checks passed!`, `148 files already formatted`.
 - Files modified: `services/xstockstrat-analysis/tests/test_evidence_grade_formula_aware.py`, `services/xstockstrat-analysis/tests/test_grade_fundamentals_exclusion.py`
 - Deviations: none
+
+### Step 13 — service: ManageStrategy UPDATE pops the grade only when the definition hash changes [done]
+- Atomic unit Steps 13+14 (one red→green, one commit). In the UPDATE branch, `locked_hash: list[str] = []` is declared before `_apply`. `_apply` writes `locked_hash[:] = [_definition_fingerprint(old_json)]` (the row `update_locked` locked, never `pre`). After `update_locked`, `changed = not locked_hash or locked_hash[0] != _definition_fingerprint(row["definition_json"])`, and the pop under the lock runs only `if changed`. The recompute and its `except Exception` are unchanged. The two-line comment now states the constraint. Line anchors drifted about +106 after Steps 9-12 (`_apply` `:3455`, comment/guard/pop/recompute block `:3505-3519`); every symbol matched.
+- TDD: AC-5 red (`.sdd-logs/v-3.log`, pre-unit servicer restored from a saved patch, exit=0 from the trailing ruff): `FAILED tests/test_update_grade_guard.py::test_ac5_rename_during_formula_outage_keeps_grade` (`KeyError: ('u1', 's1')`, the unconditional pop), `1 failed, 5 deselected`; also `3 failed, 494 passed`. That run's full-suite line died on `OSError: [Errno 28] No space left on device` (host disk full, 38M free) and was not used. Green (`.sdd-logs/v-4.log`, exit=0): 3 `locked_hash` hits (`3453`, `3457`, `3508`), `497 passed`, `All checks passed!`, `149 files already formatted`.
+- Config-key wiring gate: not applicable (no config key).
+- Files modified: `services/xstockstrat-analysis/app/handlers/servicer.py`
+- Deviations: none
+
+### Step 14 — test: a rename during a `GetFormula` outage keeps the grade [done]
+- Atomic unit Steps 13+14. Created `tests/test_update_grade_guard.py`, importing `_derivation_svc`, `_eligible_cell`, `_owned_ctx` and `_stub_update_repo` from `tests.test_analysis_servicer` and `_rpc_error` from `tests.test_grade_fundamentals_exclusion`. The CUSTOM_FORMULA (`f-9`) row and requests are inline (C-13). The row's `definition_json` carries `user_id`, as REGISTER persists it. Without it, the rename's `_row_to_strategy_definition` re-derives `user_id` from the column and moves the hash. Cases:
+  - AC-5: a masked rename with `GetFormula` UNAVAILABLE returns `Renamed`, the grade is the same object, and no delete or upsert runs.
+  - `pre` differing from the locked row: the rename still keeps the grade.
+  - The mirror, `pre` equal to the written definition with the locked row different: the grade pops.
+  - A behavioural `rhs` edit pops before the recompute (a recording wrapper sees no grade). With an outage the grade stays absent, the documented limitation. When the formula is readable, a new score is upserted.
+  - An unchanged hash with zero evidence: the grade is still held when the recompute starts, then `_recompute_headline_locked` clears it and deletes it.
+- TDD: AC-5 red as in Step 13 → green (`.sdd-logs/v-4.log`, exit=0): `1 passed, 5 deselected` (`-k ac5`), `29 passed, 387 deselected`. The conftest grep printed no lines. `1908 passed`, `Total coverage: 91.99%`, `All checks passed!`, `149 files already formatted`. The existing `test_update_keeps_db_grade_and_forwards_trio`, `test_update_clears_inmemory_even_when_delete_raises` and `test_update_recompute_no_deadlock` stayed green with no change.
+- Files modified: `services/xstockstrat-analysis/tests/test_update_grade_guard.py`
+- Deviations: none
+- Open item (pre-existing, not changed here): a row whose `definition_json` lacks `user_id` (a migrated row that carries its owner only on the column) changes hash on its first rename. The guard then pops, which is today's behaviour.
