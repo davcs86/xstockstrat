@@ -213,7 +213,7 @@ Decisions 5 and 6 were not put to the operator and stay open for `/sdd-review im
 
 ### Step 1 — test: marketdata cancel-quiet regression tests (AC-1)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/service/cancel_quiet_test.go` — create
@@ -309,7 +309,7 @@ Dependencies.
 
 ### Step 2 — service: `warnUnlessDone` at the cancel-caused marketdata WARN sites
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/service/marketdata_service.go` — modify
@@ -1044,3 +1044,15 @@ grep -n "bars.miss_backoff_ms\|marketdata_bars_miss_backoff" docs/roadmap/featur
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+### Deviation 1 — Steps 1+2: Verification lines run from the repo root, each in its own subshell (2026-11-27)
+
+- **Spec said**: the Step 1 / Step 2 `**Verification**` blocks, as written, each line starting `cd services/xstockstrat-marketdata`.
+- **Actual**: run in one shell, the first `cd` makes every later `cd services/xstockstrat-marketdata` fail and the
+  final `grep` path resolve inside the service dir, and the trailing `# …` comments would swallow a closing `)`.
+  Each line was run unchanged, in its own subshell from the repo root, chained with `&&`, the comments ending
+  their own lines. `golangci-lint` was the pinned v2.14.0 (`$(go env GOPATH)/bin`, put first on `PATH`; the
+  `/usr/local/bin` copy is 2.5.0 built with go1.25.1).
+- **Disposition**: CI-equivalent fallback — commands and judgment unchanged; only the shell framing.
+- **Anchors**: line numbers moved after the BRANCH SYNC (e.g. `fetchAndCacheBars` `:410` → `:418`,
+  `ingestRecentBarsForTimeframe` `:1410` → `:1434`); every symbol and message was found, so this is not a deviation (F-04).

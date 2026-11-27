@@ -5840,11 +5840,15 @@ type barsCancelSource struct {
 	*fakeBackfillSource
 	newBars func() []*marketdatav1.Bar
 	cancel  context.CancelFunc
+	err     error
 }
 
 func (f *barsCancelSource) GetBars(context.Context, string, string, time.Time, time.Time) ([]*marketdatav1.Bar, error) {
 	if f.cancel != nil {
 		f.cancel()
+	}
+	if f.err != nil {
+		return nil, f.err
 	}
 	return f.newBars(), nil
 }

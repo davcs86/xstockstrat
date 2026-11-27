@@ -718,3 +718,30 @@ Up-front confirmation: the operator approved the plan with this record (binding,
 ```sdd-batch-setup
 {"mainDev":"f802b184b13bd899d858c4b0349a616e9981b9d9","date":"2026-11-26"}
 ```
+
+## Session 2026-11-27 — sdd-execute sequential (sdd-batch-execute), unit A (Steps 1+2)
+
+- Tree: detached at `origin/feature/fix-marketdata-miss-path-noise` @ `5450a6a5` (post BRANCH SYNC `a68b1294`).
+  Every Step 1/2 anchor re-grepped: all symbols and messages present, lines shifted (e.g. `fetchAndCacheBars`
+  `:418`, `GetLatestQuote` `:641`, `ingestRecentBarsForTimeframe` `:1434`).
+- Tooling: go1.27.0 ✓ · golangci-lint ✓ v2.14.0 built with go1.27.0 (`$(go env GOPATH)/bin`, first on `PATH`;
+  `/usr/local/bin` is 2.5.0) · Go modules ✓ (`go build` downloaded one module).
+
+### Step 1 — test: marketdata cancel-quiet regression tests (AC-1) [done]
+- Unit A (Steps 1+2, one commit). Added `err` to `barsCancelSource`; created `cancel_quiet_test.go` with the eight
+  specced tests plus two level-aware helpers over `warmLogRecorder.recs` (`cqCount`, `cqTotal`) and the mid-cycle
+  `cancelingInsertStore`.
+- TDD: AC-1 red (throwaway no-op `warnUnlessDone` stub, deleted before commit): `TestFetchAndCacheBars_AC1_CanceledLiveFetchLogsNoWarn`
+  "1 WARN … want 0", `TestWarnUnlessDone`, `…DoneCtxReturnsBeforeFetch` "multi = 1", `…CancelMidCycleQuietsInsertWarn`
+  "3 WARN … want 0", `TestCancelQuietSites_Structural` failed by assertion; the three characterization controls
+  passed → green: all pass (15 `--- PASS`, 0 FAIL), module total 87.5%, golangci-lint 0 issues.
+- Files modified: `services/xstockstrat-marketdata/internal/service/cancel_quiet_test.go`, `services/xstockstrat-marketdata/internal/service/marketdata_service_test.go`
+- Deviations: Verification shell framing (Deviation Log, Deviation 1).
+
+### Step 2 — service: `warnUnlessDone` at the cancel-caused marketdata WARN sites [done]
+- Unit A. Added `warnUnlessDone` above `fetchAndCacheBars`; replaced the eight specced `slog.WarnContext` sites;
+  `ingestRecentBarsForTimeframe` returns on a done process `ctx` first and again before `applyBarCycle`.
+  `resolve source failed`, `cache insert failed`, the fetch-deadline WARN and the warm poller are unchanged.
+- TDD: green per Step 1 (unit red→green); `grep -c 'warnUnlessDone(ctx, '` = 8; both kept WARNs present.
+- Files modified: `services/xstockstrat-marketdata/internal/service/marketdata_service.go`
+- Deviations: Deviation 1 (shared).

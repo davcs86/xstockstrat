@@ -5,7 +5,7 @@
 **GitHub Issue**: none (Issues disabled) — reports: docs/reports/2026-11-04-cancel-warn-remaining-sites-defect.md, docs/reports/2026-11-04-marketdata-getbars-miss-path-refetch-every-call-defect.md
 **Severity**: SEV-3
 **Created**: 2026-11-10
-**Last Updated**: 2026-11-26
+**Last Updated**: 2026-11-27
 
 ---
 
