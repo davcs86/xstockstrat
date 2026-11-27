@@ -2,7 +2,7 @@
 
 **State**: in-debate
 **Mode**: full (round cap lifted by operator override, context.md 2026-11-27)
-**Rounds run**: 11 (round 12 in progress)
+**Rounds run**: 12
 
 ## Rounds
 
@@ -19,6 +19,7 @@
 | 9 | 2026-11-27 | /sdd-design | 1 | 0 | 3 | 3 | 0 | yes |
 | 10 | 2026-11-27 | /sdd-design | 1 | 0 | 2 | 2 | 0 | yes |
 | 11 | 2026-11-27 | /sdd-design | 1 | 0 | 2 | 2 | 1 | yes |
+| 12 | 2026-11-27 | /sdd-design | 0 | 0 | 1 | 1 | 0 | no |
 
 ## Settled Decisions
 
@@ -199,6 +200,7 @@
 | O-82 | 10 | Text-level gaps: D-13 (test clocks) and D-39's allow-list additions were missing from design.md; the unfinished-rows index predicate was unstated (a `finished_at IS NULL` predicate would not be implied by the queries' `state` filters); settle's statement shape unstated; the in-memory attempt key and "terminal" undefined; "every result write is one statement" contradicted park; three claims depended on unstated conditions (reap candidates "bounded by slots held"; a dead row surviving at `retention_days` + 1; "at most 30 s" for a service connection); measurements for program feature 3 referenced by ID only. | no | closed @ round 10 (text in design.md) |
 | O-83 | 11 | Runbook wording: the recovery order was stated only for failed or dead children before blocked parents, not for a blocked job before the blocked jobs that wait on it, and "blocked by its verdict" cannot be checked from the data because a verdict names no child; what to do when the recovery's lock finds no row or the transaction deadlocks with the prune was unstated; a job blocked by its own verdict was not covered; one sentence was ungrammatical; "self-fence" was used before it was defined; decision IDs missing from three headings. | no | closed @ round 11 (text in design.md) |
 | O-84 | 11 | The printed recovery SQL locks the blocked row `FOR UPDATE`, which conflicts with the `FOR KEY SHARE` a park takes on that row as a child; an operator who leaves the recovery transaction open stalls every park that names the row. `FOR NO KEY UPDATE` excludes everything the lock must exclude (a second recovery, the prune) without that conflict. Low severity; needs petition P-7. | no | closed @ round 11 (D-60) |
+| O-85 | 12 | Wording and completeness only, from reading the design as a spec author, a test writer and an operator: column constraints partly unstated; `bounded_txn`'s handle interface; the handler-registry seam; "list by run" empty; the allow-list instruction pointed at the wrong file; the Gauge extension's shape; `phase=wait` undefined; the operator page too thin (health signal, "job not running" checklist, kill-switch side effects, blank gauges); C-10 missing from Constitution Rules Touched; one runbook sentence misdescribed a job blocked by its own verdict; D-60 missing from a heading. | no | closed @ round 12 (text in design.md) |
 
 ## Reopen Petitions
 

@@ -203,3 +203,11 @@
 - **OPERATOR REOPEN P-7 (D-59 recovery lock): "weaker lock"** — the recovery locks its row
   `FOR NO KEY UPDATE` (D-60).
 - **OPERATOR (design gate): "Run round 12"** — round 12 started. Not approved.
+
+## Session 2026-11-27 — sdd-design round 12
+
+- Round 12 run. **No substance from either side** (proposer: SOUND, wording only; adversary:
+  SOUND, READY FOR OPERATOR APPROVAL). The adversary read the design as a spec author, a test
+  writer and an operator, spot-checked 19 code citations (all resolve) and found a test seam for
+  every `@AC-*`. Wording and completeness edits applied (O-85). By the protocol's detector this is
+  a no-progress round: the debate has converged.

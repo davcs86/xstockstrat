@@ -1,7 +1,7 @@
 # Design: pipeline-job-graph
 
 **Created**: 2026-11-27
-**Rounds**: 11, round 12 in progress (full; round cap lifted by the operator; termination: pending operator approval)
+**Rounds**: 12 (full; round cap lifted by the operator; termination: pending operator approval)
 **Approved by**: pending
 **Grounded in**: recon.md
 **Debate register**: debate.md
@@ -22,13 +22,15 @@ Analysis migration `031_pipeline_job_graph` creates two plain tables, disjoint f
 
 - Identity and key: `job_id BIGINT GENERATED ALWAYS AS IDENTITY` primary key; `kind`, `subject`,
   `epoch`, `run_id` (`TEXT NOT NULL`); unique index on `(kind, subject, epoch)`.
-- Scheduling: `lane SMALLINT` with `CHECK (lane IN (10, 20))` (`watchlist` = 10, `held` = 20);
-  `state` in `ready`, `running`, `waiting`, `succeeded`, `failed`, `dead`, `blocked` (`failed`,
-  `dead` and `blocked` are the terminal states; with `succeeded` they are the finished states);
-  `attempts INT`; `wait_round SMALLINT`; `next_attempt_at TIMESTAMPTZ`.
+- Scheduling: `lane SMALLINT NOT NULL` with `CHECK (lane IN (10, 20))` (`watchlist` = 10, `held` =
+  20); `state TEXT NOT NULL` with a `CHECK` over `ready`, `running`, `waiting`, `succeeded`,
+  `failed`, `dead`, `blocked` (`failed`, `dead` and `blocked` are the terminal states; with
+  `succeeded` they are the finished states); `attempts INT NOT NULL DEFAULT 0`;
+  `wait_round SMALLINT NOT NULL DEFAULT 0`; `next_attempt_at TIMESTAMPTZ NOT NULL`.
 - Lease: `lease_token UUID` (from `gen_random_uuid()`), `lease_expires_at TIMESTAMPTZ`.
-- Outcome: `verdict`, `error_class` (`transient` or `permanent`), `last_error` (1 KB),
-  `created_at`, `finished_at`. No result column.
+- Outcome: `verdict`, `error_class` (`CHECK` in `transient`, `permanent`), `last_error` (truncated
+  to 1 KB in the engine, no database length check), `created_at TIMESTAMPTZ NOT NULL DEFAULT
+  now()`, `finished_at`. No result column.
 - Checks: a row is `running` exactly when it has a lease token and expiry; `blocked` implies a
   verdict; a finished state implies `finished_at`, and only a finished state has one.
 - Indexes: the unique key; `(state, lane DESC, next_attempt_at, job_id) WHERE state IN ('ready','running','waiting')`, so
@@ -87,7 +89,11 @@ version and matches nothing.
   connection is terminated with no rollback and no awaited release (`read_budget.py:79-99`); when
   the timer fired, the error raised is `DbBudgetExceeded`. A `terminated` flag, set by whoever
   terminates first, guards later cleanup, because asyncpg detaches a terminated pooled connection
-  (`read_budget.py:100-107`). The transaction handle takes an `on_terminate` callback.
+  (`read_budget.py:100-107`). Signature: `bounded_txn(pool, budget_s, *,
+  on_acquired=None, on_terminate=None)`. `on_acquired` is called synchronously when
+  `pool.acquire` returns, before `BEGIN`. The handle exposes `fetch`, `fetchrow`, `fetchval`,
+  `execute` and a synchronous, idempotent `abort()` that terminates the connection and sets
+  `terminated`. `on_terminate` runs once, whoever terminates.
 - **No asyncio cancellation bounds any database I/O.** No `asyncio.timeout` wraps a transaction.
   `pool.acquire(timeout=remaining budget)` bounds only the wait for a client connection, including
   a new connect under `min_size=0`, before any transaction is open.
@@ -164,14 +170,17 @@ uses `bounded_txn(control_pool, 3 s)` without the lane lock.
   candidate select returns fewer than 500 rows. The cutoffs are read once per DELETE loop. Every
   candidate select in this repository locks only the outer `pipeline_jobs` alias, and any guard or
   predicate over another table is an `EXISTS` / `NOT EXISTS` subquery, which takes no row locks.
-- **List by run.**
+- **List by run:** `job_id, kind, subject, epoch, lane, state` for one `run_id`, ordered by
+  `job_id`, on the `(run_id)` index; no caller in this feature besides tests.
 - **Ready stats per lane:** over rows with `state = 'ready' AND next_attempt_at <= now()`, depth is
   the count and age is `now() − min(next_attempt_at)`. Jobs in backoff are not backlog.
 
 ### Worker runtime (D-6 to D-9, D-19, D-21, D-28, D-31, D-32, D-37, D-43, D-46, D-48 to D-54, D-57, D-58)
 
 `app/engine/job_graph.py` holds the settings reader, lanes, outcomes, classifier, backoff, attempt
-and worker. Handlers live in `app/jobs/`. Three tasks start through `supervision.spawn`
+and worker. Handlers live in `app/jobs/`. The worker takes its handler registry as a constructor
+argument; `main.py` passes the `app/jobs/` registry, and tests pass their own (for example a
+`probe` kind). Three tasks start through `supervision.spawn`
 (`app/supervision.py:16`; after `app/main.py:228`). Each database step is guarded on its own;
 `run_supervised`'s 30 s backoff (`app/supervision.py:55-68`) is only the net for bugs.
 
@@ -353,7 +362,7 @@ The worst case is therefore linear in `worker_concurrency`. It is measured by
 `db.duration{phase=wait}` and `oldest_ready_age`, not tested in CI. Any other caller of a
 repository method without `conn=` adds to the lane queue and voids the bound.
 
-### Retention prune (D-38, D-45, D-50, D-58, D-59; product-spec FR-7)
+### Retention prune (D-38, D-45, D-50, D-58, D-59, D-60; product-spec FR-7)
 
 Kind `pipeline.retention_prune`, subject `global`, epoch the UTC date, `run_id`
 `retention_prune:<UTC date>`, lane `watchlist`. Each
@@ -379,10 +388,10 @@ UPDATE analysis.pipeline_jobs
 ```
 
 For a `blocked` job (a parent, or a job blocked by its own handler's verdict, whose edge delete
-then removes nothing), in one transaction; the lock holds the row in `blocked` until commit
-without blocking a concurrent park that names it as a child. If
-the `SELECT` returns no row, `ROLLBACK` and stop. If the transaction fails, for example on a
-deadlock with the daily prune, run it again; every statement is guarded, so a re-run is safe:
+removes only edges from earlier rounds, if any), run the following in one transaction. The lock
+holds the row in `blocked` until commit without blocking a concurrent park that names it as a
+child. If the `SELECT` returns no row, `ROLLBACK` and stop. If the transaction fails, for example
+on a deadlock with the daily prune, run it again; every statement is guarded, so a re-run is safe:
 
 ```sql
 BEGIN;
@@ -403,11 +412,25 @@ before the `blocked` jobs that wait on it. A parent recovered before its child r
 child, finds it still failed or blocked, and is blocked again. Requeuing a job does not unblock
 jobs already `blocked` on it. Find them through `pipeline_job_deps` (`child_id = <id>`, then
 upward), not through the verdict, which names no child. A job's incoming edges survive its own
-recovery, so walk upward one level at a time, recovering each `blocked` parent with the block
-above. A recovered `failed` or `dead` job keeps its `wait_round` and edges and re-runs its current
-stage, as a transient retry does; a recovered `blocked` job restarts at round 0. The same page names what to watch:
-`lease_events{outcome=handler_abandoned}`, `oldest_ready_age`, `attempts{outcome=dead}`, and that
-an instance whose slots are all held by unresponsive handlers needs a restart.
+recovery, so walk upward one level at a time, recovering each `blocked` parent with the `blocked`-job SQL above. Start each walk at least 10 s
+after the recovery commits, so a settle that read the job as `blocked` before the commit has
+finished. A recovered `failed` or `dead` job keeps its `wait_round` and edges and re-runs its
+current stage, as a transient retry does; a recovered `blocked` job restarts at round 0.
+
+The same page names what to watch and how to read it:
+
+- `loop tick ok loop=pipeline_worker`: absent for over 60 s while enabled means every slot is held
+  or the claim loop is dead.
+- `lease_events{outcome=handler_abandoned}` and `attempts{outcome=dead}`.
+- `oldest_ready_age` and `ready_depth`: absent means the worker is disabled or stats are failing,
+  not an empty queue.
+
+It gives a "job not running" checklist: state, `next_attempt_at`, `lease_expires_at`,
+`last_error`, children through `pipeline_job_deps`, `worker_enabled`, and whether the kind is
+registered. It says that `worker_enabled = false` stops claims, the ensure and reaping, so
+`running` rows past expiry are expected until it is re-enabled, while running jobs finish (up to
+900 s). And it says that an instance whose slots are all held by unresponsive handlers needs a
+restart.
 
 ### Config (D-12, D-25, D-36)
 
@@ -426,8 +449,9 @@ and logs one WARN per distinct clamped value.
 
 Config migration `060_analysis_pipeline_keys`, the `SCALAR_BOUNDS_REGISTRY` rows
 (`services/xstockstrat-config/src/grpc/configServiceImpl.ts:115`), the reader, the two
-`scripts/config-wiring.json` receivers, the regenerated stored set, the config read-classification
-test rows and the docs rows land in one step and one commit.
+`scripts/config-wiring.json` receivers, the regenerated stored set, the five int keys in `FR3_KEYS` of
+`tests/test_config_read_classification.py:25-63` (each also a literal in another test,
+`:233-238`) and the docs rows land in one step and one commit.
 
 ### Telemetry (D-11, D-26, D-39, D-40)
 
@@ -441,11 +465,16 @@ test rows and the docs rows land in one step and one commit.
   `lost_heartbeat|lost_self_fence|report_rejected|report_abandoned|handler_abandoned`.
 - Histogram `analysis.pipeline.db.duration` (seconds) with `step` in
   `heartbeat|claim|reap|settle|ensure|stats|report|park|handler`, `phase` in `wait|total`, and
-  `outcome` in `ok|error|timeout` on `phase=total`. The label keys `lane`, `step` and `phase` are
-  added to `tests/test_telemetry_allowlist.py`. Buckets:
+  `outcome` in `ok|error|timeout` on `phase=total`. The label keys are added as `KEY_LANE`,
+  `KEY_STEP` and `KEY_PHASE` in `app/telemetry.py`, from which `tests/test_telemetry_allowlist.py:16`
+  derives its allow-list; the new instruments join that test's `MIN_INSTRUMENTS` and `_drive()`,
+  and the loop name is `Loop.PIPELINE_WORKER`. `phase=wait` runs from requesting the control lane
+  (for `heartbeat`, the pool; for `handler`, the gate) until the pool acquire returns;
+  `phase=total` runs from that request until the transaction exits. Buckets:
   `[0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30]`.
-- Gauges `analysis.pipeline.ready_depth{lane}` and `oldest_ready_age{lane}`, through a small
-  extension of the `Gauge` wrapper (`app/telemetry.py:365-397`), registered in `main.py` after
+- Gauges `analysis.pipeline.ready_depth{lane}` and `oldest_ready_age{lane}`, through the `Gauge`
+  wrapper (`app/telemetry.py:365-397`), extended so `observe()` may return a list of
+  `(value, attributes)` pairs while a scalar return keeps today's behaviour, registered in `main.py` after
   `init_telemetry()` (`app/main.py:41`). The snapshot is refreshed with the stats step; one older
   than 45 s reports nothing.
 - No alert ships in this feature.
@@ -488,7 +517,7 @@ Step 3's real-Postgres tests gate step 4:
   DELETE waits on the child lock and raises `ParkRace`, and its re-run inserts the child afresh
   and leaves the parent `waiting` with every edge present. A park started after the DELETE waits
   on the unique check and inserts the child afresh;
-- a `blocked`-parent recovery run a second time, after the parent was re-claimed and parked
+- a `blocked`-job recovery run a second time, after the parent was re-claimed and parked
   again, deletes no edge and updates no row; a park naming a `blocked` row as a child is not
   blocked by an open recovery transaction on it;
 - a 10 000-child park plus its settle finishes within 5 s;
@@ -622,6 +651,9 @@ prune batch 500 with a 30 s block budget; stats every third maintenance tick (15
 - `F-07` — honored by: tunables are config keys; fixed timing constants are recorded invariants,
   the established practice (`app/supervision.py:9-10`).
 - `P-03` — honored by: the program plan's advisory-lock note is corrected, not silently dropped.
+- `C-10` — honored by: step 1 lands every config surface (seed, bounds registry, reader, wiring,
+  read-classification rows, docs) in one commit; step 8 updates every pool-budget document.
+- `C-03`, `C-04`, `C-09`, `C-12`, `C-17` — not touched: no outbound RPC, no proto, no UI.
 
 ## Business Rules Touched (C-16)
 
