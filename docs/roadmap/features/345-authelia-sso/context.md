@@ -1070,3 +1070,9 @@
 - TDD: RED/GREEN via Step 53's e2e. Verification: typecheck, lint, build exit 0.
 - Files modified: `services/xstockstrat-ui/src/components/shared/SignOutButton.tsx` (new), `services/xstockstrat-ui/src/components/shared/PlatformHeader.tsx`
 - Deviations: none. Gap filled: `data-testid="sign-out"` added for the e2e (the accessible name "Sign out" stays the primary locator).
+
+### Step 46 — D-63 mobile fallback applied [done]
+- With the header icon button in Row 1, the existing `e2e/mobile-overflow.spec.ts` at 390 px failed on all five `/trader` routes (`/trader`, `/positions`, `/portfolio`, `/orders`, `/positions/AAPL`; the trader `actions` slot fills the row). Per D-63's settled fallback, the header button is now `hidden sm:inline-flex` and below `sm` a full-width "Sign out" (`SignOutButton variant="menu"`, `min-h-11`) sits in the mobile offcanvas sheet's `SidebarFooter`.
+- Verification: typecheck, lint, build exit 0; host Playwright `CI=1 E2E_PREBUILT=1 … e2e/accounts e2e/theme e2e/mobile-overflow.spec.ts e2e/nav-reachability.spec.ts --project=chromium`: before 5 failed / 80 passed, after 85 passed.
+- Files modified: `services/xstockstrat-ui/src/components/shared/{SignOutButton,PlatformHeader}.tsx`
+- Deviations: D-63 fallback (Deviation Log).

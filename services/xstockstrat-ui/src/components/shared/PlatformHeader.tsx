@@ -17,6 +17,7 @@ import {
   Sidebar,
   SidebarHeader,
   SidebarContent,
+  SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
   SidebarGroupLabel,
@@ -321,6 +322,9 @@ function PlatformHeaderInner({ actions }: PlatformHeaderProps) {
                     ))}
                   </SidebarContent>
                 </nav>
+                <SidebarFooter>
+                  <SignOutButton variant="menu" />
+                </SidebarFooter>
               </Sidebar>
             </SidebarProvider>
           </div>

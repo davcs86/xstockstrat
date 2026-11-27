@@ -2255,3 +2255,8 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Expected**: only Step 45's Files (`accounts/sso/page.tsx`, `navGroups.tsx`, `PlatformHeader.tsx`).
 - **Actual**: `SSO_ERROR_CODES`, `LINK_ERROR_CODES`, `SSO_ERROR_MESSAGES` and `LINK_ERROR_MESSAGES` (and their types) moved verbatim into a new client-safe `src/lib/ssoErrorCodes.ts` and re-exported from `src/lib/ssoErrors.ts`, because a `'use client'` page cannot import `ssoErrors.ts` (it pulls `ssoTxn.ts` → `node:crypto`; the build failed with `UnhandledSchemeError`). No behaviour change; the unit suite is unchanged (1089 passed).
 - **Disposition**: owner chose Option A (2026-11-27).
+
+### Step 46 — Sign-out button: D-63 mobile fallback
+- **Expected**: `<SignOutButton />` after `<CopilotToggle />` in the header row in every viewport, with the Step 53 mobile check passing.
+- **Actual**: at 390 px the extra 44 px button overflows the `/trader` header row (`mobile-overflow.spec.ts` failed 5 routes). Applied D-63's pre-settled fallback: the header icon is `hidden sm:inline-flex`; below `sm` the Sign out action lives in the mobile offcanvas sheet (`SidebarFooter`). The Step 53 mobile case asserts the sheet entry instead of a header icon below `sm`.
+- **Disposition**: D-63 fallback (settled in the debate); no owner decision needed beyond D-63.
