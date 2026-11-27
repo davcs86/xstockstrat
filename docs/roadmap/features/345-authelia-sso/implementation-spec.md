@@ -900,7 +900,7 @@ uv run pytest --cov=app --cov-fail-under=40 -q && uv run ruff check . && uv run 
 
 ### Step 21 — service: Effective scope, the resolve client helper and the new rejection reasons
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/scopes.py` — modify

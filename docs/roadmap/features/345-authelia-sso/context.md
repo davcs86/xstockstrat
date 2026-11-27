@@ -904,3 +904,9 @@
 - TDD: red (before Step 19): collection `ImportError: cannot import name 'jwks' from 'app'` → green: `test_jwks.py` 16 passed; full `pytest --cov=app --cov-fail-under=40` 957 passed (89.01 %); ruff clean; `def sso_keys` at `conftest.py:404`, no `generate_private_key` in `test_jwks.py`. Mutation checks: dropping the done-callback's `t.exception()` fails the never-retrieved case; serving keys past MAX_AGE fails the AC-79 case.
 - Files modified: `services/xstockstrat-agent/tests/{test_jwks,conftest}.py`
 - Deviations: none
+
+### Step 21 — Effective scope, the resolve client helper and the new rejection reasons [done]
+- `scopes.py`: `_OAUTH_SCOPE_BITS`, `MCP_SCOPES_SUPPORTED` (read, write, admin, trade), `granted_scopes`, `scopes_to_mask`, `effective_access_scope` (key presence wins, 0 included); `tools.py` both sites (`_caller_access_scope`, `CallerPropagationMiddleware`) call it and the import swaps `roles_to_access_scope` for it; `client.py` `rpc_timeout_s()` beside `_RPC_TIMEOUT_S` and `resolve_external_identity(issuer, subject, *, trace_id, timeout_s)` (own identity channel, lazy `gen.identity`, `metadata=[("x-trace-id", …)]`, `timeout=timeout_s`, roles via `Role.Name(r).removeprefix('ROLE_').lower()`); `tool_metrics.py` docstring adds `jwks_unavailable | account_refused`.
+- Verification: ruff check + format clean; `grep -c effective_access_scope app/tools.py` = 3; the resolve body shows `metadata=[("x-trace-id", trace_id)]` and `timeout=timeout_s`. TDD: recorded under Step 22.
+- Files modified: `services/xstockstrat-agent/app/{scopes,tools,client,tool_metrics}.py`
+- Deviations: none

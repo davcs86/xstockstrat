@@ -78,7 +78,7 @@ from mcp.types import EmbeddedResource, TextContent, TextResourceContents
 
 from app import backtest_view, client, egress, tool_metrics
 from app.config.watcher import read_value as read_config_value
-from app.scopes import MCP_CLAIMS_SCOPE_KEY, resolve_scope, roles_to_access_scope
+from app.scopes import MCP_CLAIMS_SCOPE_KEY, effective_access_scope, resolve_scope
 
 _ALERT_THRESHOLD_DEFAULT = 0.6
 _ALERT_THRESHOLD_CONFIG_KEY = "signal.alert_threshold"
@@ -146,7 +146,7 @@ def _caller_access_scope(ctx: Context, tool: str) -> int:
     scope. Raises when no verified claims are present (the Streamable HTTP transport authenticates
     the tool call itself; the legacy SSE transport that didn't was removed by feature 079)."""
     claims = _require_claims(ctx, tool)
-    return roles_to_access_scope(claims.get("roles"))
+    return effective_access_scope(claims)
 
 
 def _require_admin(ctx: Context, tool: str) -> None:
@@ -216,7 +216,7 @@ class CallerPropagationMiddleware:
             if claims is not None:
                 token = client.set_caller(
                     claims.get("user_id") or "",
-                    roles_to_access_scope(claims.get("roles")),
+                    effective_access_scope(claims),
                     claims.get("trace_id") or _new_trace_id(),
                 )
         try:
