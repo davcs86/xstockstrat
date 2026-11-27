@@ -143,7 +143,7 @@ not change. They pin the two facts the sweep depends on — one secret per attem
 
 ### Step 1 — test: config SQL-text suite for the sweep and preview
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/__tests__/mcpCredentialSweep.test.ts` — create
@@ -219,7 +219,7 @@ Coverage threshold: ≥ 40% lines (C-08).
 
 ### Step 2 — test: migration-rerun assertion for the sweep, and its CI path filters
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `scripts/migration-assertions` (config + ingest schemas), `.github/workflows`
 **Files**:
 - `scripts/migration-assertions/config-mcp-credential-sweep.sql` — create
@@ -422,7 +422,7 @@ service package); the unit's threshold is Step 1's `c8 check-coverage --lines 40
 
 ### Step 3 — service: operator sweep and read-only preview SQL
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `scripts/config-heal` (data owned by `xstockstrat-config`; reads `xstockstrat-ingest`'s `ingest.signal_sources`)
 **Files**:
 - `scripts/config-heal/mcp-credential-orphan-sweep.sql` — create

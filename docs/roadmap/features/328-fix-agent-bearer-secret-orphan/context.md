@@ -714,3 +714,18 @@ Effect: use the defaults recorded in this file and in the implementation spec fo
 ```sdd-batch-setup
 {"mainDev":"f802b184b13bd899d858c4b0349a616e9981b9d9","date":"2026-11-27"}
 ```
+
+### Step 1 — test: config SQL-text suite for the sweep and preview [done]
+- Atomic unit Steps 1+2+3 (one commit). Added the 9-case node:test suite `mcpCredentialSweep.test.ts`. TDD (AC-4 text pin): red against the uncommitted Step 3 skeletons, 7 of 9 failing on missing behavior (`sweep starts with SELECT 0 AS deleted`, `the final SELECT does not reference nt`, `expected exactly one -- mcp_orphan:begin`, `notify is not grouped per scope`, the actor and header cases); the transaction and forbidden-token cases pass on the skeleton because they assert absences → green: `ℹ tests 9 / pass 9 / fail 0 / skipped 0`; full config suite `tests 414 / pass 414`, `All files | 92.31` lines (≥ 40), lint 0 errors.
+- Files modified: `services/xstockstrat-config/src/__tests__/mcpCredentialSweep.test.ts`
+- Deviations: none
+
+### Step 2 — test: migration-rerun assertion for the sweep, and its CI path filters [done]
+- Atomic unit Steps 1+2+3. Created `scripts/migration-assertions/config-mcp-credential-sweep.sql` verbatim from the spec and added `scripts/config-heal/mcp-credential-orphan-sweep*.sql` to the `xstockstrat-config` and `migrations` CI filters. Verification green: BEGIN/ROLLBACK/filter counts 2/2/2, `config-wiring.test.mjs` 75/75 pass, `pglast ok` (1/1/9 statements). SQL red not captured locally (no `DATABASE_URL`; no database started); the CI `migration-rerun` job on the integration PR is the live gate (AC-1..AC-4 block 1).
+- Files modified: `scripts/migration-assertions/config-mcp-credential-sweep.sql`, `.github/workflows/ci.yml`
+- Deviations: none
+
+### Step 3 — service: operator sweep and read-only preview SQL [done]
+- Atomic unit Steps 1+2+3. Created the sweep and preview verbatim from the spec, replacing the skeleton placeholders. Verification green: marker blocks diff empty, forbidden-token counts 0/0, lint 0 errors; Step 1 suite and Step 2 pglast block green (above). Config-key wiring gate not applicable (no config key declared or seeded; no migration). Verification ran with Node 24 (`/opt/node24/bin` first on PATH), the pinned version.
+- Files modified: `scripts/config-heal/mcp-credential-orphan-sweep.sql`, `scripts/config-heal/mcp-credential-orphan-sweep-preview.sql`
+- Deviations: none

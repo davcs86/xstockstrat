@@ -57,7 +57,7 @@ jobs:
             xstockstrat-ingest:     ['services/xstockstrat-ingest/**']
             xstockstrat-analysis:   ['services/xstockstrat-analysis/**', 'services/xstockstrat-indicators/migrations/*_seed_formula_templates.up.sql']
             xstockstrat-agent:      ['services/xstockstrat-agent/**', 'services/xstockstrat-analysis/app/handlers/servicer.py', 'services/xstockstrat-trading/internal/service/trading.go', 'services/xstockstrat-ingest/app/handlers/servicer.py', 'services/xstockstrat-ingest/tests/fixtures/self_serve_denial.json', 'docs/runbooks/mcp-tools.md', 'services/xstockstrat-ingest/app/peer_identity.py', 'services/xstockstrat-indicators/app/peer_identity.py']
-            xstockstrat-config:     ['services/xstockstrat-config/**']
+            xstockstrat-config:     ['services/xstockstrat-config/**', 'scripts/config-heal/mcp-credential-orphan-sweep*.sql']
             xstockstrat-ledger:     ['services/xstockstrat-ledger/**']
             xstockstrat-identity:   ['services/xstockstrat-identity/**']
             xstockstrat-notify:     ['services/xstockstrat-notify/**']
@@ -93,6 +93,7 @@ jobs:
               - 'scripts/migration-ahead-check.sh'
               - 'scripts/migration-rerun.py'
               - 'scripts/migration-assertions/**'
+              - 'scripts/config-heal/mcp-credential-orphan-sweep*.sql'
               - 'scripts/Dockerfile.migrate'
               - 'services/xstockstrat-indicators/app/services/formulas_repository.py'
             homelab:
