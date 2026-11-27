@@ -764,3 +764,107 @@ Effect: option A — expand Step 11 scope to fix the 17 pre-existing findings in
 **Progress**: 13 done / 13 total
 **Stopped at**: Step 13 (all complete)
 **Next**: integration PR `feature/fix-migration-tooling-safety` → `main-dev` (name 345's config `053` renumber, the `FORBID_NEW` first-run checks and the four `[ ] unaddressed` impl-spec warnings in its description)
+
+## Session 2026-11-27 — sdd-batch-execute promotion plan (awaiting operator confirm)
+
+````sdd-batch-promotion-plan
+## Promotion plan — fix-migration-tooling-safety (feature 318)
+
+Source: docs/roadmap/features/318-fix-migration-tooling-safety/acceptance.feature, read from the working tree. I had no git access, so I could not read it on origin/feature/fix-migration-tooling-safety. It matches the branch-tip content described in implementation-spec Step 13. I also could not see the branch-tip platform.feature, so the dedup below runs against the main-dev copy (see Notes 1 and 2).
+
+### Verdicts
+| @AC | target suite (path) | CREATE/APPEND | verdict | note |
+|---|---|---|---|---|
+| @AC-1 | /home/user/xstockstrat/docs/sdd/business-rules/platform.feature | APPEND | NEW | Refuse-all for a dirty service with no contract floor. The related 225 @AC-18 and 279 @AC-25 cover other states: contract-floor dirty, and migrator-ahead dirty. |
+| @AC-2 | /home/user/xstockstrat/docs/sdd/business-rules/platform.feature | APPEND | NEW | CI migration-ordering gate. A grep for "ordering" and "below the maximum" in platform.feature and the service suites found nothing. The 225 @AC-5 contract gate checks the `-- contract-of:` header, not NNN ordering. |
+| @AC-3 | /home/user/xstockstrat/docs/sdd/business-rules/platform.feature | APPEND | NEW | The rewritten 225 @AC-19 (Step 13) covers the `force 3` row, but not the full Recover line, the `force 6` escalation text, or the "$DATABASE_URL, no postgres://" assertions. See Note 2. |
+| @AC-4 | /home/user/xstockstrat/docs/sdd/business-rules/platform.feature | APPEND | NEW | Same partial overlap with the rewritten 225 @AC-19 TRUNCATE row. The full psql line and the "no force -1" assertion are unique to this scenario. |
+| @AC-5 | /home/user/xstockstrat/docs/sdd/business-rules/platform.feature | APPEND | NEW | The rewritten 225 @AC-19 covers two of the three rows. The `7 (dirty)` row is unique, and the "no Recover: line" assertion is unique. See Note 2. |
+
+All five scenarios go to platform.feature. The guarantee lives in `scripts/db-migrate.sh`, `scripts/migration-dirty-guard.sh` and `.github/workflows/ci.yml`. These are platform tooling that no single service owns. The db-migrate dirty-guard rules from 225, 279 and 295 already live in platform.feature, or in the config suite where they are config-specific.
+
+### Ready-to-write blocks
+Append at the end of the file, after line 2737 ("| Python  | xstockstrat-agent      |"). The file exists, so no Feature header is needed. The source scenarios carry no @FR tags (bug fix, and the product-spec defines no FR ids). The tags are kept verbatim, and I did not invent FR tags. Feature 329, appended just above, has the same shape.
+
+--- /home/user/xstockstrat/docs/sdd/business-rules/platform.feature (APPEND) ---
+```gherkin
+
+  # ─── migration tooling safety: refuse-all dirty recovery + ordering gate (feature 318) ──
+  # Platform tooling: scripts/db-migrate.sh, scripts/migration-dirty-guard.sh and the CI migration-ordering check.
+  # Source defects: docs/reports/2026-10-07-db-migrate-dirty-recovery-replay-unsafe-defect.md,
+  # docs/reports/2026-10-19-config-seed-migration-late-lower-nnn-defect.md
+  # Operator decision O-1 (2026-11-20, 318 context.md): db-migrate.sh up never recovers a dirty service by itself.
+  # 318 changed 225 @AC-19 and the last clause of config 295 @AC-28 in place (operator-signed C-16 CHANGE O-3); these scenarios extend them.
+
+  @AC-1 @regression @feature-318
+  Scenario: dirty recovery for a service without a contract floor does not replay from 001
+    Given services/xstockstrat-indicators/migrations has no "-- contract-of:" migration
+    And the indicators schema_migrations row is "5 (dirty)"
+    And indicators 001_formulas.up.sql contains a bare "CREATE TABLE indicators.formulas ("
+    When scripts/db-migrate.sh up runs
+    Then no "migrate ... force" command is executed for any service
+    And the run exits 1 and no service after indicators is migrated
+    And its output carries the line 'Recover: migrate -path services/xstockstrat-indicators/migrations -database "$DATABASE_URL&x-migrations-table=indicators_schema_migrations" force 4'
+
+  @AC-2 @regression @feature-318
+  Scenario: CI rejects a new migration numbered below the target branch maximum
+    Given main-dev's services/xstockstrat-config/migrations maximum is 025
+    When a PR adds services/xstockstrat-config/migrations/024_late_seed.up.sql
+    Then the CI migration-ordering check fails naming 024 and the current maximum 025
+
+  @AC-3 @regression @feature-318
+  Scenario: the recovery names the previous existing version across a numbering gap
+    Given a migrations directory for schema "x" holding up-files 001, 002, 003, 005 and 006
+    When the dirty guard evaluates "5 (dirty)"
+    Then it exits 3 with the line 'Recover: migrate -path services/xstockstrat-x/migrations -database "$DATABASE_URL&x-migrations-table=x_schema_migrations" force 3'
+    And its output names "force 6" only as an escalation after "already exists" in version 6
+    And its output contains the literal "$DATABASE_URL" and no "postgres://" URL
+
+  @AC-4 @regression @feature-318
+  Scenario: a service dirty at its first migration is told to empty the tracking table
+    Given a migrations directory for schema "x" holding up-files 001, 002, 003, 005 and 006
+    When the dirty guard evaluates "1 (dirty)"
+    Then it exits 3 with the line "Recover: psql "$DATABASE_URL" -c 'TRUNCATE public.x_schema_migrations'"
+    And its output contains no "force -1"
+
+  @AC-5 @regression @feature-318
+  Scenario Outline: the dirty guard fails closed when it cannot compute a recovery
+    Given a migrations directory for schema "x" holding up-files <files>
+    When the dirty guard evaluates "<version>"
+    Then it exits 2 naming "cannot compute recovery" and prints no "Recover:" line
+
+    Examples:
+      | files                   | version   |
+      | (none)                  | 5 (dirty) |
+      | 001, 002, 003, 005, 006 | 4 (dirty) |
+      | 001, 002, 003, 005, 006 | 7 (dirty) |
+```
+
+### Notes / ambiguities / conflicts
+1. **No CONFLICT planned, and no existing scenario is edited by this promotion.** On the main-dev copy, platform.feature:386-390 (225 @AC-19, "both evaluations allow the automatic force-0 recovery") and config fix-config-keys-drift.feature:109 (295 @AC-28, "an automatic force 0 from a dirty 041") contradict 318. Both are covered by operator-signed C-16 CHANGE O-3 (318 context.md; design.md §10). implementation-spec Step 13 rewrites them in place on the branch as hand edits, not as promotion output. Before this plan is applied, check that on the branch tip:
+   - platform.feature carries the rewritten `@AC-19 @FR-8 @feature-225` outline with the "# Changed by @feature-318" comment.
+   - fix-config-keys-drift.feature:109 carries the reworded clause.
+
+   If either is still the old text, stop. Appending AC-1, AC-3 or AC-4 would put contradictory rules side by side, which is the "alongside promotion" mistake in fails.md 2026-11-04. In that case the verdict for those scenarios becomes CONFLICT and needs a human decision.
+2. **Overlap consolidation candidate.** The rewritten 225 @AC-19 (Step 13) shares rows with 318 @AC-3, @AC-4 and @AC-5: `5 (dirty)` → force 3, `1 (dirty)` → TRUNCATE, `4 (dirty)` → exit 2, and the empty directory. The 318 scenarios add assertions that the outline lacks:
+   - the full Recover command text;
+   - the "force 6" escalation wording;
+   - the literal `$DATABASE_URL` with no `postgres://` URL;
+   - "no force -1";
+   - the `7 (dirty)` row;
+   - "no Recover: line".
+
+   I judged them NEW rather than OVERLAP for that reason. If the promoting skill instead judges them OVERLAP against the branch-tip @AC-19, skip the writes for @AC-3, @AC-4 and @AC-5. I would still prefer keeping them, because the exact-text assertions are what the regression guard needs. Consolidating the two is a human curation step. Nothing is deleted.
+3. **Related, not overlapping, rules that stay as they are.** None of these is a conflict with 318.
+   - 225 @AC-18 (contract-floor dirty, "force 25"): the guard still refuses and names the previous version.
+   - 279 @AC-25 (ahead-dirty refusal, `force 8`, literal `$DATABASE_URL`): consistent with AC-3.
+   - 279 @AC-26 and @AC-27: PRESERVE/EXTEND per design.
+   - 225 @AC-12 and 279 @AC-30: PRESERVE.
+4. **Tags and numbering.** AC numbers are not renumbered. They repeat the numbers of other features' scenarios in platform.feature, as the file already does. Uniqueness comes from the `@AC-n`+`@feature-318` pair. The source has no @FR tags, so none were invented (feature 329's block has the same shape). The `@regression` tag is kept.
+5. **Comment header.** The three comment lines under the section banner are provenance only, taken from the source's `# guards:` lines and design.md §10. Drop them if you want a tags-only append.
+6. **Other suites.** No service suite receives a scenario. The config suite's @AC-28 last-clause change is a Step 13 in-place edit, not a promotion.
+
+### Coverage check
+- Source scenarios: 5 (@AC-1, @AC-2, @AC-3, @AC-4, and @AC-5 as one Scenario Outline with 3 example rows). Planned (NEW+DUP+OVERLAP): 5 (5 NEW, 0 DUP, 0 OVERLAP, 0 CONFLICT, conditional on Note 1). Every @AC-* is accounted for, with none skipped.
+- Files: /home/user/xstockstrat/docs/roadmap/features/318-fix-migration-tooling-safety/acceptance.feature (source), /home/user/xstockstrat/docs/sdd/business-rules/platform.feature (the only target).
+````
