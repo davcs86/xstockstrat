@@ -151,7 +151,7 @@ cd services/xstockstrat-trading && export GOWORK=off \
 
 ### Step 2 — test: trading propagation interceptors
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/middleware/propagation_test.go` — create

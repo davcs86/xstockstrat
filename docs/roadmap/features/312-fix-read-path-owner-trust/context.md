@@ -558,3 +558,10 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Tooling: go1.27.0 ✓ · golangci-lint v2.14.0 ✓ (`~/go/bin`, put first on PATH for the run; `/usr/local/bin` still has 2.5.0/go1.25). The config-key wiring gate does not apply because this step declares no config key.
 - Files modified: `services/xstockstrat-trading/internal/middleware/propagation.go`, `services/xstockstrat-trading/cmd/server/main.go`
 - Deviations: none
+
+### Step 2 — test: trading propagation interceptors [done]
+- Added `propagation_test.go` (`package middleware`) with the three specced cases. A `fakeServerStream` returns a metadata-bearing context, and the cases assert `FromContext` on the stream and unary paths, plus the zero `PropagationData` when there is no metadata (the handler is still called).
+- TDD: AC-1/AC-4 (stream identity precondition). RED: the step Verification was run with the new test against Step 1's parent `91e11e0e` versions of `propagation.go` and `main.go`, restored temporarily. It gave exit=1 with `propagation_test.go:41:12: undefined: StreamServerInterceptor`, as specced. GREEN: the same Verification on the Step 1 tree gave exit=0, `ok .../internal/middleware`, `total: (statements) 85.3%` (≥ 40%) and golangci-lint v2.14.0 `0 issues.` A `-v` run showed all 3 cases `--- PASS`.
+- Config-key wiring gate: does not apply, because no config key is declared.
+- Files modified: `services/xstockstrat-trading/internal/middleware/propagation_test.go`
+- Deviations: none
