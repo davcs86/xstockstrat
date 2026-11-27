@@ -1911,7 +1911,11 @@ def register_tools(server: MCPServer) -> None:
         timeout_ms: 0 = use the configured sandbox timeout.
         Returns the full sandbox result: success, output (the result dict; NON-FINITE values such
             as NaN/Infinity are returned as null), stdout, stderr, error, exit_reason,
-            parameter_errors, execution_ms (int64 as a JSON string)."""
+            parameter_errors, execution_ms and memory_used_bytes (int64 as JSON strings).
+        memory_used_bytes: peak resident memory of the sandbox process in bytes, INCLUDING the
+            interpreter and the imported modules, so it is not usage of the memory cap. "0"
+            means not measured (timeout, kill, abort or os._exit; most memory_exceeded runs
+            report "0")."""
         deadline_s = client.formula_deadline_s(timeout_ms)
         try:
             return await client.execute_formula(

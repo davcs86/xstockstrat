@@ -1961,6 +1961,13 @@ class TestAdditiveTools:
         assert result == {"success": True}
         assert m.call_args.kwargs["formula_source"] == "result = {'value': 1}"
 
+    def test_test_formula_description_defines_memory_used_bytes(self):
+        description = _make_server()._tool_manager.get_tool("test_formula").description or ""
+        normalized = " ".join(description.split())
+        assert "memory_used_bytes" in normalized
+        assert "not measured" in normalized
+        assert "not usage of the memory cap" in normalized
+
     @pytest.mark.asyncio
     async def test_cancel_backfill_dispatches(self):
         server = _make_server()

@@ -552,3 +552,256 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - [ ] Batch peer features' file lists are unverified against Step 5 (`tools.py`) and Step 7 (`formulas.spec.ts`) — target: `/sdd-execute` Step 0 discovery, and `/merge-train` ordering.
 - [ ] DO App Platform may render no VmHWM under seccomp; record the first post-deploy `sandbox memory self-test` log line (or the ERROR) here — target: integration PR (D-14).
 - [ ] debate.md still shows O-1, O-3, O-4 and O-5 as `open`; O-1, O-3 and O-4 are answered — target: next register write (`/sdd-design` owns the register).
+
+## Session 2026-11-21 — sdd-execute sequential (sdd-batch-execute)
+
+- Up-front confirmation: the operator approved the plan with this record (binding, verbatim):
+  `{"mainDev":"8baf3976c17f2f074f834d63ad9a1e8ffd8af22e","dev":"0ab25f5ef66692773f8839bf848d166a54ccf75f","specHash":"dfb189ef7540296bcb7afec59fae90c351ced699","directive":"conditional","pending":[1,2,3,4,5,6,7,8],"mismatches":[{"n":5,"detail":"Line anchors in services/xstockstrat-agent/app/tools.py and docs/runbooks/mcp-tools.md have moved. These files changed after 8d01d15a, including 51da5e06 from 360-fix-mcp-tools-page and 4f14f897, 4330f0ef, 8b472521, 0787a1a1, 99530332 and 9d45f208. The content is unchanged and only the lines differ. `async def test_formula(` is now at tools.py:1817 (spec says :1669). The docstring return list ('Returns the full sandbox result: ... execution_ms (int64 as a JSON string).') is now at tools.py:1835-1837 (spec :1687-1689). The tool body is now about :1838-1849 (spec :1690-1700). The MessageToDict return in client.py is now :1199-1201 (spec :1178-1180). The mcp-tools.md **Return** paragraph is now :1172-1174 (spec :1060-1062). The proto anchors hold: `int64 memory_used_bytes = 6` at indicators.proto:95. Both Files paths exist. The spec already tells the executor to re-grep these anchors after a rebase."},{"n":6,"detail":"Line anchors in services/xstockstrat-agent/tests/test_tools.py have moved; the content still matches. `_make_server()` is at :33 (spec :27-30). `_tool_fn` is at :39 (spec :33-34). The manage_strategy description pattern is at :1094-1095 (spec :1088-1089). `class TestAdditiveTools` is at :1944 (spec :1835). `test_test_formula_dispatches_inline_source` is at :1946 (spec :1837). The Files path exists."},{"n":8,"detail":"Line anchors have moved after commits d1c97273, 5c4cc935 and 99530332. The content and the text the Verification greps target are still present. In services/xstockstrat-indicators/CLAUDE.md: `## Sandbox Security Model` is at :104 (spec :117). The 'Execution enforcement' bullet is at :159-162 (spec :213-216). The 'No-output failure (feature 268)' bullet is at :163-168 (spec :217-222). The feature-300 'Memory watchdog and startup probe' observability bullet is at :174-181 under '## Observability (feature 294-signal-map-instrumentation)' (spec :230-236). In docs/context-constitution.md, the 'Sandbox failure classification by stderr substring-match is a fixed contract' row is at :37 (spec :41). context-constitution-findings.md matches the spec: :22 and :23 hold the two open rows, :62-63 hold the report link rows, :3 holds the refresh header, and there is no '2026-10-22-indicators' row. All three Files paths exist."}]}`
+- Merge: `origin/main-dev@8baf3976` is already an ancestor of the dev branch, so no merge was needed.
+- Re-spec (directive conditional, line anchors only; no instruction text, Files or Verification change):
+  - `915771c1` respec(fix-sandbox-result-contract): align steps 5,6,8 with current codebase
+- Tooling setup (steps 1-8): python3.13 ✓ · uv ✓ 0.11.32 (ruff/pytest via per-step `uv sync`) · pnpm ✓ 9.15.9 · Node 24 ✓ at `/opt/node24` (the default PATH `node` is v22) · Playwright Chromium ✓ (`/opt/pw-browsers`) · docker ✓. Pre-commit hook check: hook=0.
+- Status: `implementation-ready` → `in-progress`.
+
+```sdd-batch-setup
+{"mainDev":"8baf3976c17f2f074f834d63ad9a1e8ffd8af22e","date":"2026-11-21"}
+```
+
+### Step 1 — service: nonce status line, classifier, missing-result failure and measured memory in the sandbox [done]
+- Landed the whole result contract in `sandbox.py`. The pieces are `_ImportBlocked`, the `_ms` fd opened before seccomp, a total `_status` that prints the nonce status line with the leader VmHWM, and key-presence `result` detection inside a handler chain that re-raises. In the parent, `secrets.token_hex(16)` makes the nonce, `_split_status` strips the line on the watchdog-kill and post-communicate paths, the D-7 classifier replaces the guard-message substring branch (O-3), `no_result` fails with "formula did not assign result", and `memory_used_bytes` is measured on `_fail` and success.
+- TDD (no `**Covers**`; Step 2 owns the @AC tests): RED came from the Verification on the pre-change tree (`.sdd-logs/v-1.log`, exit=0). `grep -c "memory_used_bytes=0"` printed `4` (expect 2) and the substring grep matched `809:                if "is not allowed in sandbox" in stderr:` (expect none). A scratch behaviour probe (`.sdd-logs/v-2.log`, exit=1) printed `no_result: True success '' 0` and `guard_msg: False import_blocked`. GREEN came from the probe (`.sdd-logs/v-6.log`, exit=0), which printed `no_result: False runtime_error 'formula did not assign result' 15777792`, `guard_msg: False runtime_error` and `FAILURES: []`. The Verification (`.sdd-logs/v-5.log`, exit=0) printed `610 passed in 70.12s`, `Total coverage: 87.05%`, `All checks passed!`, `65 files already formatted`, grep count `2`, no substring match, and `781:                pass_fds=(w,) if w >= 0 else (),`.
+- The first GREEN Verification (`.sdd-logs/v-3.log`) printed exit=0 while ruff reported E501 on the verbatim `__OUTPUT__` print line. The exit status comes from the trailing grep, so a non-zero `&&` chain does not show in `exit=`. The line was split (Deviation Log) and the Verification re-ran green. The `test_ac8_fork_bomb…` flake did not appear in any run.
+- Config-key wiring gate: not applicable (no config key, no migration).
+- Files modified: `services/xstockstrat-indicators/app/services/sandbox.py`
+- Deviations: E501 line split; RED evidence from greps plus a scratch probe; 610 vs 571 suite count (full detail in Deviation Log)
+
+### Step 2 — test: sandbox result-contract regression tests (@AC-1..4) [done]
+- Added `TestSandboxResultContract`, which runs 11 cases through a real subprocess. Also added a fake for the no-status stderr-marker case and a fake where OOM-counter evidence outranks the status line (`_killed_proc` gained `stdout=""`). Two servicer tests cover @AC-3 and @AC-2.
+- TDD RED: run with `sandbox.py` temporarily restored to `4f57ba17~1` (`.sdd-logs/v-1.log`, exit=0 because the trailing grep sets the status). It printed `10 failed, 615 passed`.
+  - AC-1 red: `assert 'import_blocked' == 'runtime_error'`.
+  - AC-2 red: `assert 0 > 0`.
+  - AC-3 red: `assert True is False`.
+  - Stdout red: `assert '\n__OUTPUT__:{}\n' == ''`.
+  - The OOM-outranks fake red: `AttributeError: module 'app.services.sandbox' has no attribute 'secrets'`.
+- TDD GREEN (`.sdd-logs/v-3.log`, exit=0) printed `625 passed in 73.47s`, `Total coverage: 87.11%`, `All checks passed!`, `65 files already formatted` and `11 passed, 20 deselected`. The grep matched one line only: `tests/test_sandbox.py:399:            return sandbox.SandboxResult(`.
+- The first GREEN run (`.sdd-logs/v-2.log`) had 625 passed, but ruff reported E501 on a new test line. `exit=0` did not show it, because the trailing grep sets the status. The line was split and the Verification re-ran green.
+- Flake (P-03): `test_ac8_fork_bomb_is_not_a_success_the_service_recovers_and_nothing_is_unobservable` failed in the RED run, on the pre-Step-1 tree, at the `CANNOT_OBSERVE_MSG` assertion (`tests/test_sandbox_watchdog.py:462`). It passed in both GREEN runs. This is the known pre-existing flake and was not caused by this step.
+- Config-key wiring gate: not applicable (no config key, no migration).
+- Files modified: `services/xstockstrat-indicators/tests/test_sandbox.py`, `services/xstockstrat-indicators/tests/test_sandbox_isolation.py`, `services/xstockstrat-indicators/tests/test_sandbox_watchdog.py`, `services/xstockstrat-indicators/tests/test_formulas.py`
+- Deviations: RED run against the restored pre-Step-1 file; the existing fake moved to `:399`; E501 split (full detail in Deviation Log)
+
+### Step 3 — service: boot self-test for `memory_used_bytes` in the startup probe [done]
+- Moved the existing `run_startup_probe` body, unchanged, into `_run_memory_probe()`, so its early `return` no longer skips anything. Added `from app.services import sandbox`, `_UNMEASURABLE_MSG` and `_self_test()`. `_self_test()` calls `sandbox.execute_formula("result = {}", {}, [])` and logs INFO `sandbox memory self-test exit_reason=%s memory_measured=%d`. It logs ERROR on a non-success result or on memory <= 0. The new `run_startup_probe` runs the probe and then the self-test in its own `try`, and it never raises. `app/main.py` is unchanged.
+- TDD (no `**Covers**`; Step 4 owns the tests):
+  - RED came from a scratch behaviour probe outside the repo (`.sdd-logs/v-2.log`, exit=1). It covered a real run, a fake that returns 0 memory, and a fake that raises. It printed `real selftest: [] unmeasurable_errors: 0` and `FAILURES: ['real', 'zero', 'raises']`.
+  - The pre-change Verification (`.sdd-logs/v-1.log`, exit=0) printed `625 passed`.
+  - GREEN probe (`.sdd-logs/v-3.log`, exit=0) printed:
+    - `real selftest: ['sandbox memory self-test exit_reason=success memory_measured=15691776'] unmeasurable_errors: 0`
+    - `zero … unmeasurable_errors: 1`
+    - `raises selftest: [] unmeasurable_errors: 1`
+    - `FAILURES: []`
+  - GREEN Verification (`.sdd-logs/v-4.log`, exit=0) printed `625 passed in 73.44s`, `Total coverage: 87.03%`, `All checks passed!`, `65 files already formatted`, `25:from app.services.sandbox_probe import run_startup_probe` and `46:    await asyncio.to_thread(run_startup_probe)`.
+- The `test_ac8_fork_bomb…` flake did not appear in either Verification run.
+- Config-key wiring gate: not applicable (no config key, no migration).
+- Files modified: `services/xstockstrat-indicators/app/services/sandbox_probe.py`
+- Deviations: RED evidence from a scratch probe; the run script puts the Verification's closing `)` on its own line (full detail in Deviation Log)
+
+## Session 2026-11-26 — sdd-execute sequential (sdd-batch-execute), Step 4
+
+- Operator decision for the Step 4 blocker (binding; option A, operator-approved 2026-11-21): fold the fix into Step 4, widening its scope to `app/services/sandbox_probe.py`. The boot self-test must not change the watchdog-observability outcome. Add a regression assertion that a blind self-test sample leaves the gauge at 1 and logs no `CANNOT_OBSERVE_MSG`.
+
+### Step 4 — test: boot self-test logs a measured figure and reports an unmeasurable runtime [done]
+- Added `UNMEASURABLE_MSG`, `SELF_TEST_MSG` and the five spec `test_boot_self_test_*` tests. They use `dataclasses.replace` on a real `execute_formula("result = {}", {}, [])` result, so there is no new `SandboxResult(` literal (C-13).
+- Fold: the new `_self_test_isolated()` in `sandbox_probe.py` pre-marks the `unobservable` once-flag around `_self_test()`. Afterwards it re-arms the flag if this call set it, and restores `telemetry._memory_watchdog_observable`. `run_startup_probe` calls it.
+- The fold's regression test is `test_boot_self_test_blind_sample_leaves_the_probe_outcome_unchanged`. It simulates the blind tick by calling `_warn_unobservable_once()` inside a wrapped `execute_formula`.
+- TDD RED for the fold test, on the post-Step-3 tree (`.sdd-logs/v-1.log`, exit=1): `1 failed, 630 passed` and `1 failed, 5 passed, 7 deselected`. The failure was `assert not [<LogRecord: app.services.sandbox, 40, ... "sandbox memory watchdog cannot observe child">]`.
+- TDD RED for the five spec tests, against the pre-Step-3 `sandbox_probe.py` restored from `5755e29d~1` and put back afterwards (`.sdd-logs/v-2.log`, exit=0 from the trailing restore): `5 failed, 1 passed, 7 deselected`, each with `assert 0 == 1` / `where 0 = len([])` on the self-test or unmeasurable records.
+- TDD GREEN (`.sdd-logs/v-3.log`, exit=1 from the expected empty C-13 grep): `631 passed in 75.42s`, `Total coverage: 87.29%`, `All checks passed!`, `65 files already formatted`, `6 passed, 7 deselected in 0.81s`. The C-13 grep found no `SandboxResult(` match.
+- The `test_ac8_fork_bomb…` flake did not appear in any run.
+- Config-key wiring gate: not applicable (no config key, no migration).
+- Files modified: `services/xstockstrat-indicators/tests/test_sandbox_probe.py`, `services/xstockstrat-indicators/app/services/sandbox_probe.py` (fold)
+- Deviations: operator-approved fold of `sandbox_probe.py`; `-k boot_self_test` reports 6 passed, not 5; RED for the spec tests ran against the restored pre-Step-3 file (full detail in Deviation Log)
+
+## Session 2026-11-26 — sdd-execute sequential (sdd-batch-execute), Step 5
+
+### Step 5 — service: agent `test_formula` documents `memory_used_bytes` [done]
+- The `test_formula` docstring return sentence now ends `execution_ms and memory_used_bytes (int64 as JSON strings).` and is followed by the O-1 definition: baseline included, so not usage of the memory cap; `"0"` means not measured. The `docs/runbooks/mcp-tools.md` **Return** paragraph mirrors it in one sentence. The tool body, name, parameters and return shape are unchanged, and the probe still counts 45 tools.
+- Discovery re-verified at `origin/feature/fix-sandbox-result-contract@b1c30ecb`: `tools.py:1817` `async def test_formula(`, the return sentence at `:1835-1837`, `client.py:1199-1201` `MessageToDict(…always_print_fields_with_no_presence=True)`, `indicators.proto:95` `int64 memory_used_bytes = 6;`, `mcp-tools.md:1172-1174`. Before the change neither file mentioned `memory_used_bytes`.
+- TDD (no `**Covers**`; Step 6 owns the test):
+  - RED Verification (`.sdd-logs/v-1.log`, exit=1): `825 passed in 109.66s`, `Total coverage: 88.47%`, `All checks passed!`, `79 files already formatted`, then the grep found no match in either file.
+  - RED from a scratch description probe outside the repo (`.sdd-logs/v-2.log`, exit=1): `FAILURES: ['memory_used_bytes', 'not measured', 'not usage of the memory cap']`.
+  - GREEN Verification (`.sdd-logs/v-3.log`, exit=0): `825 passed in 106.85s`, `Total coverage: 88.47%`, `All checks passed!`, `79 files already formatted`, and grep matches at `app/tools.py:1837`, `:1838` and `../../docs/runbooks/mcp-tools.md:1174`, `:1175`.
+  - GREEN probe (`.sdd-logs/v-4.log`, exit=0): `tool_count: 45`, `FAILURES: []`.
+- Config-key wiring gate: not applicable (no config key, no migration).
+- Files modified: `services/xstockstrat-agent/app/tools.py`, `docs/runbooks/mcp-tools.md`
+- Deviations: E501 rewrap of the docstring's last two lines; RED evidence from the grep plus a scratch probe (full detail in Deviation Log)
+
+## Session 2026-11-26 — sdd-execute sequential (sdd-batch-execute), Step 6
+
+### Step 6 — test: `test_formula` description names `memory_used_bytes` and its zero meaning [done]
+- Added `TestAdditiveTools.test_test_formula_description_defines_memory_used_bytes` after `test_test_formula_dispatches_inline_source`. It reads the `test_formula` tool description, normalizes whitespace and asserts `memory_used_bytes`, `not measured` and `not usage of the memory cap`.
+- Discovery re-verified at `origin/feature/fix-sandbox-result-contract@7efe5d7a`: `_make_server()` `tests/test_tools.py:33`, `_tool_fn` `:39`, the description pattern `:1094-1095`, `class TestAdditiveTools` `:1944`, `test_test_formula_dispatches_inline_source` `:1946-1955`.
+- TDD red: run with `app/tools.py` restored temporarily from `7efe5d7a~1` (`.sdd-logs/v-1.log`, exit=1): `1 failed, 825 passed` and `1 failed, 137 deselected`; `assert 'memory_used_bytes' in "Dry-run inline formula source … execution_ms (int64 as a JSON string)."` at `tests/test_tools.py:1960`. tools.py was put back before GREEN.
+- TDD green (`.sdd-logs/v-2.log`, exit=0): `826 passed in 102.30s`, `Total coverage: 88.47%`, `All checks passed!`, `79 files already formatted`, `1 passed, 137 deselected in 0.61s`.
+- Config-key wiring gate: not applicable (no config key, no migration).
+- Files modified: `services/xstockstrat-agent/tests/test_tools.py`
+- Deviations: RED against the restored pre-Step-5 `tools.py`; the run script's closing `)` on its own line (full detail in Deviation Log)
+
+## Session 2026-11-26 — sdd-execute sequential (sdd-batch-execute), Step 7
+
+- Operator decision for the Step 7 blocker (binding; option A, operator-approved 2026-11-26): **O-5 / C-14 answer — "surface unchanged, justified".** The new failure classes and the missing-`result` error already show through `FormulaRunResult.tsx:64` (exit-reason map), `:73` (exit label) and `:77` (`result.error`), and the UI never displayed memory, so no follow-up feature is filed. Step 7 runs as written (the `310 AC-3` characterisation test in `e2e/insights/formulas.spec.ts`). This closes the O-5 Open Thread and confirms Step 7 (impl-review warnings "Step 7: C-14" and "Step 7: test-only `**TDD**: N/A`").
+
+### Step 7 — test: `/insights` formula run shows the missing-result failure [done]
+- Added `310 AC-3: a run that never assigns result shows the failure and its error` to the `Formula fundamental inputs (feature 205)` describe, after AC-5. It reuses `addAuthCookie`, `stubCatalog` and `stubGetFundamentalsFormula`, and fulfils `ExecuteFormula` with `{success:false, error:"formula did not assign result", exitReason:"SANDBOX_EXIT_REASON_RUNTIME_ERROR", parameterErrors:[]}`. It clicks `Run` and asserts that `Failed`, `Runtime error` and `formula did not assign result` are visible (exact match). It adds no memory display, and no fixture or `INVENTORY.md` row (C-12 one-off error payload).
+- Discovery re-verified at `origin/feature/fix-sandbox-result-contract@778ee6b1`:
+  - `FormulaRunResult.tsx:64`, `:70-72`, `:73`, `:77`;
+  - `FormulaWorkspace.tsx:545` (`Run`) and `:564`;
+  - `formulaReference.ts:193`;
+  - `indicators.proto:106` `SANDBOX_EXIT_REASON_RUNTIME_ERROR = 4`;
+  - spec anchors `:1-3`, `:152`, `:165`, `:223-246`;
+  - no `memoryUsedBytes`/`memory_used_bytes` under `src` or `e2e`.
+- TDD (AC-3): red N/A, no behaviour change; a characterisation test was added (the step's `**TDD**: N/A`). AC-3 green: the new test passed.
+- GREEN (`.sdd-logs/v-3.log`, exit=0, run with `CI=true`):
+  - `✓  12 [chromium] › e2e/insights/formulas.spec.ts:248:7 › Formula fundamental inputs (feature 205) › 310 AC-3: a run that never assigns result shows the failure and its error (975ms)`;
+  - `13 passed (1.7m)`;
+  - `next lint` reported only pre-existing warnings in other files;
+  - the grep matched `2:import { addAuthCookie } from '../helpers/auth';` and `3:import { FORMULAS, FORMULA_FUNDAMENTALS, FUNDAMENTALS_AAPL } from '../fixtures';`.
+  - No coverage threshold applies.
+- The two host `pnpm dev` runs (`v-1.log`, `v-2.log`) failed on the warmup setup timeout (`12 did not run`). `exit=0` hid this, because the trailing grep sets the status.
+- Config-key wiring gate: not applicable (no config key, no migration).
+- Files modified: `services/xstockstrat-ui/e2e/insights/formulas.spec.ts`
+- Deviations: a CI-equivalent `CI=true` fallback for the host dev-server warmup timeout; the run script's closing `)` on its own line (full detail in Deviation Log)
+
+## Session 2026-11-26 — sdd-execute sequential (sdd-batch-execute), Step 8
+
+### Step 8 — docs: result contract, memory definition and resolved findings rows [done]
+- Service `CLAUDE.md` gained the "Result contract (feature 310)" and "`memory_used_bytes` (feature 310)" bullets after the feature-268 bullet (verbatim spec text), the "did not assign result" sentence on "Execution enforcement", and the boot self-test INFO/ERROR text on the feature-300 observability bullet. The constitution candidate row is replaced in place with the nonce-status-line invariant (O-3), re-anchored to `#_split_status` (~L692) and `#_MEMORY_EXHAUSTED_MARKERS` (~L545). In the findings file, `:22` is resolved (feature 310, O-4), `:23` carries the D-14 conditional wording verbatim, both report link rows read "fixed by feature 310" with the links kept, and `:3` gains the 2026-11-20 refresh clause. Report sidecars untouched (spec Step Dependencies).
+- Discovery re-verified at `origin/feature/fix-sandbox-result-contract@4c9de26c` by text anchor (lines match the re-spec): `CLAUDE.md:104`, `:159-162`, `:163-168`, `:174-181`; constitution `:37`; findings `:3`, `:22`, `:23`, `:62-63`; no `2026-10-22-indicators` row. Step 1/3 symbols present: `sandbox.py:692` `_split_status`, `:877` "formula did not assign result", `sandbox_probe.py:324,330`.
+- TDD: N/A (docs). Baseline Verification on the pre-change tree (`.sdd-logs/v-1.log`, exit=0): no "feature 310" hit, `37:| Sandbox failure classification by stderr substring-match is a fixed contract …`, no D-14 match, and both open rows `:22`/`:23` matched. GREEN (`.sdd-logs/v-2.log`, exit=1 from the expected empty last grep): `171:- **Result contract (feature 310)**`, `181:- **`memory_used_bytes` (feature 310)**`, `202:  Boot self-test (feature 310)`, no "fixed contract" match, one D-14 match at findings `:23`, no open row matching `memory_used_bytes`/`is not allowed in sandbox`.
+- Config-key wiring gate: step-time not applicable (no config key, no migration). Final gate `node scripts/check-config-wiring.mjs --final` (`.sdd-logs/v-3.log`, exit=0): two `REPORTED:` lines in other services (`services/xstockstrat-analysis/app/engine/fundsignal_loop.py`, `services/xstockstrat-trading/internal/service/trading.go`, `readers-disagree`), not this feature's.
+- All 8 steps done. Status: `in-progress` → `code-completed`. No insights ledger line: nothing new generalizes.
+- Files modified: `services/xstockstrat-indicators/CLAUDE.md`, `services/xstockstrat-indicators/docs/context-constitution.md`, `services/xstockstrat-indicators/docs/context-constitution-findings.md`
+- Deviations: the run script's closing `)` on its own line; constitution row kept under Candidate rules (full detail in Deviation Log)
+
+## Open Threads
+
+- [ ] OQ1: operator check of dev and prod `indicators.formulas` for saved formulas that never assign `result` — target: before the integration PR; record the result here.
+- [x] Sidecar reading of design.md § 7 — ruled 2026-11-26: mark the reports resolved (see the session block at the end); done in the follow-up commit.
+- [ ] DO App Platform may render no VmHWM under seccomp; record the first post-deploy `sandbox memory self-test` log line (or the ERROR) here — target: integration PR (D-14).
+- [ ] Promote `@AC-1..4` into `services/xstockstrat-indicators/acceptance/` with `@feature-310` — target: integration.
+- [ ] The pre-existing `test_ac8_fork_bomb…` isolation flake needs a defect report via `/sdd-qa defect` — target: next session with write access outside this feature directory.
+- [ ] debate.md still shows O-1, O-3, O-4 and O-5 as `open`; all four are now answered — target: next register write (`/sdd-design` owns the register).
+
+## Session 2026-11-26 — operator ruling on the sidecar reading, recorded by the orchestrator (verbatim)
+
+- **Question**: "310, before Step 8: confirm the design.md §7 sidecar reading — the defect-report status sidecars are left untouched by this feature, and the findings row in context-constitution-findings.md uses conditional wording (it does not mark the reports resolved)?"
+- **Answer**: "Mark the reports resolved" (option text: "Step 8 also flips the relevant docs/reports sidecars to resolved with the commit ref (needs a spec change; 310 stops at Step 8 until amended)").
+- **Timing**: Step 8 had already run without the sidecar flip, as specced (Deviation Log, 2026-11-20 entry), before this ruling arrived; the flip is a follow-up commit, logged in the Deviation Log (2026-11-26, post-Step 8).
+- **Changed**: the three `docs/reports/*.status` sidecars (`2026-10-19-sandbox-exit-reason-stderr-substring-defect`, `2026-10-19-sandbox-memory-used-bytes-always-zero-defect`, `2026-10-22-indicators-missing-result-silent-success-defect`) go `triaged` to `resolved`, keeping `ref: feature:310-fix-sandbox-result-contract`. Indicators findings `:23` moves from the conditional wording to "resolved (feature 310, D-14)" and keeps the DO boot-log confirmation as a recorded-at-promotion item; the two report link rows read "resolved by feature 310".
+- **Ref**: the ref is the feature, not a commit sha. The sidecar contract (`.claude/skills/sdd-qa/reference/defect-filing.md` § The status sidecar) defines `commit:<sha>` as "fixed directly, outside any track", and `sdd-execute` ALL-DONE 2.6 stamps `resolved` / `ref: feature:<NNN-slug>` for a fix feature. A branch sha would not survive the squash into `main-dev`, so none was used.
+- **Still open**: the DO boot-log line (D-14) and the integration PR itself; the sidecars read `resolved` before the fix is merged, so if the integration PR is abandoned they must be reverted to `triaged`.
+
+## Session 2026-11-26 — sdd-batch-execute promotion plan (awaiting operator confirm)
+
+```sdd-batch-promotion-plan
+## Promotion plan — fix-sandbox-result-contract (feature 310)
+
+### Verdicts
+| @AC | target suite (path) | CREATE/APPEND | verdict | note |
+|---|---|---|---|---|
+| AC-1 | services/xstockstrat-indicators/acceptance/fix-sandbox-result-contract.feature | CREATE | NEW | Subject is the sandbox exit_reason classification, which the indicators service owns. No existing scenario asserts that a formula exception carrying a guard message is classified runtime_error rather than import_blocked. Related but different outcomes: 300 AC-5 (SIGKILL attribution) and 228 AC-4 (OpenBLAS abort to memory_exceeded). |
+| AC-2 | same | CREATE | NEW | memory_used_bytes as a real per-run peak. Grep of every indicators suite and platform.feature for memory_used_bytes and VmHWM found nothing. The 300 and 228 suites assert memory_exceeded kills and headroom, not the reported figure. |
+| AC-3 | same | CREATE | NEW | A formula that never assigns result fails with an error containing "result". 268 AC-1 (services/xstockstrat-indicators/acceptance/fix-indicators-formula-correctness.feature:10) covers SystemExit(0) with no marker ("produced no output"). That is a different trigger and a different error text, so it is not an OVERLAP. No contradiction. |
+| AC-4 | same | CREATE | NEW | An explicit `result = {}` still succeeds with output {}. 268 AC-3 (same file, line 27) covers `result = {'x': 1}`. The empty-dict boundary is a different observable. No contradiction. |
+
+All four scenarios are in the indicators service (the observable subject is ExecuteFormula and the sandbox result). The feature.md Reviewers table also lists agent and ui, but only for the MCP tool and UI display steps, not for these guarantees. Nothing is cross-service, so platform.feature gets no write. The acceptance/ directory already exists in indicators, so only the file is new.
+
+### Ready-to-write blocks
+--- services/xstockstrat-indicators/acceptance/fix-sandbox-result-contract.feature (CREATE) ---
+# Promoted from docs/roadmap/features/310-fix-sandbox-result-contract/acceptance.feature
+# (Constitution C-16). Source-feature provenance is carried on every scenario's `@feature-310` tag.
+# Durable business rules xstockstrat-indicators already guarantees — a rule enters only by promotion
+# from a reviewed feature acceptance.feature, never by hand-authoring.
+
+Feature: xstockstrat-indicators — the sandbox reports its failure class, memory use, and missing-result outcome truthfully
+  Regression guard for clustered defect reports: docs/reports/2026-10-19-sandbox-exit-reason-stderr-substring-defect.md,
+  docs/reports/2026-10-19-sandbox-memory-used-bytes-always-zero-defect.md and
+  docs/reports/2026-10-22-indicators-missing-result-silent-success-defect.md.
+
+  @AC-1 @regression @feature-310
+  Scenario: A formula exception carrying a guard message is classified as a runtime error
+    Given an ExecuteFormula request with formula_source 'raise ValueError("is not allowed in sandbox")'
+    When the sandbox runs the formula
+    Then the result has success false
+    And exit_reason is "runtime_error", not "import_blocked"
+
+  @AC-2 @regression @feature-310
+  Scenario: memory_used_bytes is a real per-run peak, not a fabricated or inherited figure
+    Given the runtime renders a VmHWM line in /proc/self/status
+    And run A is an ExecuteFormula request with formula_source "result = {}"
+    And run B is an ExecuteFormula request with formula_source:
+      """
+      import numpy
+      a = numpy.ones(10_000_000)
+      result = {"s": float(a[0])}
+      """
+    When the sandbox runs A and then B
+    Then A's memory_used_bytes is greater than 0
+    And B's memory_used_bytes exceeds A's by at least 41943040
+
+  @AC-3 @regression @feature-310
+  Scenario: A formula that never assigns result fails with an explicit error
+    Given an ExecuteFormula request with inline formula_source "x = 1" and empty input_data
+    When the sandbox runs the formula
+    Then the result has success false
+    And the error message contains "result"
+
+  @AC-4 @regression @feature-310
+  Scenario: A formula that explicitly assigns an empty result still succeeds
+    Given an ExecuteFormula request with inline formula_source "result = {}" and empty input_data
+    When the sandbox runs the formula
+    Then the result has success true
+    And the output is {}
+
+### Notes / ambiguities / conflicts
+- No CONFLICT and no OVERLAP. Suites checked: all 19 files under services/xstockstrat-indicators/acceptance/ and docs/sdd/business-rules/platform.feature. Grep terms were exit_reason, memory_used_bytes, VmHWM, never assigns, result = {}, import_blocked and @feature-310. There is no existing @feature-310 scenario, so a re-run is idempotent (this is the first promotion).
+- The source acceptance.feature carries no @FR-* tags (only @AC-n @regression). I kept the tags exactly as in the source and added only @feature-310. I did not invent FR tags. If the caller wants @FR-* tags for provenance, they must come from product-spec.md, not from this plan.
+- The per-scenario `# guards:` comments from the source are folded into the Feature description (the three report paths), matching the style of the 228, 268 and 300 promoted files. Scenario step text is verbatim, including the AC-2 docstring.
+- Optional, not planned: the 228 and 300 files carry a "Backed by tests/..." header. The test file names for 310 are not known at plan time, so the orchestrator may add that line from implementation-spec.md if wanted. I did not guess it.
+- Related guarantees to cross-check at consolidation: 268 AC-1 and AC-3 (fix-indicators-formula-correctness.feature) share the "no output / result assigned" area with 310 AC-3 and AC-4. They assert different outcomes, so no merge is suggested.
+
+### Coverage check
+- Source scenarios: 4 (@AC-1 to @AC-4). Planned: 4 (NEW 4, DUP 0, OVERLAP 0, CONFLICT 0). Every @AC-* is accounted for and none were skipped.
+```
+
+## Session 2026-11-27 — operator rulings on OQ1 (production waived) and merging the integration PR, recorded by the orchestrator (verbatim)
+
+Operator answers (2026-11-27): to "waive prod": "waive prod" — the production half of OQ1 (and any production procedure for 310) is WAIVED under the standing ruling "leave production out. It's never been out/launched."; to "310: should I merge PR #1617 once CI is green and OQ1 is settled?": "B5 yes".
+
+Effect: OQ1 reduces to the dev/staging check of indicators.formulas (operator-run; query and steps in the 2026-11 operator runbook). PR #1617 may be squash-merged once its CI is green and the operator reports the dev/staging OQ1 check done. D-14 (first post-deploy sandbox memory self-test log line) is staging-only.
+
+## Session 2026-11-27 — OQ1 check, DO staging, supplied by the operator (verbatim)
+
+The operator ran the A1 read-only check (BEGIN READ ONLY ... ROLLBACK, three queries over `indicators.formulas`) on the **DO staging** database. Result of the totals query:
+
+```
+ total_rows | live_rows | soft_deleted_rows | tier_a_never_mentions_result | tier_b_mentions_but_no_assignment
+------------+-----------+-------------------+------------------------------+-----------------------------------
+         14 |        14 |                 0 |                            0 |                                 0
+(1 row)
+```
+
+No saved formula on DO staging lacks a `result` binding by either static heuristic (tier A: the word never appears; tier B: mentioned but no assignment form), so none will start failing with "formula did not assign result". The Tier A and Tier B listings were empty (the counts are 0). Homelab staging: the first two pastes carried no result tables (the echoed queries only, backslashes stripped); a backslash-free replacement script was sent to the operator and its result is outstanding. Production half waived (standing ruling). OQ1 is reported as the DO staging check done; the homelab staging result will be appended when it arrives.
+
+## Session 2026-11-27 — OQ1 check, homelab staging, supplied by the operator (verbatim)
+
+The operator ran the A1 totals query on the **homelab staging** database:
+
+```
+ total_rows | live_rows | soft_deleted_rows | tier_a_never_mentions_result | tier_b_mentions_but_no_assignment
+------------+-----------+-------------------+------------------------------+-----------------------------------
+          3 |         3 |                 0 |                            0 |                                 0
+(1 row)
+```
+
+No saved formula on homelab staging lacks a `result` binding by either static heuristic. With the DO staging result recorded in the previous entry (0 of 14), the OQ1 dev/staging check is done for both staging stacks; the production half stays waived (standing ruling). Per the 2026-11-27 ruling, PR #1617 may be squash-merged once its CI is green.
