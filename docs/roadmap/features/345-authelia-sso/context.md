@@ -803,3 +803,10 @@
 - Created `007_external_identities.{up,down}.sql` (`006` was the highest; `007` free — impl-review ⚠ "re-check identity `007`" cleared at execute). Offline check: both files exist, the constraint/IF NOT EXISTS grep counts 3, the down's `DROP TABLE IF EXISTS` inverts the up's single `CREATE TABLE IF NOT EXISTS`. TDD: N/A. Live apply deferred to CI.
 - Files modified: `services/xstockstrat-identity/migrations/007_external_identities.up.sql`, `.down.sql`
 - Deviations: none
+
+### Step 4 — migration: config 060_authelia_sso_keys and the regenerated stored set [done]
+- `060` re-checked at execute (highest `059`; impl-review ⚠ "re-check config `056`/`060`" cleared). Up: two `ON CONFLICT … DO NOTHING` statements, 16 plain rows (8 keys × 2 envs) + 2 secret rows, sentinel `system:config-migration-feature-authelia-sso`, no notify. Down: one sentinel- and seed-value-guarded `DELETE`; the secret row only while `value_encrypted IS NULL`.
+- **Blocker resolved by the owner (2026-11-27): "Allow scratch Postgres"** — one throwaway local Postgres 16 (host binaries `/usr/lib/postgresql/16`, port 55432, data dir `/var/tmp/pg345`, stopped and removed after) to run `scripts/config-wiring-stored.py` (`migrate` v4.17.1, the `Dockerfile.migrate` pin). The diff adds the 18 new rows and changes only `inputs_sha256` (existing rows reproduced byte-for-byte).
+- Verification: 2 `060_*` files; no `pg_notify`; `check-config-wiring.mjs --declared-migration …060…` exit=0 with 8 `PENDING` seeded-unread (readers land in Steps 7, 17, 30); `--final` shows 0 `STALE-STORED`. TDD: N/A.
+- Files modified: `services/xstockstrat-config/migrations/060_authelia_sso_keys.{up,down}.sql`, `scripts/config-wiring-stored.json`
+- Deviations: scratch Postgres used with owner sign-off (Deviation Log).

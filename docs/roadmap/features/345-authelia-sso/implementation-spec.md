@@ -253,7 +253,7 @@ grep -c "CONSTRAINT external_identities_pkey\|CONSTRAINT external_identities_iss
 
 ### Step 4 — migration: config 060_authelia_sso_keys and the regenerated stored set
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/migrations/060_authelia_sso_keys.up.sql` — create (number re-checked at execute)
@@ -2225,3 +2225,8 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Expected**: `./scripts/buf-gen.sh` via the Docker codegen image; commit every path it changes.
 - **Actual**: the image's `golang:1.27-trixie` pull got Docker Hub `429 Too Many Requests`; ran `buf-gen.sh` host-native with the CI `proto-freshness` pins. That toolchain also reflowed two doc comments in `gen/go/analysis/v1/analysis.pb.go` and `gen/go/trading/v1/trading.pb.go` (no identity change; trunk's committed output, which CI produces, lacks the reflow).
 - **Disposition**: CI-equivalent fallback; the two non-identity files were reverted, not committed (CI `proto-freshness` re-checks the gen tree).
+
+### Step 4 — stored set regenerated on a local scratch Postgres (owner override)
+- **Expected**: regenerate `scripts/config-wiring-stored.json` on a scratch Postgres 16, or block (P-03) and take the CI `config-wiring-stored` artifact; the execute rails forbid starting a database.
+- **Actual**: CI runs only on pull requests, so no artifact existed. The owner chose "Allow scratch Postgres" (2026-11-27, this session) over an early PR or a deferral. Ran one throwaway local Postgres 16 (host binaries, no container) only for `config-wiring-stored.py`; stopped and deleted it right after. No migration was verified against it beyond the generator's own apply.
+- **Disposition**: owner-signed override of the no-database rail for this one regeneration; CI's `config-wiring-stored` job re-checks freshness on the integration PR.
