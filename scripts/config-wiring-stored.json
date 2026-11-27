@@ -1,6 +1,30 @@
 {
     "rows": [
         {
+            "key": "extract.call_budget_seconds",
+            "file": "057_mcp_deadline_budget.up.sql",
+            "global": true,
+            "is_secret": false,
+            "namespace": "agent",
+            "value_type": "float",
+            "description": "Whole-call budget (seconds) for the URL fetches of one extract_email_content / extract_website_content call. Identity auth (10 s) + the source lookup (10 s) + this value must stay at or below 57 s, 3 s under the MCP client's 60 s timeout. Read live; a non-finite or <= 0 value reads as 35. SetConfig-bounded [5,35].",
+            "environment": "production",
+            "default_value": "35",
+            "consuming_service": "xstockstrat-agent"
+        },
+        {
+            "key": "extract.call_budget_seconds",
+            "file": "057_mcp_deadline_budget.up.sql",
+            "global": true,
+            "is_secret": false,
+            "namespace": "agent",
+            "value_type": "float",
+            "description": "Whole-call budget (seconds) for the URL fetches of one extract_email_content / extract_website_content call. Identity auth (10 s) + the source lookup (10 s) + this value must stay at or below 57 s, 3 s under the MCP client's 60 s timeout. Read live; a non-finite or <= 0 value reads as 35. SetConfig-bounded [5,35].",
+            "environment": "staging",
+            "default_value": "35",
+            "consuming_service": "xstockstrat-agent"
+        },
+        {
             "key": "extract.connect_timeout_seconds",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
@@ -5161,5 +5185,5 @@
             "consuming_service": "xstockstrat-ui"
         }
     ],
-    "inputs_sha256": "171dc776a579da4384dc040ff3dcc5bc31dbab5aa998b6649fa59c21f3f551de"
+    "inputs_sha256": "436445e5805e8a3060144a428a349387ef6a0238765702e3b9bbca1a8aa1846a"
 }

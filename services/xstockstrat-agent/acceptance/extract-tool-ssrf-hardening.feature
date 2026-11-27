@@ -42,12 +42,13 @@ Feature: extract-tool-ssrf-hardening (SSRF egress controls on the agent extract_
     Then the redirect target is re-validated, rejected as non-public, and the redirect is not followed
     And the tool returns an egress error rather than metadata content
 
-  @AC-6 @FR-4 @feature-207
+  # Changed by feature 314 (C-16, operator sign-off 2026-11-20): a legitimate fetch is also bounded by the whole-call budget agent.extract.call_budget_seconds (default 35 s).
+  @AC-6 @FR-4 @feature-207 @feature-314
   Scenario: A legitimate public URL is still fetched and extracted
     Given a reachable public URL "https://example.com/article" that resolves only to a public address and returns HTML within the size limit
     When the agent calls extract_website_content with that url
     Then the content is fetched and the extracted text is returned as before this feature
-    And behavior for well-formed public requests is unchanged
+    And a fetch that outlives the 35 s budget ends as a PARTIAL result (extract_email_content) or a DEADLINE_EXCEEDED error (extract_website_content)
 
   @AC-7 @FR-6 @feature-207
   Scenario: A blocked fetch does not leak internal targets and is recorded

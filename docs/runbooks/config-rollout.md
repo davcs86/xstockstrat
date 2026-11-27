@@ -173,6 +173,25 @@ for key, value in [
     )
 ```
 
+### Cross-key deadline order (feature 314)
+
+`SetConfig` refuses (code 3, no write) a global write that would invert either PLAT-13 deadline pair
+(`CROSS_KEY_ORDERING`, strict `>`):
+
+| Greater key (must stay above) | Lesser key(s) |
+|---|---|
+| `portfolio` / `marketdata.quote_timeout_ms` | max(`marketdata` / `quotes.batch_timeout_ms`, `marketdata` / `quotes.mark_timeout_ms`) |
+| `analysis` / `opportunity.live_enrich_timeout_ms` | `marketdata` / `price.batch_timeout_ms` |
+
+- When a change moves both sides, **raise the greater key first**, then raise the lesser key. Lowering
+  goes the other way: lower the lesser key first, then the greater one. The rejection message names
+  both keys, the stored sibling value and the remedy.
+- The gate covers **global writes only**, compared with the global siblings in the same environment. Per-user
+  writes skip it, because every reader watches global config.
+- Two concurrent writes, one to a greater key and one to its lesser key, can each pass against the other's
+  old value (accepted residual). Apply them one after the other, never in parallel.
+- The rule is not shown by `ListKeys` or config-ui; this table is its operator-facing record.
+
 ---
 
 ## Step 4 — Verify Propagation
@@ -226,6 +245,47 @@ environment** (`staging`, then `production`) through the same path its reader us
 - [ ] `node scripts/check-config-wiring.mjs --final` is clean on the deployed commit.
 
 Record the per-key, per-environment result in the feature's `context.md`.
+
+## Rollout — `*_mcp_deadline_budget` migration (feature 314)
+
+The migration seeds `agent` / `extract.call_budget_seconds` = `35` and clamps global
+`agent` / `opportunities.read_timeout_seconds` rows above `44` down to `44`. It sends its own
+`pg_notify('config_changed')`, so running agents pick both up without a restart.
+
+1. **Pre-deploy**, on the staging and the production database (access → `docs/runbooks/operator-db-access.md`),
+   run these read-only queries:
+   ```sql
+   SELECT environment, user_id IS NULL AS global, value_type, value_data, updated_by,
+          value_data ~ '^[+-]?([0-9]{1,30}(\.[0-9]{0,30})?|\.[0-9]{1,30})([eE][+-]?[0-9]{1,3})?$' AS matches_numeric
+   FROM config.config_values
+   WHERE namespace = 'agent' AND key = 'opportunities.read_timeout_seconds'
+   ORDER BY environment, global DESC;
+
+   SELECT environment, namespace, key, value_data
+   FROM config.config_values
+   WHERE user_id IS NULL
+     AND (namespace, key) IN (('portfolio', 'marketdata.quote_timeout_ms'),
+                              ('marketdata', 'quotes.batch_timeout_ms'),
+                              ('marketdata', 'quotes.mark_timeout_ms'),
+                              ('analysis', 'opportunity.live_enrich_timeout_ms'),
+                              ('marketdata', 'price.batch_timeout_ms'))
+   ORDER BY environment, namespace, key;
+   ```
+   - A global row above 44 will be clamped; confirm that is acceptable.
+   - A global row with `matches_numeric = false` is skipped by the clamp; fix it with `SetConfig` before
+     deploy.
+   - Per-user rows above 44 are reported only and never rewritten (the agent does not read them).
+   - Note every inverted pair: quote ≤ max(batch, mark), or enrich ≤ price.
+2. **Inverted pairs** are fixed with ordered `SetConfig` once the new config image is live — raise the
+   greater key first (§ Step 3, Cross-key deadline order). Never fix them with SQL.
+3. **Post-rollout**, once each environment runs the new config image, re-run the first query. Every global row
+   must match and be ≤ 44. The old config image still accepts 45–55 between the db-migrator run and the new
+   image going live, so a row at 45–55 was written in that window; lower it with `SetConfig`.
+4. Read back both keys per § Step 6.
+
+**Sign-off.** Record the query results and the operator's sign-off in the feature's `context.md`. If the
+queries cannot be run before deploy, the migration still ships (the clamp is defensive), and the sign-off is
+recorded as "unenumerated"; run the queries after the rollout instead.
 
 ## Config Inventory (DO console, read-only)
 
