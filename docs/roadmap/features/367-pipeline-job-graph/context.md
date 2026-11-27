@@ -168,3 +168,8 @@
 - One narrow substance item: the manual recovery SQL for a `blocked` parent needed an order and a
   transaction (O-78 → D-58). The rest was wording and one unbuildable test description.
 - Both sides judge the debate converged. No Floor breach, no C-16 regression, no petition.
+
+## Session 2026-11-27 — sdd-design gate after round 9
+
+- **OPERATOR (design gate): "Run round 10"** — the round-9 text edits have not been re-read by
+  either reviewer. Round 10 started. Not approved.

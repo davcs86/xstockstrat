@@ -2,7 +2,7 @@
 
 **State**: in-debate
 **Mode**: full (round cap lifted by operator override, context.md 2026-11-27)
-**Rounds run**: 9
+**Rounds run**: 9 (round 10 in progress)
 
 ## Rounds
 
