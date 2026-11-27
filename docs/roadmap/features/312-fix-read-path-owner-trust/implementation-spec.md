@@ -434,7 +434,7 @@ cd services/xstockstrat-trading && export GOWORK=off \
 
 ### Step 6 — test: trading owner-scope harness on the production interceptor chain
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/service/export_test.go` — create

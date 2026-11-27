@@ -587,3 +587,21 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Config-key wiring gate: does not apply, because no config key is declared.
 - Files modified: `services/xstockstrat-trading/internal/handler/trading.go`
 - Deviations: none
+
+### Step 6 — test: trading owner-scope harness on the production interceptor chain [done]
+- Added `export_test.go` (`package service`, two funcs: `NewOwnerScopeTestService(repo, accounts, orders...)` and `BroadcastOrderForTest`) and `trading_owner_scope_test.go` (`package service_test`). The test serves `handler.NewTradingHandler(svc).GRPCHandler()` over bufconn behind `ChainUnaryInterceptor(middleware.UnaryServerInterceptor)` + `ChainStreamInterceptor(middleware.StreamServerInterceptor)`, sends identity only through `metadata.NewOutgoingContext`, and bounds every call with `context.WithTimeout`. Repo rows come from `testdata.NewOrderRow` with the `user_id` column overwritten via `testdata.OrderRowColumns`. The two body-`user_id` request helpers carry `//nolint:staticcheck`. A local `fixedAccountRepo` stub serves one OFFLINE record owned by `user-b` and counts writes. Six tests: `TestOwnerScope_ListOrdersScopedToHeader`, `TestOwnerScope_ListOrdersInMemoryFallback`, `TestOwnerScope_StreamOrderUpdatesScopedToHeader`, `TestHeaderless_OrderReadsRefused`, `TestOwnerScope_GetOrderCrossUserIsNotFound` and `TestBrokerAccountRefusals_OnTheWire`.
+- TDD: AC-1/AC-4/AC-5/AC-6/AC-2 (wire) red → green.
+  - RED setup: the step Verification ran with the new files against the pre-Step-3 versions (`a5b98f04`) of `service/trading.go`, `handler/trading.go` and the three Step-3-edited tests. Those were restored temporarily and then reverted.
+  - RED result: exit=1 (`.sdd-logs/v-1.log`).
+    - ListOrders, all four scope/body rows: `got 0 orders, want 1`
+    - Stream, all four rows: `received ob-poll owned by "user-b", want only user-a`
+    - Fallback: `got [... "ob-1" user_id:"user-b"], want only user-a's order`
+    - Headerless ListOrders, GetOrder and StreamOrderUpdates: `code = OK (err <nil>), want PermissionDenied`
+    - Cross-user GetOrder: `code = OK (err <nil>), want NotFound`
+  - The pre-fix headerless `RegisterBrokerAccount` ran past the missing guard into `environmentIsPaper` and panicked on the harness's nil `cfg`. A supplementary run of the other broker-account subtests on the same tree (`.sdd-logs/diag-1.log`) showed `code = Internal ... want PermissionDenied` and `want FailedPrecondition`, and `code = OK` for headerless `ListBrokerAccounts`.
+  - First GREEN run (`.sdd-logs/v-2.log`): exit=1. It failed only on my own message assertion, because the wire message is the nested `rpc error: code = NotFound desc = order <id> not found`. The assertion now compares each NotFound message with the absent-id message; the code assertion, which was the RED cause, is unchanged.
+  - GREEN re-run (`.sdd-logs/v-3.log`): exit=0, all six `--- PASS`, `ok  github.com/xstockstrat/trading/internal/service 14.084s`, `total: (statements) 85.3%` (≥ 40%), golangci-lint v2.14.0 `0 issues.` (`~/go/bin` first on PATH for the run).
+- Open item: the handler wraps service statuses twice. `connect.NewError(code, err)` is followed by `toGRPCError` using `connectErr.Message()`, so the gRPC message reads `rpc error: code = … desc = …`. The code is correct and only the text is nested. This predates the step and is outside its **Files**.
+- Config-key wiring gate: does not apply, because no config key is declared.
+- Files modified: `services/xstockstrat-trading/internal/service/export_test.go`, `services/xstockstrat-trading/internal/service/trading_owner_scope_test.go`
+- Deviations: none
