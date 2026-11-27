@@ -1106,3 +1106,10 @@
 - TDD: N/A (harness; the default state is `local` with the mode row absent). Verification: typecheck and lint exit 0; host Playwright (`NEXT_DISABLE_STANDALONE=1` build, `CI=1 E2E_PREBUILT=1 … e2e/auth.spec.ts --project=chromium`) 39 passed.
 - Files modified: `services/xstockstrat-ui/e2e/{mock-backend,global-setup,global-teardown}.ts`
 - Deviations: none. Gaps filled: `getConfigFails` fails every GetConfig namespace (and GetSecret), i.e. config unreachable; the Resolve mock does not consult recorded links (success unless `resolveRefusal`), so AC-65's post-link SSO login and AC-1 both resolve the test user.
+
+### Step 52 — test: Serialized chromium-sso project and the APP_URL wiring [done]
+- `use.baseURL` and `webServer.env.APP_URL` both come from `BASE_URL` (D-67); new project `chromium-sso` (`testMatch: /e2e\/sso\/.*\.spec\.ts/`, `dependencies: ['chromium']`, `fullyParallel: false`, `workers: 1`, the chromium device + pre-installed executable); `chromium` gains `testIgnore: /e2e\/sso\//`.
+- **Impl-review ⚠ cleared:** the conditional `firefox` project also gains `testIgnore: /e2e\/sso\//` (`playwright.config.ts:128`), so the serial SSO file never runs in a parallel project when Firefox is included locally.
+- TDD: N/A (test configuration; RED→GREEN via Step 53). Verification: typecheck, lint exit 0; the grep hits `chromium-sso` `:140`, `workers: 1` `:144`, `testIgnore` `:115,:128`, `APP_URL` `:189`; `playwright test --list` exit 0. The per-shard `--list` sum is checked in Step 53 once the SSO file exists.
+- Files modified: `services/xstockstrat-ui/playwright.config.ts`
+- Deviations: none. Gap filled: `BASE_URL` is imported from `e2e/helpers/auth.ts` (where the same literal already lives as `BASE_URL`) instead of re-declaring it (DRY guard rail).

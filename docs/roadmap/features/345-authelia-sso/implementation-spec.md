@@ -1976,7 +1976,7 @@ pnpm exec playwright test e2e/auth.spec.ts --project=chromium   # default state 
 
 ### Step 52 — test: Serialized chromium-sso project and the APP_URL wiring
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/playwright.config.ts` — modify
