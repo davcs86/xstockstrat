@@ -496,7 +496,7 @@ ruff check . && ruff format --check .
 
 ### Step 7 — test: backend — scoped presence verification for the config, Node-leaf, marketdata and ingest deletions
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`, `xstockstrat-ledger`, `xstockstrat-identity`, `xstockstrat-notify`, `xstockstrat-marketdata`, `xstockstrat-ingest`, `xstockstrat-analysis` (item 5 evidence only)
 **Files**:
 - `docs/roadmap/features/323-fix-orphaned-code/context.md` — modify (record the outputs below)

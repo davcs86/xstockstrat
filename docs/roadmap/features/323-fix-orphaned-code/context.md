@@ -580,3 +580,20 @@ Two rulings on the open items the previous re-spec raised, relayed by the orches
 - Files modified: `services/xstockstrat-ingest/app/extractors/example_simple_email.py` (deleted), `services/xstockstrat-ingest/tests/test_extractor.py` (deleted), `services/xstockstrat-ingest/tests/test_noop_extractor.py` (new), `services/xstockstrat-ingest/app/extractors/base.py`, `services/xstockstrat-ingest/docs/context-constitution-findings.md`, `services/xstockstrat-ingest/docs/context-constitution.md`
 - Deviations: none
 
+
+## Session 2026-11-27 — sdd-execute (by hand, outside sdd-batch-execute), steps 7-9
+
+- Operator ruling 2026-11-27 (same as Step 4: "A: I run Step 4 outside the batch"): Step 4's regenerated root `pnpm-lock.yaml` trips the batch runner's "lockfile differs from main-dev" gate on every later step, so Steps 7, 8 and 9 run by hand, one commit each. Fresh worktree on `origin/feature/fix-orphaned-code` @ `681f0f90`.
+- Tooling setup (step 7): Node v24.22.3 (`/opt/node24/bin`) · pnpm 9.15.9 · real `pnpm install --frozen-lockfile` in the worktree (no symlinked `node_modules`) · go 1.27 · `uv sync --extra dev` in `services/xstockstrat-ingest`. No database, no image build.
+
+### Step 7 — test: backend — scoped presence verification for the config, Node-leaf, marketdata and ingest deletions [done]
+- Verification-only; no source file added or edited. Ran the Verification block on the tree holding Steps 1-6 and read every line.
+- AC-2 deleted paths: `git ls-files` for `configWatcher.ts`, `configWatcher.test.ts`, `example_simple_email.py`, `tests/test_extractor.py` printed nothing; `git ls-files .../extractors/noop.py` printed the path (kept, O-2). Manifest greps (`"migrate"`/`node-pg-migrate` across the four leaves; `jsonwebtoken`/`bcrypt` in notify) printed nothing.
+- `pnpm install --frozen-lockfile` rc 0. `pnpm why -r node-pg-migrate` printed nothing. `pnpm why -r bcrypt jsonwebtoken` listed only `xstockstrat-identity@0.1.0` (`bcrypt 5.1.1`, `jsonwebtoken 9.0.3`, dependencies).
+- `git grep -n "AlpacaAsset" -- '*.go' '*.ts' '*.py'` printed nothing. Item 5: `git grep -n "sandbox_timeout\|sandbox_memory\|sandbox_max\|indicators\.sandbox" -- services/xstockstrat-analysis/app services/xstockstrat-ingest/app` printed nothing (already resolved, no code change).
+- Node leaves (`rm -rf dist`, `pnpm build`, `test:coverage`, `c8 check-coverage --lines 40`, `lint`), each rc 0 on Node 24: config 396/396, lines 94.05%; ledger 168/168, 85.78%; identity 169/169, 85.5%; notify 416/416, 90.7%; lint 0 errors (warnings only: 300, 292, 271, 382).
+- marketdata: `go build`, `go vet` clean; `go test ./... -race` all packages `ok`; `total: (statements) 87.5%` (>= 40%). ingest: `609 passed` (includes `tests/test_noop_extractor.py`), `Total coverage: 87.49%` (>= 40), `ruff check` `All checks passed!`, `ruff format --check` `57 files already formatted`.
+- `node scripts/check-config-wiring.mjs --final` rc 0; it printed two `REPORTED:` lines that do not involve this feature's keys (`fundsignal_loop.py:marketdata/fundamentals.provider:readers-disagree`, `trading.go:platform/trading_state:readers-disagree`).
+- TDD: RED was the per-item pre-edit capture of Steps 3-6; this step's consolidated GREEN is the run above.
+- Files modified: none outside `docs/roadmap/features/323-fix-orphaned-code/` (`context.md`, `implementation-spec.md` Status)
+- Deviations: none
