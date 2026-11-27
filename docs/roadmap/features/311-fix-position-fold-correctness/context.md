@@ -3627,3 +3627,38 @@ The operator ran `doctl apps propose --app "$APP_ID" --spec spec-no-portfolio.ya
 ```
 
 Reading: DO returned a cost and name summary and no validation error for the spec. "suggested app name xstockstrat-staging-2" is the name-availability line (the name is already taken by the existing app), not an error. So DO's propose endpoint accepts the spec with the portfolio service removed. Limit of the evidence: `propose` validates the spec and does not deploy it, so it does not prove that the four dangling references resolve at deploy time. If the real deploy of that spec fails, DO leaves the running app unchanged and the stop is done another way (e.g. the references are replaced for the stop window); nothing is half-applied. Precondition #1: **yes**, with that limit. Precondition #3 stays open.
+
+## Session 2026-11-27 — O-61 #3, homelab `app-deploy` rollback exit code, supplied by the operator (verbatim)
+
+On the homelab staging VM the operator read the `gate` forced command, `/usr/local/bin/app-deploy`, and pasted the relevant output. The script starts with `set -euo pipefail`, and `die()` exits 2. The `deploy` action's health-failure branch (lines 78-100):
+
+```bash
+    switch_to "$rel"
+    if compose "$rel" up -d --pull never --remove-orphans --wait --wait-timeout "$wait_seconds"; then
+      echo "deployed $release"
+      ...
+    else
+      echo "release $release did not become healthy" >&2
+      if [[ -n "$previous" && -d "$previous" ]]; then
+        switch_to "$previous"
+        compose "$previous" up -d --pull never --remove-orphans --wait --wait-timeout "$wait_seconds" \
+          && echo "rolled back to $(basename "$previous")" >&2
+      fi
+      exit 1
+    fi
+```
+
+Reading: when the new release does not become healthy within `--wait-timeout`, the script rolls back to the previous release and then runs `exit 1` unconditionally: the `exit 1` sits after the `if [[ -n "$previous" ... ]]` block, so it runs whether or not the rollback succeeded, and also when there is no previous release. A failing rollback `compose ... && echo` does not abort (it is a `&&` list under `set -e`) and still reaches `exit 1`. The workflow step runs `gate deploy` under `bash -e` with `gate deploy` as the last command of the pipeline, so its exit status fails the CI step. An unattended rollback therefore cannot leave the job green. Precondition #3: **yes**. Not covered by this evidence: a release that never starts failing health within the timeout, i.e. a portfolio that crash-loops slower than `--wait-timeout`; §2's boot-log check (step 6) and the §2 per-database record are the guard for that.
+
+## O-61 status (all six answered)
+
+| # | Answer |
+|---|---|
+| 1 | yes (doctl propose accepted the spec; see the dry-run entry for its limit) |
+| 2 | yes |
+| 3 | yes |
+| 4 | yes |
+| 5 | accepted |
+| 6 | accepted |
+
+The cutover preconditions in `docs/runbooks/position-fold-cutover.md` §1 are met for staging. The cutover itself (§2) has not been run.
