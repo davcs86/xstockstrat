@@ -25,7 +25,8 @@ adds only the file, symbol and test seams.
 5. **Engine (Steps 9-12).** Pure primitives first (outcomes, classifier, backoff, registry), then
    the attempt, stop path, three loops and worker.
 6. **Retention prune (Steps 13-14).** The only production job kind.
-7. **Telemetry (Steps 15-16).**
+7. **Telemetry (Steps 15-16, one atomic unit).** Adding the loop name turns an existing
+   all-members tick test red until its driver emits a pipeline tick.
 8. **Startup wiring (Steps 17-18, one atomic unit).** Second pool, worker and three boot tasks.
 9. **Docs (Step 19).**
 
@@ -43,9 +44,9 @@ RPC response changes. No UI or agent step exists; that is a decision, not an omi
 | `@AC-2` | 8 (two claimers), 12 (handler runs once) |
 | `@AC-3` | 8 (reap, attempt count 2), 12 (takeover on a fake clock) |
 | `@AC-4` | 8 (fenced report rejected, finish time kept), 16 (exactly 1 succeeded attempt counted) |
-| `@AC-5` | 8 (ready again, not claimable before `next_attempt_at`), 10 (delay at least 5 s) |
-| `@AC-6` | 8 (state `failed`, error class `permanent`), 10 (classifier) |
-| `@AC-7` | 8 (attempt 5 ends `dead`), 10 (unknown error is transient) |
+| `@AC-5` | 8 (ready again, not claimable before `next_attempt_at`), 10 (delay at least 5 s), 12 (retry delay through the worker) |
+| `@AC-6` | 8 (state `failed`, error class `permanent`), 10 (classifier), 12 (through the worker) |
+| `@AC-7` | 8 (attempt 5 ends `dead`), 10 (unknown error is transient), 12 (through the worker) |
 | `@AC-8` | 8 (park and settle), 12 (parent re-claimed) |
 | `@AC-9` | 8 (verdict propagates), 12 (handler does not run again) |
 | `@AC-10` | 8 |
@@ -91,6 +92,15 @@ Names and seams the design leaves open. Each is this spec's choice and is open t
   `scripts/migration-rerun.py:1114` hard-codes the analysis tip `30` (Step 4);
   `tests/test_config_zero_clamps.py:96-97` requires `AC6_ROWS` to equal `FR3_KEYS` (Step 3);
   `tests/test_supervision.py:143-148` pins the number of `spawn(` calls in `app/main.py` (Step 18).
+  A fourth, found at `/sdd-review impl-spec`: `tests/test_analysis_tick_telemetry.py:164-166`
+  requires the emitted tick records to cover every `telemetry.Loop` member (Steps 15 and 16).
+- **S-10. Seams the design leaves to the build.** Named in their steps and listed here so none is
+  a silent choice: `lane()` and the `lane_held` parameters on repository methods (how the control
+  lane is passed); `ClaimedJob.db` (the handler's `job.db()` entry point); `start_listening` (the
+  `cfg.on_change` registration); `set_pipeline_ready_stats(at=)` (the gauge snapshot setter);
+  and `heartbeat()` taking no `conn=`, because it never runs inside a caller's transaction.
+- **S-11. Step 1 lists eight files.** The design requires the seed, bounds, stored set and docs
+  rows in one commit (D-25, C-10), so the step cannot be split below the usual five-file guide.
 
 ## Step Dependencies
 
@@ -181,7 +191,7 @@ Names and seams the design leaves open. Each is this spec's choice and is open t
 
 **Lands with**: `Step 2, Step 3`
 
-**TDD**: `N/A (config seed and write-edge bounds; the static seed test and the bounds table rows are written alongside and run in the unit's Verification)`
+**TDD**: `red-green required (the bounds rows: add the `setConfigScalarBounds.test.ts` rows first and see them fail before editing `SCALAR_BOUNDS_REGISTRY`; the seed SQL itself is N/A and its static test is written alongside)`
 
 **Covers**: —
 
@@ -354,8 +364,14 @@ config, stored-set and wiring commands.
      `worker_concurrency` 64 reads 16);
    - the clamp WARN fires once for a repeated read of the same stored value and again after the
      stored value changes (`caplog`), and names `analysis.pipeline.<key>`;
-   - a value changed in the snapshot between two calls is seen by the second call (no caching).
-   The watcher values are scenario one-offs with one consumer, so they stay inline (C-13).
+   - a value changed in the snapshot between two calls is seen by the second call (no caching);
+   - seed-to-reader: parse the twelve tuples of
+     `services/xstockstrat-config/migrations/<NNN>_analysis_pipeline_keys.up.sql` (the number from
+     Step 1) into a snapshot, one per environment, and assert the real `JobGraphSettings` returns
+     each seeded value, so a seed that drifts from the code default fails here and not only in
+     CI's wiring gate.
+   The watcher values are scenario one-offs with one consumer, so they stay inline (C-13); the
+   seed-to-reader case reads its values from the migration file.
 2. `test_config_read_classification.py`: add the five int keys to `FR3_KEYS`
    (`"pipeline.worker_concurrency"`, `"pipeline.poll_interval_ms"`, `"pipeline.lease_seconds"`,
    `"pipeline.max_attempts"`, `"pipeline.retention_days"`). Add nothing to `HONOUR_KEYS` or
@@ -779,7 +795,8 @@ grep -c "SKIP LOCKED" app/repositories/pipeline_jobs.py   # claim, reap, settle,
      `failed`/`dead` recovery `UPDATE` run twice changes the row once;
    - a 10 000-child park plus its settle finishes within 5 s;
    - 1 200 settleable parents are settled by three `settle_batch` calls (500, 500, 200, the first
-     two reporting `full`), each with the lowest-id verdict;
+     two reporting `full`), each with the lowest-id verdict (the single-tick form of this design
+     test is in Step 12);
    - on a seeded and `ANALYZE`d table, `EXPLAIN` of each prune candidate select names
      `idx_pipeline_jobs_state_finished_at` and of the claim select
      `idx_pipeline_jobs_state_lane_next_attempt_at`; with `retention_days` 7 a `dead` row aged
@@ -999,8 +1016,10 @@ grep -n "def .*fixture\|from .conftest\|conftest" tests/test_job_graph_core.py ;
 9. Fixed constants (design.md § Build order, last paragraph) are named module constants: heartbeat
    period 7.5 s, maintenance period 5 s, self-fence margin 3 s, tolerated lag 2 s, attempt
    deadline 900 s, stop grace 10 s, report give-up 300 s, report retry 1 to 30 s, settle at most
-   20 batches or 8 s, stats every third tick, idle claim ceiling 5 s, runner batch wait 6 s,
-   handler block cap 30 s. Timer lateness beyond 2 s is logged.
+   20 batches or 8 s, stats every third tick, stats stale after 45 s, idle claim ceiling 5 s,
+   runner batch wait 6 s, claim acknowledgement window 7 s, handler block cap 30 s. The settle and
+   prune batch size of 500 is one named constant in `app/repositories/pipeline_jobs.py` (Step 7),
+   used by the SQL and by the "full batch" test. Timer lateness beyond 2 s is logged.
 10. `app/jobs/__init__.py`: `def build_registry(settings) -> HandlerRegistry` returning an empty,
     validated registry. Step 13 registers the prune kind in it.
 11. This step adds no telemetry call (Step 15) and no `main.py` wiring (Step 17). No
@@ -1042,7 +1061,7 @@ python3 ../../scripts/check-watcher-copies.py ../..
 
 **TDD**: `red-green required`
 
-**Covers**: `AC-2, AC-3, AC-8, AC-9, AC-14, AC-16, AC-17`
+**Covers**: `AC-2, AC-3, AC-5, AC-6, AC-7, AC-8, AC-9, AC-14, AC-16, AC-17`
 
 **Instructions**:
 1. `tests/conftest.py`: a virtual-time event-loop helper (time advances only when the test advances
@@ -1093,7 +1112,11 @@ python3 ../../scripts/check-watcher-copies.py ../..
    is neither a call on the block's `conn` nor a call passing `conn=`. One synthetic offending
    source per rule proves each rule fires (so the test is not vacuous while `app/jobs/` is empty),
    and one compliant source passes.
-5. RED: `@AC-17`'s "second job still ready with attempt count 0" and the contract checker's
+5. Design gate tests that need the engine (`real_pg`, `tests/test_job_graph_worker_real_pg.py`):
+   - 1 200 settleable parents are all woken by ONE maintenance tick of a real worker (three settle
+     batches inside the tick), each with the lowest-id verdict;
+   - a runner that waited for an in-flight heartbeat batch records no false loss (S-7).
+6. RED: `@AC-17`'s "second job still ready with attempt count 0" and the contract checker's
    bare-`except:` case.
 
 **Verification**:
@@ -1224,6 +1247,8 @@ grep -n "pipeline_pg\|insert_pipeline_job\|from tests.conftest\|conftest" tests/
 - `host.provider` is stamped on every datapoint by the exporter wrapper (`app/telemetry.py:49-66`), so new instruments need no label for it.
 - `tests/test_telemetry_allowlist.py:158` asserts `len(telemetry.Loop) <= 8`; `:157-164` requires every `log_tick_ok` loop argument to be a `Loop.<MEMBER>` attribute.
 
+**Lands with**: `Step 16`
+
 **TDD**: `red-green required`
 
 **Covers**: —
@@ -1285,15 +1310,19 @@ cd ../.. && python3 scripts/check-otel-produced-signals.py
 - `services/xstockstrat-analysis/tests/test_pipeline_telemetry.py` — create
 - `services/xstockstrat-analysis/tests/test_telemetry_allowlist.py` — modify
 - `services/xstockstrat-analysis/tests/test_telemetry_instruments.py` — modify
+- `services/xstockstrat-analysis/tests/test_analysis_tick_telemetry.py` — modify
 
 **Reviewers**: `xstockstrat-analysis` service owner — Backtest reproducibility, strategy scoring determinism, no look-ahead bias
 
 **Codebase Evidence**:
+- `tests/test_analysis_tick_telemetry.py:164-166` asserts the set of `loop` values in the emitted tick records equals every `telemetry.Loop` member, so adding `Loop.PIPELINE_WORKER` (Step 15) turns it red until its driver emits a pipeline tick. Steps 15 and 16 therefore land in one commit.
 - `ALLOWED_KEYS` is derived from the module's `KEY_*` names (`tests/test_telemetry_allowlist.py:16`); `MIN_INSTRUMENTS` at `:34-42`; `_drive()` at `:46-56`; `_keys_by_instrument` at `:59-68`.
 - In-memory reader fixture: `metric_reader` in `tests/test_telemetry.py:154-163`, re-exported the way `tests/test_telemetry_allowlist.py:10-13` does.
 - Gauge tests to extend: `tests/test_telemetry_instruments.py:86-106` (`test_gauge_rebinds_on_provider_change`, `test_gauge_reports_nothing_when_observe_returns_none`).
 - Tick-record tests: `tests/test_analysis_tick_telemetry.py:64-149` read `loop tick ok` records by `Loop` member.
 - `pipeline_pg`, the fake repository and the virtual-time helper: `tests/conftest.py` (Steps 8 and 12).
+
+**Lands with**: `Step 15`
 
 **TDD**: `red-green required`
 
@@ -1304,10 +1333,14 @@ cd ../.. && python3 scripts/check-otel-produced-signals.py
    `analysis.pipeline.lease_events` and `analysis.pipeline.db.duration` to `MIN_INSTRUMENTS`, and
    one call of each new record helper plus a `log_tick_ok(…, telemetry.Loop.PIPELINE_WORKER, 1.0)`
    to `_drive()`.
-2. `tests/test_telemetry_instruments.py`: a gauge whose `observe()` returns
+2. `tests/test_analysis_tick_telemetry.py`: extend the driver that feeds the all-members assertion
+   at `:164-166` so it also drives one pipeline claim tick (a worker with a fake repository), and
+   the emitted records include `loop=pipeline_worker`. `tests/test_telemetry_allowlist.py:158`
+   (`len(telemetry.Loop) <= 8`) needs no change at 6 of 8.
+3. `tests/test_telemetry_instruments.py`: a gauge whose `observe()` returns
    `[(4, {"lane": "watchlist"}), (1, {"lane": "held"})]` exports two points with those attributes;
    the scalar and `None` cases keep passing unchanged.
-3. `tests/test_pipeline_telemetry.py`:
+4. `tests/test_pipeline_telemetry.py`:
    - `@AC-13` (`real_pg`): four ready `watchlist` rows, the oldest 120 s old; run the stats step;
      collect through `metric_reader` → `analysis.pipeline.ready_depth{lane=watchlist}` is 4 and
      `analysis.pipeline.oldest_ready_age{lane=watchlist}` is at least 120. A snapshot older than
@@ -1319,7 +1352,9 @@ cd ../.. && python3 scripts/check-otel-produced-signals.py
    - one counted outcome per transition: `parked`, `blocked`, `retried`, `failed`, `dead`;
    - the claim loop's tick record: no state after a claim with jobs, `idle` after an empty claim,
      `disabled` when disabled, at most one record per 60 s of virtual time;
-   - `analysis.pipeline.db.duration` carries only `step`, `phase` and (on `total`) `outcome`.
+   - `analysis.pipeline.db.duration` carries only `step`, `phase` and (on `total`) `outcome`;
+   - the durable `@AC-3 @feature-337` case: collected through the exporter wrapper, a point of
+     each new instrument carries `host.provider`.
 
 **Verification**:
 ```bash

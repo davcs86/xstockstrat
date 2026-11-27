@@ -283,3 +283,29 @@ Carried from design.md § Open Risks; each needs an owner at `/sdd-spec` or late
   recorded in the Deviation Log.
 - Step 1's stored-set regeneration starts a database for artifact generation; name the route at
   the Phase-2 confirmation.
+
+## Session 2026-11-27 — sdd-review impl-spec (advisory, round 1)
+
+- Tree: ccr-fe135a59-nyslbm@bbc6e89 (origin/main-dev@19d095b plus the spec commit).
+- Result: 2 failures (one root cause), 7 warnings (advisory — did not block). No Floor breach.
+  Every `@AC-1`..`@AC-18` has a test step; every design test has a step; no rejected alternative
+  is reintroduced.
+- Unresolved ✗ / ⚠ carried into execution:
+  - Steps 15/16: adding `Loop.PIPELINE_WORKER` turns `tests/test_analysis_tick_telemetry.py:164-166`
+    red (F-05 exposure) — [x] fixed in the spec: the file is in Step 16's Files, and Steps 15 and
+    16 land together.
+  - Step 1: no seed-to-reader value test (C-05) — [x] fixed: Step 3 parses the seed migration.
+  - Step 1: TDD marked N/A despite a bounds-registry code change (P-06) — [x] fixed.
+  - Step 1: eight files — [x] recorded as S-11 (one commit required by D-25 / C-10).
+  - Step 8/12: 1 200 settleable parents not tested in one tick — [x] fixed: Step 12 adds it.
+  - Step 11: fixed-constants list incomplete — [x] fixed.
+  - Step 12: Covers omitted `@AC-5/6/7` — [x] fixed.
+  - Step 16: no `host.provider` assertion for the durable `@AC-3 @feature-337` — [x] fixed.
+  - Undeclared seams — [x] recorded as S-10.
+  - Step 7 (S-2): `prune_batch` is a module-level function where design.md says "method" —
+    [ ] unaddressed: needs an operator ruling on the design wording.
+  - S-7: one design gate test lands in Step 12, not before the engine — [ ] unaddressed: needs an
+    operator ruling on the design's test list.
+- Overlap findings: config migration `060` is claimed by both 367 and 345 (`authelia-sso`); no
+  `merge-order.md` row exists — [ ] unaddressed: needs operator confirmation to write the row.
+  All other overlaps are clean or rebase-only.
