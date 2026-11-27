@@ -85,22 +85,21 @@ func ibkrAuthService(t *testing.T, h *testdata.IBKRAuthHandler, cfgW *config.Wat
 	svc := &TradingService{cfg: &config.Config{}, cfgW: cfgW, accountRepo: repo, credStatus: map[string]int32{}}
 	ts, _ := strconv.ParseInt(v.Inputs.Timestamp, 10, 64)
 	clock := &ibkrTestClock{t: time.Unix(ts, 0)}
-	cfg := broker.IBKRConfig{
-		BaseURL:           v.Inputs.BaseURL,
-		IBKRAccountID:     "U123",
+	cfg := svc.ibkrClientConfig(&repository.BrokerAccountRecord{}, ibkrCreds{
 		ConsumerKey:       v.Inputs.ConsumerKey,
 		AccessToken:       v.Inputs.AccessToken,
 		AccessTokenSecret: v.Inputs.AccessTokenSecret,
+		IBKRAccountID:     "U123",
 		SignatureKey:      testdata.IBKRSignatureKeyPEM,
 		EncryptionKey:     testdata.IBKREncryptionKeyPEM,
 		DHPrime:           testdata.IBKRDHParamPEM,
-		Timing:            svc.ibkrTiming,
-		Now:               clock.Now,
-		Nonce:             func() string { return v.LSTRequest.Nonce },
-		DHRandom: func() *big.Int {
-			a, _ := new(big.Int).SetString(v.Inputs.DHRandomHex, 16)
-			return a
-		},
+	})
+	cfg.BaseURL = v.Inputs.BaseURL
+	cfg.Now = clock.Now
+	cfg.Nonce = func() string { return v.LSTRequest.Nonce }
+	cfg.DHRandom = func() *big.Int {
+		a, _ := new(big.Int).SetString(v.Inputs.DHRandomHex, 16)
+		return a
 	}
 	if mod != nil {
 		mod(&cfg)
@@ -207,6 +206,32 @@ func TestValidateAndRecordCredential_IBKRHandshakeFailures(t *testing.T) {
 				t.Fatalf("GET /portfolio/accounts sent %d times after a failed handshake", n)
 			}
 		})
+	}
+}
+
+// @AC-1 — the production IBKR config reads the live broker.timeout_ms.
+func TestIBKRClientConfig_WiresLiveBrokerTimeout_F321_AC1(t *testing.T) {
+	block := make(chan struct{})
+	h := &testdata.IBKRAuthHandler{Next: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/portfolio/accounts") {
+			select {
+			case <-r.Context().Done():
+			case <-block:
+			}
+			return
+		}
+		http.NotFound(w, r)
+	})}
+	_, _, c, _ := ibkrAuthService(t, h, snapshotInts(map[string]int64{"broker.timeout_ms": 200}), nil)
+	t.Cleanup(func() { close(block) }) // runs before the server's Close
+	start := time.Now()
+	err := c.ValidateCredentials(context.Background())
+	elapsed := time.Since(start)
+	if !isUncertainBrokerOutcome(err) {
+		t.Fatalf("err = %v, want a timeout", err)
+	}
+	if elapsed >= 3*time.Second {
+		t.Fatalf("ValidateCredentials returned after %v, want under 3s (live broker.timeout_ms 200)", elapsed)
 	}
 }
 

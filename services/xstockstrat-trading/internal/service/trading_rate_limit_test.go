@@ -36,6 +36,8 @@ func TestRateLimitBudget(t *testing.T) {
 		{true, 5 * time.Second, 15 * time.Second, 5 * time.Second},
 		{true, 10 * time.Second, 15 * time.Second, 10 * time.Second},
 		{true, time.Second, 30 * time.Second, 28 * time.Second},
+		{true, 10 * time.Second, 30 * time.Second, 10 * time.Second},
+		{true, 10 * time.Second, 40 * time.Second, 20 * time.Second},
 		{false, 5 * time.Second, 30 * time.Second, 0},
 	} {
 		if got := rateLimitBudget(tc.enabled, tc.t, tc.stale); got != tc.want {
@@ -66,6 +68,8 @@ func TestAlpacaRateLimitBudget_FollowsConfig(t *testing.T) {
 		{5000, 1.5, 5 * time.Second},
 		{10000, 1.5, 10 * time.Second},
 		{1000, 3.0, 28 * time.Second},
+		{10000, 3.0, 10 * time.Second},
+		{10000, 4.0, 20 * time.Second},
 	} {
 		svc := &TradingService{cfgW: rateLimitWatcher(tc.timeoutMs, tc.multiplier, nil)}
 		if got := svc.alpacaRateLimitBudget(); got != tc.want {
@@ -78,6 +82,15 @@ func TestAlpacaRateLimitBudget_FollowsConfig(t *testing.T) {
 	// true is the value the alpaca_adaptive_rate_limit_keys config migration seeds.
 	if got := (&TradingService{cfgW: rateLimitWatcher(5000, 3.0, &on)}).alpacaRateLimitBudget(); got != 20*time.Second {
 		t.Errorf("seeded true: budget = %v, want 20s", got)
+	}
+}
+
+func TestBrokerTimeout_IntRow_F321(t *testing.T) {
+	if got := (&TradingService{cfgW: snapshotInts(map[string]int64{"broker.timeout_ms": 10000})}).brokerTimeout(); got != 10*time.Second {
+		t.Errorf("int row 10000: brokerTimeout = %v, want 10s", got)
+	}
+	if got := (&TradingService{cfgW: &config.Watcher{}}).brokerTimeout(); got != 5*time.Second {
+		t.Errorf("zero watcher: brokerTimeout = %v, want 5s", got)
 	}
 }
 
@@ -173,7 +186,7 @@ func newRateLimitHarness(t *testing.T, timeoutMs float64, orders map[string]*tra
 	}
 	h.client = broker.NewClient(broker.ClientConfig{
 		APIKey: "k", APISecret: "s", PaperURL: srv.URL, LiveURL: "http://should-not-be-called", Paper: true,
-		Timeout:         func() time.Duration { return brokerCallTimeout(h.svc.cfgW) },
+		Timeout:         h.svc.brokerTimeout,
 		RateLimitBudget: h.svc.alpacaRateLimitBudget,
 	})
 	h.svc.brokers = map[string]brokerPoolEntry{

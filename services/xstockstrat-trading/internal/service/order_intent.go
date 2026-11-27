@@ -105,11 +105,11 @@ func rateLimitBudget(enabled bool, t, stale time.Duration) time.Duration {
 }
 
 // staleThreshold derives the PENDING-intent staleness threshold live: floor = max(live
-// trading.broker.timeout_ms, IBKRRequestTimeout), multiplier clamped >=1.5 (never below the floor).
+// trading.broker.timeout_ms, IBKRDefaultHandshakeTimeout), multiplier clamped >=1.5 (never below the floor).
 func staleThreshold(cfgW *config.Watcher) time.Duration {
 	brokerMs := brokerCallTimeout(cfgW).Milliseconds()
 	floorMs := brokerMs
-	if ibkrMs := int64(broker.IBKRRequestTimeout / time.Millisecond); ibkrMs > floorMs {
+	if ibkrMs := int64(broker.IBKRDefaultHandshakeTimeout / time.Millisecond); ibkrMs > floorMs {
 		floorMs = ibkrMs
 	}
 	multiplier := cfgW.GetFloat("order_intent.stale_multiplier", 3.0)
