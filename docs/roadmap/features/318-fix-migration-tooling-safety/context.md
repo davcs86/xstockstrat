@@ -726,3 +726,10 @@ Each open risk from design.md, with its target. Step numbers do not exist until 
 - Config-key wiring gate: N/A (no config key, no config migration).
 - Files modified: `scripts/tests/test_check_migration_order.py`
 - Deviations: none beyond the Step 9/10 indentation entry already logged
+
+## Session 2026-11-27 — operator ruling on the Step 11 markdownlint blocker, recorded by the orchestrator (verbatim)
+
+Question (Step 11 blocker): "Step 11's Verification ends with markdownlint-cli2 on the four docs and exits 1 because of 17 findings that already exist on lines this step did not touch (docs/context-constitution.md 4, docs/runbooks/config-rollout.md 13). A (recommended): fix the 17 existing markdownlint findings in docs/runbooks/config-rollout.md and docs/context-constitution.md (both already in Step 11's Files)... B: accept as a deviation... C: narrow the lint target."
+Operator answer (2026-11-27): "B3 fix the lint".
+
+Effect: option A — expand Step 11 scope to fix the 17 pre-existing findings in the two files, re-run Verification for exit=0, log the expansion in the Deviation Log. 318 is no longer suspended: it resumes at Step 11.
