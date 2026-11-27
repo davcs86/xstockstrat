@@ -99,7 +99,7 @@ def _execute_with_outage(req, **_kw):
 
 
 def _with_formula(svc):
-    svc._indicators.GetFormula = AsyncMock(return_value=SimpleNamespace(fundamental_inputs=[]))
+    svc._indicators.GetFormula = AsyncMock(return_value=indicators_pb2.FormulaDefinition())
     svc._indicators.ExecuteFormula = AsyncMock(side_effect=_execute_with_outage)
     return svc
 
@@ -259,7 +259,7 @@ def _raise_in_eval(_svc, exc, *, strategy=None, yields=0):
 
 
 def _failing_formula(svc, exit_reason):
-    svc._indicators.GetFormula = AsyncMock(return_value=SimpleNamespace(fundamental_inputs=[]))
+    svc._indicators.GetFormula = AsyncMock(return_value=indicators_pb2.FormulaDefinition())
     svc._indicators.ExecuteFormula = AsyncMock(
         return_value=SimpleNamespace(success=False, error="boom", exit_reason=exit_reason)
     )
@@ -284,7 +284,7 @@ async def test_opportunities_compute_marks_only_the_failing_row(inject, exc, cap
     svc = _opp_svc()
 
     with inject(svc, exc), _classifier_spy() as spy, caplog.at_level(logging.WARNING):
-        rows = await svc._compute_opportunities("u1", _META)
+        rows, _ = await svc._compute_opportunities("u1", _META)
 
     spy.assert_called_once_with(exc)
     for symbol in _HEALTHY:
@@ -312,7 +312,7 @@ async def test_opportunities_terminal_exit_reason_is_evaluation_failed(exit_reas
     svc = _failing_formula(_mysz_svc(), exit_reason)
 
     with _classifier_spy() as spy:
-        row = _find(await svc._compute_opportunities("u1", _META), "s-1")
+        row = _find((await svc._compute_opportunities("u1", _META))[0], "s-1")
 
     (received,) = [call.args[0] for call in spy.call_args_list]
     assert isinstance(received, FormulaExecutionError)
@@ -327,7 +327,7 @@ async def test_opportunities_held_row_keeps_its_action_and_carries_the_marker():
     )
 
     with _classifier_spy() as spy:
-        row = _find(await svc._compute_opportunities("u1", _META), "s-1")
+        row = _find((await svc._compute_opportunities("u1", _META))[0], "s-1")
 
     assert isinstance(spy.call_args.args[0], FormulaExecutionError)
     _assert_marked(row)
@@ -340,7 +340,7 @@ async def test_opportunities_outage_is_row_local(yields):
     exc = aio_rpc_error(grpc.StatusCode.UNAVAILABLE, "down")
 
     with _raise_in_eval(svc, exc, strategy="sx", yields=yields), _classifier_spy() as spy:
-        rows = await svc._compute_opportunities("u1", _META)
+        rows, _ = await svc._compute_opportunities("u1", _META)
 
     spy.assert_called_once_with(exc)
     assert "unavailable" in _find(rows, "sx", "AAPL")["provenance"]
@@ -355,7 +355,7 @@ async def test_opportunities_bars_outage_outranks_a_terminal_eval_fault():
     exc = FormulaExecutionError("f-1", "boom")
 
     with _raise_in_eval(svc, exc), _classifier_spy() as spy:
-        failing = _find(await svc._compute_opportunities("u1", _META), "sx", _FAILING)
+        failing = _find((await svc._compute_opportunities("u1", _META))[0], "sx", _FAILING)
 
     spy.assert_called_once_with(exc)
     assert "unavailable" in failing["provenance"]
@@ -365,11 +365,11 @@ async def test_opportunities_bars_outage_outranks_a_terminal_eval_fault():
 async def test_opportunities_marker_clears_on_a_healthy_recompute():
     svc = _opp_svc()
     with _raise_in_eval(svc, ZeroDivisionError("boom")), _classifier_spy() as spy:
-        first = _find(await svc._compute_opportunities("u1", _META), "sx", _FAILING)
+        first = _find((await svc._compute_opportunities("u1", _META))[0], "sx", _FAILING)
     assert isinstance(spy.call_args.args[0], ZeroDivisionError)
     _assert_marked(first)
 
-    second = _find(await svc._compute_opportunities("u1", _META), "sx", _FAILING)
+    second = _find((await svc._compute_opportunities("u1", _META))[0], "sx", _FAILING)
 
     assert EVALUATION_FAILED_PROVENANCE not in second["provenance"]
     assert second["readiness_json"]["total_conditions"] > 0
@@ -401,7 +401,7 @@ async def test_opportunities_row_assembly_failure_drops_only_that_candidate(capl
         patch("app.handlers.servicer._composite_score", _composite),
         caplog.at_level(logging.WARNING),
     ):
-        rows = await svc._compute_opportunities("u1", _META)
+        rows, _ = await svc._compute_opportunities("u1", _META)
 
     (dropped,) = set(_SYMBOLS) - {r["symbol"] for r in rows}
     assert len(rows) == len(_SYMBOLS) - 1

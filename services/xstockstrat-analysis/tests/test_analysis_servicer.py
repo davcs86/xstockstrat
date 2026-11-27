@@ -5678,7 +5678,7 @@ class TestOpportunityDataUnavailable:
             patch.object(StrategyEvaluator, "evaluate_conditions_traced", _boom),
             caplog.at_level(logging.WARNING),
         ):
-            rows = await svc._compute_opportunities("u1", self._META)
+            rows, _ = await svc._compute_opportunities("u1", self._META)
         provenance = {r["symbol"]: r for r in rows}["AAPL"]["provenance"]
         assert EVALUATION_FAILED_PROVENANCE in provenance
         assert "unavailable" not in provenance
