@@ -1813,7 +1813,7 @@ cd services/xstockstrat-ui && pnpm run typecheck && pnpm run lint && pnpm run bu
 
 ### Step 47 — service: Authorized-apps split and the issuer pointer card
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/accounts/authorized-apps/page.tsx` — modify

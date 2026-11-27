@@ -1076,3 +1076,9 @@
 - Verification: typecheck, lint, build exit 0; host Playwright `CI=1 E2E_PREBUILT=1 … e2e/accounts e2e/theme e2e/mobile-overflow.spec.ts e2e/nav-reachability.spec.ts --project=chromium`: before 5 failed / 80 passed, after 85 passed.
 - Files modified: `services/xstockstrat-ui/src/components/shared/{SignOutButton,PlatformHeader}.tsx`
 - Deviations: D-63 fallback (Deviation Log).
+
+### Step 47 — service: Authorized-apps split and the issuer pointer card [done]
+- `ConnectorUrlField` (`'use client'`, `useAgentUrl` + copy state) extracted verbatim from the connect dialog; the page body moved verbatim into `AuthorizedAppsList.tsx` (only the field, its state and `copyAgentUrl` left, replaced by `<ConnectorUrlField />`; `columns` memo and focus handling untouched). `page.tsx` is a server component: `loadAuthMode()`; `oidc` → `loadOidcConfig()` → `SsoAppsCard` (issuer link only when `isValidIssuer`, connector URL + copy, one row per non-empty client ID: Claude.ai full / read-only, Claude Code full / read-only, with the paste instruction; no grants, no revoke); a `loadOidcConfig` fault → `SsoAppsCard` with no issuer and no rows; `local`/`both`/`'error'` → `AuthorizedAppsList`.
+- TDD: RED/GREEN via Step 53's e2e and the existing list cases. Verification: typecheck, lint, build exit 0; "page is a server component". Regression (`local`): host Playwright `e2e/accounts` (incl. `authorized-apps.spec.ts` `@feature-350 @AC-4/6/9`), `e2e/theme`, `mobile-overflow`, `nav-reachability` 85 passed.
+- Files modified: `services/xstockstrat-ui/src/app/accounts/authorized-apps/{page,AuthorizedAppsList,SsoAppsCard}.tsx` (`AuthorizedAppsList`/`SsoAppsCard` new), `services/xstockstrat-ui/src/components/accounts/ConnectorUrlField.tsx` (new)
+- Deviations: none. Gaps filled: `SsoAppsCard` keeps the "My Authorized Apps" heading; the issuer link text is "Open your sign-in provider" (new tab, `noopener noreferrer`).
