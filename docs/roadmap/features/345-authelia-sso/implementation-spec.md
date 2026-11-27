@@ -1009,7 +1009,7 @@ cd services/xstockstrat-agent && uv run ruff check . && uv run ruff format --che
 
 ### Step 24 — test: Agent oidc auth end to end (status map, deadline, routes, metadata)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_sso_auth.py` — create

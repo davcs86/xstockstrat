@@ -422,3 +422,66 @@ def sso_keys():
         rotated_jwk=rotated_jwk,
         mint=mint,
     )
+
+
+SSO_ISSUER = "https://auth.example.test"
+
+
+@pytest.fixture
+def oidc_mode(monkeypatch, sso_keys):
+    """`oidc` mode against a respx-mocked issuer (feature 345, C-13; three consumers).
+
+    Installs `identity` auth.mode=oidc and `agent` oidc.issuer, serves discovery + `sso_keys`' JWKS,
+    and resets the jwks/sso_auth caches. `claims(**over)` builds a valid access-token payload."""
+    import asyncio  # noqa: PLC0415
+    import time  # noqa: PLC0415
+
+    import httpx  # noqa: PLC0415
+    import respx  # noqa: PLC0415
+
+    from app import jwks, sso_auth  # noqa: PLC0415
+    from tests.test_config_watcher import install_watcher  # noqa: PLC0415
+
+    def install(namespace: str, **values):
+        # The lifespan waits on every watcher's snapshot event (watch_core.wait_for_snapshot).
+        w = install_watcher(monkeypatch, namespace, **values)
+        w._snapshot_event = asyncio.Event()
+        w._snapshot_event.set()
+        return w
+
+    install("identity", **{"auth.mode": "oidc"})
+    install("agent", **{"oidc.issuer": SSO_ISSUER})
+    jwks._reset_for_tests()
+    sso_auth._reset_for_tests()
+
+    def claims(**over):
+        base = {
+            "iss": SSO_ISSUER,
+            "sub": "sso-subject-1",
+            "aud": sso_auth.AGENT_PUBLIC_URL,
+            "exp": int(time.time()) + 600,
+            "scp": ["xstockstrat.read", "xstockstrat.write"],
+        }
+        base.update(over)
+        return {k: v for k, v in base.items() if v is not None}
+
+    with respx.mock(assert_all_called=False) as mock:
+        disc = mock.get(f"{SSO_ISSUER}/.well-known/openid-configuration").mock(
+            return_value=httpx.Response(
+                200, json={"issuer": SSO_ISSUER, "jwks_uri": f"{SSO_ISSUER}/jwks.json"}
+            )
+        )
+        keys = mock.get(f"{SSO_ISSUER}/jwks.json").mock(
+            return_value=httpx.Response(200, json=sso_keys.jwks)
+        )
+        yield SimpleNamespace(
+            issuer=SSO_ISSUER,
+            discovery=disc,
+            jwks=keys,
+            keys=sso_keys,
+            claims=claims,
+            token=lambda **over: sso_keys.mint(**claims(**over)),
+            install=install,
+        )
+    jwks._reset_for_tests()
+    sso_auth._reset_for_tests()
