@@ -129,6 +129,34 @@ export async function revokeToken(token: string): Promise<void>;
 
 ---
 
+## SSO (feature 345)
+
+One global key, `identity` / `auth.mode` (`local` | `both` | `oidc`), drives the login surfaces; the UI reads it per
+request with `GetConfig` (`src/lib/oidcConfig.ts` `loadAuthMode`; unreadable → the `local` login). The web client
+comes from `ui/oidc.issuer`, `ui/oidc.client_id` and the secret `ui/oidc.client_secret` (`GetSecret` with
+`x-internal-caller: ui`); `ui/oidc.mcp_client_id*` feed `/accounts/authorized-apps`; `agent/oidc.issuer` feeds the
+UI's protected-resource document in `oidc`. `APP_URL` is the exact browser origin. Lifecycle →
+`docs/runbooks/authelia-sso-cutover.md`.
+
+- **Login page** (`src/app/auth/login/page.tsx`, a server component): `local` → password form; `both` → "Sign in with
+  SSO" (`SsoSignInForm`, a native POST) plus the password form; `oidc` → SSO only.
+- **Start / callback.** `POST /api/auth/sso/start` (POST-only, `Origin` must equal `APP_URL`) seals a transaction
+  (PKCE verifier, state, nonce, redirect) into an `sso_txn_<sha256(state)>` cookie (JWE keyed from `JWT_SECRET`,
+  path `/api/auth/sso/callback`, 600 s) and 303s to the issuer. `GET /api/auth/sso/callback` exchanges the code
+  (`src/lib/oidcClient.ts`), then calls `ResolveExternalIdentity` and `IssueSessionForUser` with one `x-trace-id`
+  and sets the normal session cookies. Sign-in failures redirect to `/auth/login?error=<code>` (`src/lib/ssoErrors.ts`).
+- **Link SSO** (`both` only): `/accounts/sso` calls `GET /accounts/api/sso`, `POST /accounts/api/sso/link` and
+  `POST /accounts/api/sso/confirm` through `apiFetch` (`src/lib/authRedirect.ts`), never bare `fetch`
+  (ledger `fails.md:4251`). The link callback requires a fresh `auth_time` (`prompt=login`, `max_age=1`) and seals
+  the issuer identity into the `sso_link` cookie (path `/`, the transaction's absolute expiry); confirm sends it with
+  the user's password to `LinkExternalIdentity`.
+- **Logout** (`/api/auth/logout`): step 0 refuses a present `Origin` that is not `APP_URL` with 403 (no cookie
+  change); then `verifyAccessTokenForLogout`, `RevokeToken` only for a verified token, and in `both`/`oidc` the
+  issuer logout URL (`src/lib/ssoLogout.ts`); it clears the session and `sso_link` cookies and answers
+  `{ok: true[, redirect]}`. The header `SignOutButton` follows `redirect`.
+- **Middleware sets** (`src/middleware.ts`): `SSO_PUBLIC_PATHS` (start, callback) skip the session check;
+  `COOKIE_GATED_PATHS` (logout) pass when either session cookie is present.
+
 ## Session + header forwarding (where it lives now)
 
 **Backend data calls are not made from per-route handlers anymore — they go through the BFF.** The `connectBff.ts` router does this once for every RPC: each service-impl method calls `requireSession(ctx)` (reads the `access_token` cookie, verifies it) and forwards `x-user-id` / `x-access-scope` / `x-trace-id` to the gRPC client via a `Headers` object. Browser components call those RPCs through `browserClients.ts`; there are no bespoke `/api/orders`, `/api/portfolio`, … routes to gate individually.

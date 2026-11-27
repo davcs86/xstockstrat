@@ -62,6 +62,13 @@ A server may also authorize a caller by the **verified peer certificate's DNS SA
   no grant.
 - config `GetSecret` ← `xstockstrat-notify`, for the `notify` caller's exact key `commsgun.app_key`
   (feature 338, the same `SECRET_CALLER_ALLOWLIST`). The `x-internal-caller` header is still required as well.
+- config `GetSecret` ← `xstockstrat-ui`, for the `ui` caller's exact key `oidc.client_secret` (feature 345,
+  the same `SECRET_CALLER_ALLOWLIST`). The `x-internal-caller: ui` header is still required as well.
+- identity `ResolveExternalIdentity` ← `xstockstrat-ui`, `xstockstrat-agent`; `IssueSessionForUser`,
+  `LinkExternalIdentity`, `GetExternalIdentityLinks` ← `xstockstrat-ui` only (feature 345,
+  `EXTERNAL_IDENTITY_PEER_SANS` in `services/xstockstrat-identity/src/grpc/externalIdentity.ts`). The SAN is the
+  **only** check (header-blind); `LinkExternalIdentity` takes the user id from its request, which the UI fills from
+  the verified session.
 - identity `ListAdminUserIds` ← `xstockstrat-notify` (feature 242,
   `services/xstockstrat-identity/src/grpc/adminDirectory.ts`). The SAN is the **only** check: the RPC
   ignores every header, so a forwarded `x-access-scope` or `x-user-id` confers nothing.

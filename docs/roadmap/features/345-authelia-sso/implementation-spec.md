@@ -2081,7 +2081,7 @@ for s in "openid profile email" "preferred_username" "auth_time" "max_age=1" "/a
 
 ### Step 55 — docs: Pattern docs and the root dependency graph
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/patterns/` and root `CLAUDE.md`
 **Files**:
 - `docs/patterns/frontend-auth.md` — modify
