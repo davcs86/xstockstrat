@@ -742,3 +742,15 @@ FROM trading.broker_accounts WHERE user_id = '' AND is_active ORDER BY created_a
 ```
 
 Homelab staging: 0 active owner-less `trading.broker_accounts` rows (2026-11-27). Outstanding for Step 20: the same count on DO staging. Production is out of scope (standing ruling; never launched), so no production count will be supplied.
+
+## Session 2026-11-27 — O-11 detail, DO staging, supplied by the operator (verbatim)
+
+Operator ran the A6 detail query on the DO staging database and pasted the result:
+
+```
+                  id                  | display_name | broker_type | is_paper |          created_at
+--------------------------------------+--------------+-------------+----------+-------------------------------
+ 6c9252af-393a-49a5-8af3-e36845249078 | Alpaca 1     |           1 | t        | 2026-05-31 00:24:30.778166+00
+```
+
+DO staging: 1 active owner-less `trading.broker_accounts` row (the detail query lists exactly one row; the `count(*)` line was not pasted, so the count is taken from the listing). Homelab staging: 0 (previous entry). Production: not taken — production is out of scope and was never launched (standing operator ruling), so no production count will be supplied. Per Step 20 Instruction 4, a non-zero count does not block the merge; it sizes the Step 19 cleanup follow-up (one paper Alpaca account, created 2026-05-31).
