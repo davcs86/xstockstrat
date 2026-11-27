@@ -1161,7 +1161,7 @@ uv run --extra dev pytest tests/test_job_graph_worker.py tests/test_job_graph_wo
 uv run --extra dev pytest --cov=app --cov-fail-under=40
 ruff check . && ruff format --check .
 grep -q "snapshot_watcher" tests/test_job_graph_worker.py && grep -q "pipeline_pg" tests/test_job_graph_worker_real_pg.py   # C-13: shared helpers from conftest
-grep -nE "asyncio\.sleep\([^0)]" tests/test_job_graph_worker.py ; test $? -eq 1   # only sleep(0) yields; time moves through advance()
+grep -nE "asyncio\.sleep\(([^0)]|0[.0-9])" tests/test_job_graph_worker.py ; test $? -eq 1   # only sleep(0) yields; time moves through advance()
 uv run --extra dev pytest tests/test_job_graph_worker_real_pg.py -q -rs | grep -c SKIPPED ; test $? -eq 1   # nothing skipped
 ```
 

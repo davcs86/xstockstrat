@@ -403,3 +403,11 @@ Carried from design.md § Open Risks; each needs an owner at `/sdd-spec` or late
     files.
   - [x] N1 Step 13's informational import grep is removed (the handler contract test is the
     gate). N2 Step 7's guard grep escapes its dots.
+
+## Session 2026-11-27 — sdd-review impl-spec (advisory, round 6: criteria) — PASS
+
+- Result: PASS, 0 failures, 0 warnings, 1 note. All round-5 fixes verified; paths, signatures,
+  step order and all 18 `@AC-*` traces check out. The review loop is closed.
+  - [x] N1 Step 12's sleep regex let `sleep(0.5)` through; the pattern now catches it.
+- Still open by choice, for `/sdd-execute`: the stored-set regeneration database route, and the
+  config-service lint and tests (not runnable in the spec sandbox).
