@@ -2,7 +2,7 @@
 
 **State**: in-debate
 **Mode**: full (round cap lifted by operator override, context.md 2026-11-27)
-**Rounds run**: 6 (round 7 in progress)
+**Rounds run**: 7
 
 ## Rounds
 
@@ -14,6 +14,7 @@
 | 4 | 2026-11-27 | /sdd-design | 5 | 0 | 5 | 5 | 0 | yes |
 | 5 | 2026-11-27 | /sdd-design | 5 | 0 | 10 | 9 | 3 | yes |
 | 6 | 2026-11-27 | /sdd-design | 3 | 0 | 8 | 8 | 2 | yes |
+| 7 | 2026-11-27 | /sdd-design | 1 | 0 | 2 | 3 | 1 | yes |
 
 ## Settled Decisions
 
@@ -73,6 +74,7 @@
 | D-51 | 6 | Invariant 1: the control lane is FIFO with at most (slots held + 2) operations queued; slots held is at most `worker_concurrency`, except that after a runtime decrease holders keep their slots until they end, so never more than 16. Invariant 3: each settle batch is its own lane operation queued at the tail; a maintenance tick issues at most 3 lane operations besides settle (reap, ensure, stats; the enqueue retry runs in the ensure's transaction) and at most 20 settle batches, starting none once 8 s have passed since settle began. The invariants are the bound the spec's lease constraint refers to, and are tested with a fake connection and a virtual-time event loop. `bounded_txn`'s deadline is fixed before the pool acquire. Supersedes invariants 1 and 3 of D-47 (user reopen, P-5). | O-64, O-65, O-66; `app/config/live_limits.py:13` | settled |
 | D-52 | 6 | Reap and settle select candidates with `ORDER BY job_id FOR NO KEY UPDATE SKIP LOCKED`; prune and claim keep `FOR UPDATE SKIP LOCKED`. The settleable predicate and the prune's unfinished-parent guard are inside the candidate subquery, before `LIMIT`; "full" means the select returned 500 rows. The prune deletes terminal states before `succeeded`. Supersedes the lock-strength clause of D-49 (user reopen, P-4). | O-67, O-68, O-70 | settled |
 | D-53 | 6 | `worker_enabled` is read again after the limiter returns and after the control lane is taken, immediately before the claim, and before each maintenance step. A heartbeat batch is in flight from the synchronous snapshot-and-register step until its transaction exits (signalled in a `finally`); a runner becomes `reporting` and checks for one in a single synchronous step and bounds its wait with its own 6 s timer; a committed result omitting the key of an attempt already `reporting` declares no loss. The self-fence does not stop an attempt in `retry_wait`. At the 300 s give-up the runner logs at ERROR and counts `report_abandoned`; `ParkRace` re-runs share that give-up. A `job.db(budget)` outside (0, 30] s raises `PermanentJobError`. Refines D-21, D-32 and D-50. | O-63, O-65, O-69; FR-9; `@AC-17` | settled |
+| D-54 | 7 | The self-fence and the 900 s deadline stop only an attempt whose handler task is still running. Once the handler has ended (waiting for the lane, `reporting` or `retry_wait`) the attempt only writes its fenced report or park, and ends when that is written or rejected, when a committed heartbeat omits its pair while it is not `reporting`, or at the 300 s give-up. Expiry alone does not end a lease; a reap does: the heartbeat and report predicates test token and state, not expiry. Maintenance order is reap, settle, ensure, stats. Refines D-20 and D-53. | O-71; FR-2 | settled |
 
 ## Rejected Alternatives (locked)
 
@@ -173,6 +175,9 @@
 | O-68 | 6 | The settleable predicate and the prune's unfinished-parent guard must sit inside the candidate subquery before `LIMIT`, or 500 non-settleable parents block settle head-of-line; "full" must mean the candidate select returned 500. | yes | closed @ round 6 (D-52) |
 | O-69 | 6 | Unspecified or inconsistent: what a self-fence does to an attempt in `retry_wait`; where `report_abandoned` is counted and that the cause of a deterministic report failure is only in the log; whether `ParkRace` re-runs share the 300 s give-up; the exception a `job.db(budget)` outside (0, 30] raises; the prune's own block budget; the enqueue retry's transaction; when the send time is stamped; the tick-record states; the abandoned statement task of the asyncpg fallback; the fake-clock mechanism; an Open Risk that understates a delay; stale C-15 row and section headings. | no | closed @ round 6 (D-53; text in design.md) |
 | O-70 | 6 | The prune's fixed state order can starve the terminal-state DELETEs under a succeeded backlog larger than 600 s per day. | no | closed @ round 6 (D-52) |
+| O-71 | 7 | An attempt whose handler has ended but which is still waiting for the control lane is in phase `running`; a self-fence (or the 900 s deadline) in that window would discard a finished result, although the same wait as a retry is allowed to report. Found independently by both sides. | yes | closed @ round 7 (D-54) |
+| O-72 | 7 | Wording a spec author would otherwise decide: the heartbeat predicate (no expiry test); maintenance step order; what a late kill-switch read does; the exception for a refused database block; a sentence left over from D-49 that could never apply; "starting none" versus "queueing none" in invariant 3; missing decision IDs in headings; two unrecorded risks (lost claim acknowledgement; terminal backlog delaying the succeeded prune). | no | closed @ round 7 (text in design.md) |
+| O-73 | 7 | The claim still selects with `FOR UPDATE SKIP LOCKED`, which conflicts with a park's `FOR KEY SHARE` on an already-`ready` child, so that child is skipped while the park's transaction is open. A delay, not a correctness issue. The proposer petitions (P-6); the adversary does not re-raise it. | no | open |
 
 ## Reopen Petitions
 
@@ -184,3 +189,4 @@
 | P-3 | 5 | D-34 ("heartbeat period = lease/6") and D-44 ("and the period") | Trace g fails (O-56), and `app/supervision.py:68` shows the sleep cannot be woken. Proposed: a fixed heartbeat period of 7.5 s, a recorded invariant; an empty set issues no statement. Alternative: reopen D-32 and move the wait into the tick, woken by `cfg.on_change`. | user reopened (context.md 2026-11-27) |
 | P-4 | 6 | D-49 (lock-strength clause) | PostgreSQL's row-lock conflict table: `FOR UPDATE` conflicts with `FOR KEY SHARE`, `FOR NO KEY UPDATE` does not; park (D-22) and edge-insert foreign-key checks take `FOR KEY SHARE`. O-58 considered only instance-versus-instance blocking (O-67). Proposed: reap and settle select with `ORDER BY job_id FOR NO KEY UPDATE SKIP LOCKED`; prune and claim unchanged. | user reopened (context.md 2026-11-27) |
 | P-5 | 6 | D-47 (invariants 1 and 3) | `app/config/live_limits.py:13` (a shrink never interrupts holders) with D-46 makes invariant 1 false after a decrease; invariant 3's terms are undefined (O-64). Proposed: invariant 1 in terms of slots held (never more than 16); settle batches are separate lane operations, a tick issues at most 3 lane operations besides settle and at most 20 settle batches, starting none once 8 s have passed. | user reopened (context.md 2026-11-27) |
+| P-6 | 7 | D-4 / D-52 (claim lock strength) | The claim UPDATE sets only non-key columns; under D-22 a park takes `FOR KEY SHARE` on a child that may already be `ready`; P-4 said "claim unchanged" without a reason (O-73). Proposed: the claim selects with `FOR NO KEY UPDATE SKIP LOCKED`; exclusion between claimers still holds because that lock conflicts with itself; prune keeps `FOR UPDATE`. | pending user |

@@ -130,3 +130,12 @@
   "`lease_seconds` + 10 s, plus up to 4 s of event-loop lag".
 - Kill-switch re-check and the other round-6 corrections applied to design.md (D-53).
 - Reopens require another round: round 7 started. Not approved.
+
+## Session 2026-11-27 — sdd-design round 7
+
+- Round 7 run over the design as amended for round 6. One substance item, found independently by
+  both sides: a finished handler's result could be discarded by the self-fence while it waited
+  for the lane (O-71 → D-54). Everything else was wording, applied to design.md. No Floor breach,
+  no C-16 regression, no register violation; FR-1..FR-9 and `@AC-1`..`@AC-18` all PASS.
+- One non-blocking reopen petition pending the operator: P-6 (claim lock strength). If declined
+  it stays an Open Risk.
