@@ -533,3 +533,18 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - [ ] unaddressed — Overlap scan scope: the overlap pass read only a trunk checkout, so the impl-specs of peers that exist only on their feature branches (308–311, 313–316, 318–319, 322–325, 327–328, 331) were not scanned. Re-check them on `origin/feature/<slug>` before execute, in particular 315 and 316 (`notifyServiceImpl.ts`) and 322 (`trading.proto`, other messages per D-12).
 - [ ] unaddressed — `packages/proto/gen/**` conflicts with 321 and 322: the second merger re-runs `./scripts/buf-gen.sh` (Step 13).
 - [ ] unaddressed — Steps 14–17 doc and comment edits: 360 (`code-completed`) references `services/xstockstrat-ui/src/lib/connectClients.ts`, adjacent to Step 14's `traderBff.ts`; not verified to collide. Re-grep at Step 14.
+
+## Session 2026-11-26 — sdd-execute sequential (sdd-batch-execute)
+
+- Up-front confirmation: the operator approved the plan with this binding record (mismatches abridged to step numbers):
+  `{"mainDev":"f802b184b13bd899d858c4b0349a616e9981b9d9","dev":"8c2e17f685a3ef289091754e5b7f6a5c30b7b286","specHash":"3569aa5f5ccf8ed9c9a5c175f57dab422bd37d84","directive":"conditional","pending":[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20],"mismatches":[1,3,4,5,6,7,8,10,11,12,13,15,16,17,18,19]}`
+  (the full record, mismatch details included, is verbatim in the `9f69d778` commit body).
+- Merge: `origin/main-dev` `f802b184` merged into `feature/fix-read-path-owner-trust` (`4230df50`); resolver and `ledger-guard` clean. Feature 315 is now in the base (D-12).
+- Respec commits (`git log --first-parent origin/main-dev..HEAD`): `9f69d778` respec(fix-read-path-owner-trust): align steps 1,3,4,5,6,7,8,10,11,12,13,15,16,17,18,19 with current codebase.
+- Respec decisions to review: Step 15 now targets the agent `CLAUDE.md:22-24` "`ListOrders` filter" example. Step 17 no longer edits `services/xstockstrat-trading/docs/context-constitution.md`, because TRADING-N1 is retired. The notify `CLAUDE.md` edit moves to the `:32` NOTIFY-7 pointer. The proto-constitution edit moves to the `:33` "Also deprecated + server-ignored" additions, since the old `:38` inventory now lives only in root PLAT-11.
+- Tooling detection (steps 1-20): go1.27.0 ✓ · golangci-lint ✗ 2.5.0/go1.25 (the Go steps install v2.14.0 with `GOTOOLCHAIN=go1.27.0 go install`) · uv ✓ 0.11.32 · python ✓ 3.13 · pnpm ✓ 9.15.9 · node v22 (root pins 24) · buf ✗ (Steps 12-13 use the Docker codegen image via `scripts/localenv-setup.py`; docker CLI and dockerd present) · hook check hook=0.
+- Status `implementation-ready` → `in-progress`.
+
+```sdd-batch-setup
+{"mainDev":"f802b184b13bd899d858c4b0349a616e9981b9d9","date":"2026-11-26"}
+```
