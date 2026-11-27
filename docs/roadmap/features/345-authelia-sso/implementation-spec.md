@@ -1461,7 +1461,7 @@ grep -rn "recordAuthEvent('sso_" src | grep -v "test\|ssoErrors.ts"   # only sso
 
 ### Step 37 — test: Metric typing, error redirects, logout verify and the logout route
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/__tests__/bffAllowlist.test.ts` — modify
@@ -2235,3 +2235,8 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Expected**: `pnpm-lock.yaml` updated for the new dependency; `docker compose build --no-cache xstockstrat-ui` succeeds and the `docker run` boot smoke returns an HTTP status.
 - **Actual**: `pnpm add` reordered `package.json`, so the line was inserted by hand and `pnpm install --frozen-lockfile` passed against the lockfile pnpm wrote (+21 lines: `openid-client@6.8.9`, `oauth4webapi@3.8.9`); staged as the sanctioned lockfile exception. The compose build failed in the base stage (`corepack prepare pnpm@9.15.9` cannot reach registry.npmjs.org from inside the build container on this host). A scratch copy of the Dockerfile with only the host proxy CA + proxy env added to the base stage, built with `--network host`, completed (exit 0); the repo Dockerfile is unchanged. The boot smoke (`docker run …`) was refused by the session's permission policy and was not run. At this step no route imports `openid-client` yet; the logout route imports it from Step 36, whose `pnpm run build` is the first build that bundles it.
 - **Disposition**: host-environment limitation, not a code change. Re-run the compose build and the boot smoke on a host with registry egress before the integration PR (or rely on CI's image build).
+
+### Step 37 — Metric typing, error redirects, logout verify and the logout route
+- **Expected**: "remove one directive, `pnpm run typecheck` fails with TS2578, restore it".
+- **Actual**: removing a directive makes the guarded call a real error (`TS2345`, line 89). `TS2578: Unused '@ts-expect-error' directive` appears only when the typing the directives guard is absent: with Step 36's generic `recordAuthEvent` swapped back temporarily for an untyped `(event, reason?: string)`, all four directives report TS2578. Both runs were made and restored; the committed tree typechecks clean.
+- **Disposition**: the proof's intent (the `@ts-expect-error` cases fail under a real `tsc` if the typing regresses) holds; the recorded RED is the TS2578 run, with the TS2345 run alongside.

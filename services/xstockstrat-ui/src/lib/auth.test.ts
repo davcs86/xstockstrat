@@ -1,9 +1,11 @@
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 import { metrics } from '@opentelemetry/api';
 import { MeterProvider, MetricReader } from '@opentelemetry/sdk-metrics';
+import { signTestJwt, TEST_JWT_SECRET } from '../../e2e/helpers/auth';
 import {
   verifyAccessToken,
+  verifyAccessTokenForLogout,
   setSessionCookies,
   clearSessionCookies,
   rememberMeOptsFromRequest,
@@ -117,5 +119,59 @@ describe('verifyAccessToken — auth events (feature 294)', () => {
     expect(events.map((p) => [p.attributes, p.value])).toEqual([
       [{ event: 'jwt_rejected', reason: 'no_secret' }, 1],
     ]);
+  });
+});
+
+describe('verifyAccessTokenForLogout (D-61)', () => {
+  const reader = new CollectingReader();
+  const DAY_MS = 86_400_000;
+  const HOUR_MS = 3_600_000;
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllEnvs();
+  });
+
+  async function authEvents() {
+    const { resourceMetrics } = await reader.collect();
+    return resourceMetrics.scopeMetrics
+      .flatMap((sm) => sm.metrics)
+      .filter((m) => m.descriptor.name === 'ui.auth.events')
+      .flatMap((m) => m.dataPoints.map((p) => p.attributes));
+  }
+
+  async function reasonAt(offsetMs: number, secret: string | undefined = TEST_JWT_SECRET) {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.stubEnv('JWT_SECRET', TEST_JWT_SECRET);
+    const token = await signTestJwt();
+    vi.setSystemTime(Date.now() + offsetMs);
+    vi.stubEnv('JWT_SECRET', secret);
+    return verifyAccessTokenForLogout(token);
+  }
+
+  it('a valid signature → verified', async () => {
+    metrics.disable();
+    metrics.setGlobalMeterProvider(new MeterProvider({ readers: [reader] }));
+    expect(await reasonAt(0)).toBe('verified');
+  });
+
+  it('expired 1 day ago, signature valid → verified', async () => {
+    expect(await reasonAt(HOUR_MS + DAY_MS)).toBe('verified');
+  });
+
+  it('expired 15 days ago → expired_too_old', async () => {
+    expect(await reasonAt(HOUR_MS + 15 * DAY_MS)).toBe('expired_too_old');
+  });
+
+  it('a token signed with another key → unverified', async () => {
+    expect(await reasonAt(0, `${TEST_JWT_SECRET}-other`)).toBe('unverified');
+  });
+
+  it('no JWT_SECRET → unverified', async () => {
+    expect(await reasonAt(0, '')).toBe('unverified');
+  });
+
+  it('jwt_rejected is never recorded on these paths', async () => {
+    expect((await authEvents()).filter((a) => a.event === 'jwt_rejected')).toEqual([]);
   });
 });
