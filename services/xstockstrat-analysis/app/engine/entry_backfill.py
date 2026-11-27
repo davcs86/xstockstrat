@@ -70,7 +70,7 @@ async def run_once(live_loop, db_pool, trading_stub, cfg_watcher):
 
     async def _backfill_pair(user_id, strategy_id, symbol):
         # Key must match live_loop's (user_id, strategy_id, symbol) key or the slot is never read.
-        # Body user_id is load-bearing: trading treats an empty user_id as all users.
+        # x-user-id from owner_metadata is load-bearing: trading scopes ListOrders to that header.
         key = (user_id, strategy_id, symbol)
         if live_loop._last_entry_at.get(key) is not None:
             return

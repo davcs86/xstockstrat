@@ -691,3 +691,11 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Config-key wiring gate: does not apply, because no config key is declared.
 - Files modified: `services/xstockstrat-agent/CLAUDE.md`
 - Deviations: none
+
+### Step 16 — docs: xstockstrat-analysis entry-backfill comment [done]
+- Replaced the stale comment above the `_backfill_pair` `ListOrders` call in `entry_backfill.py:73` with one constraint line: "x-user-id from owner_metadata is load-bearing: trading scopes ListOrders to that header." (98 columns, under ruff's 100). Line 72, the live-loop key comment, is unchanged. No code changed. The request keeps its body `user_id`, so PRESERVE analysis `@AC-1` @feature-262 holds (Instruction 2).
+- TDD: N/A (comment-only). Baseline: the step Verification on the pre-edit tree gave exit=1 (`.sdd-logs/v-1.log`) because the `! grep` matched `73:        # Body user_id is load-bearing: trading treats an empty user_id as all users.` After the edit the same Verification gave exit=0 (`.sdd-logs/v-2.log`) with `All checks passed!` and `143 files already formatted` (host ruff 0.16.9; CI installs unpinned `ruff`).
+- Evidence re-grepped on this tree: `servicer.py:6626` still holds the `GetStrategyAnalytics` `ListOrdersRequest(strategy_id=strategy_id, user_id=user_id)`, as the spec says. The `entry_backfill.py:78-84` call span actually ends at `:85`. Neither changes this step.
+- Config-key wiring gate: does not apply, because no config key is declared.
+- Files modified: `services/xstockstrat-analysis/app/engine/entry_backfill.py`
+- Deviations: none

@@ -1016,7 +1016,7 @@ cd services/xstockstrat-ui \
 
 ### Step 16 — docs: xstockstrat-analysis entry-backfill comment
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/engine/entry_backfill.py` — modify
