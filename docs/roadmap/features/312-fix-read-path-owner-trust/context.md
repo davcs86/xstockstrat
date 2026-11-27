@@ -765,3 +765,136 @@ DO staging: 1 active owner-less `trading.broker_accounts` row (the detail query 
 - Files modified: `docs/roadmap/features/312-fix-read-path-owner-trust/context.md`
 - Deviations: Instruction 1 asks for a staging and a production count. Production was waived by operator ruling, and staging is reported per environment (DO and homelab). Full detail is in the Deviation Log.
 - O-11 row count: DO staging 1 (2026-11-27); homelab staging 0 (2026-11-27); production waived (standing ruling: production out of scope)
+
+## Session 2026-11-27 — sdd-batch-execute promotion plan (awaiting operator confirm)
+
+````sdd-batch-promotion-plan
+## Promotion plan — fix-read-path-owner-trust (feature 312)
+
+Source: `/home/user/xstockstrat/docs/roadmap/features/312-fix-read-path-owner-trust/acceptance.feature` (6 scenarios, AC-1..AC-6; AC-4, AC-5 and AC-6 are Scenario Outlines).
+
+### Verdicts
+| @AC | target suite (path) | CREATE/APPEND | verdict | note |
+|---|---|---|---|---|
+| AC-1 | services/xstockstrat-trading/acceptance/fix-read-path-owner-trust.feature | CREATE | NEW | ListOrders/StreamOrderUpdates owner scoping; the observable subject is trading. No existing trading scenario asserts it. |
+| AC-2 | docs/sdd/business-rules/platform.feature | APPEND | NEW | Cross-service: trading rejects headerless RegisterBrokerAccount, and portfolio skips identity-less events. See Notes. |
+| AC-3 | services/xstockstrat-notify/acceptance/fix-read-path-owner-trust.feature | CREATE | NEW | The observable subject is NotifyService.ListAlerts. It does not conflict with the feature-203 ListAlerts rules (see Notes). |
+| AC-4 | services/xstockstrat-trading/acceptance/fix-read-path-owner-trust.feature | CREATE | NEW | Design D-17 names it a durable trading @AC. |
+| AC-5 | services/xstockstrat-trading/acceptance/fix-read-path-owner-trust.feature | CREATE | NEW | Design D-17 names it a durable trading @AC. |
+| AC-6 | services/xstockstrat-trading/acceptance/fix-read-path-owner-trust.feature | CREATE | NEW | Design D-17 names it a durable trading @AC. |
+
+### Ready-to-write blocks
+
+--- /home/user/xstockstrat/services/xstockstrat-trading/acceptance/fix-read-path-owner-trust.feature (CREATE) ---
+```gherkin
+# Promoted from docs/roadmap/features/312-fix-read-path-owner-trust/acceptance.feature at launch
+# (Constitution C-16). Source-feature provenance is carried on every scenario's `@feature-312` tag.
+# Durable business rules trading already guarantees; a rule enters only by promotion from a reviewed acceptance.feature.
+
+Feature: xstockstrat-trading - order reads are scoped to the trusted x-user-id header
+  Order read paths scope ownership to the trusted x-user-id header, never to a body field.
+
+  # guards: docs/reports/2026-10-19-trading-listorders-body-user-id-filter-defect.md
+  @AC-1 @regression @feature-312
+  Scenario: A non-admin ListOrders with an empty body user_id returns only the caller's orders
+    Given trading holds orders for users "user-a" and "user-b"
+    When an internal caller sends ListOrders with an empty user_id and x-user-id "user-a" and x-access-scope "3" (ADMIN bit 0x04 unset)
+    Then only "user-a"'s orders are returned
+    And the same holds for StreamOrderUpdates
+
+  # guards: docs/reports/2026-10-19-trading-listorders-body-user-id-filter-defect.md (design D-7, D-17)
+  @AC-4 @regression @feature-312
+  Scenario Outline: Order reads are scoped to x-user-id for every scope and the body user_id is ignored
+    Given trading holds orders for users "user-a" and "user-b"
+    When an internal caller sends <rpc> with x-user-id "user-a", x-access-scope "<scope>" and body user_id "<body>"
+    Then only "user-a"'s orders are delivered
+
+    Examples:
+      | rpc                | scope | body   |
+      | ListOrders         | 3     | user-b |
+      | ListOrders         | 4     | user-b |
+      | ListOrders         | 4     |        |
+      | StreamOrderUpdates | 3     | user-b |
+      | StreamOrderUpdates | 4     | user-b |
+      | StreamOrderUpdates | 4     |        |
+
+  # guards: docs/reports/2026-10-19-trading-listorders-body-user-id-filter-defect.md (design D-7, D-15)
+  @AC-5 @regression @feature-312
+  Scenario Outline: An order read with no x-user-id is refused
+    Given trading holds orders for users "user-a" and "user-b"
+    When an internal caller sends <rpc> with no x-user-id metadata
+    Then the call fails with PERMISSION_DENIED
+    And no order is delivered
+
+    Examples:
+      | rpc                |
+      | ListOrders         |
+      | StreamOrderUpdates |
+      | GetOrder           |
+
+  # guards: docs/reports/2026-10-19-trading-listorders-body-user-id-filter-defect.md (design D-15)
+  @AC-6 @regression @feature-312
+  Scenario Outline: GetOrder for another user's order is indistinguishable from an absent order
+    Given trading holds an order owned by "user-b"
+    When an internal caller sends GetOrder for that order_id with x-user-id "user-a" and x-access-scope "<scope>"
+    Then the call fails with NOT_FOUND
+    And the status code and message match those returned for an order_id that does not exist
+
+    Examples:
+      | scope |
+      | 3     |
+      | 4     |
+```
+
+--- /home/user/xstockstrat/services/xstockstrat-notify/acceptance/fix-read-path-owner-trust.feature (CREATE) ---
+```gherkin
+# Promoted from docs/roadmap/features/312-fix-read-path-owner-trust/acceptance.feature at launch
+# (Constitution C-16). Source-feature provenance is carried on every scenario's `@feature-312` tag.
+# Durable business rules notify already guarantees; a rule enters only by promotion from a reviewed acceptance.feature.
+
+Feature: xstockstrat-notify - ListAlerts scopes ownership to the trusted x-user-id header
+  ListAlerts takes the owner from x-user-id metadata only; a body userId never widens or redirects the read.
+
+  # guards: docs/reports/2026-10-19-notify-listalerts-owner-fallback-unscoped-defect.md
+  @AC-3 @regression @feature-312
+  Scenario: ListAlerts without x-user-id is rejected and a body userId is ignored
+    Given alerts targeted to users "user-a" and "user-b"
+    When NotifyService.ListAlerts is called over mTLS with no x-user-id metadata
+    Then the call is rejected with INVALID_ARGUMENT or UNAUTHENTICATED
+    And when it is called with x-user-id "user-a" and body userId "user-b"
+    Then no alert targeted to "user-b" is returned
+```
+
+--- /home/user/xstockstrat/docs/sdd/business-rules/platform.feature (APPEND) ---
+```gherkin
+
+  # ─── broker-account identity is never filed under a placeholder owner (feature 312) ──
+  # Cross-service: trading's RegisterBrokerAccount rejection and portfolio's event consumption are
+  # one guarantee. Source defect: docs/reports/2026-10-19-portfolio-default-identity-fallback-defect.md
+
+  # guards: docs/reports/2026-10-19-portfolio-default-identity-fallback-defect.md
+  @AC-2 @regression @feature-312
+  Scenario: Broker-account identity is never filed under a placeholder owner
+    Given a RegisterBrokerAccount call with no x-user-id metadata
+    When trading handles the call
+    Then the call is rejected and no broker account is persisted
+    And when portfolio consumes an account.positions.synced, account.balance.synced or account.deregistered event with user_id ""
+    Then the event is acked, logged and skipped
+    And no portfolio row is written or purged under user_id "default"
+```
+
+### Notes / ambiguities / conflicts
+- **AC-2 routing (judgement call).** The scenario asserts on two services: trading rejects a headerless `RegisterBrokerAccount`, and portfolio skips identity-less events (the placeholder `"default"` at `portfolio_service.go:1614`). A scenario cannot be split, because it must be promoted verbatim, and neither service alone owns the whole guarantee. I routed it to `platform.feature` under the cross-service rule. The alternative is `services/xstockstrat-trading/acceptance/fix-read-path-owner-trust.feature`, since the placeholder originates in trading. A human can move it if they prefer. Design.md only names AC-4, AC-5 and AC-6 as trading rules, so AC-2's routing is not pre-decided.
+- **No FR tags.** The source scenarios carry `@regression` and no `@FR-*` tag (bug fix). I promoted them verbatim without inventing `@FR-n`. `docs/sdd/business-rules/CLAUDE.md` asks for at least one `@FR-n`, but other promoted bug-fix suites such as feature 329 in `platform.feature` also carry only `@regression`. The `# guards:` comment lines are kept as provenance.
+- **Dedup.** `grep feature-312` across the repo returns nothing, so there is no DUP. No existing suite asserts header-only order scoping, the headerless `PERMISSION_DENIED` on order reads, the `GetOrder` NOT_FOUND parity, or the `"default"` placeholder rule, so there is no OVERLAP. The `trading/acceptance` directory has no ListOrders ownership scenario. Its `fix-ibkr-request-signing.feature` mentions ListOrders only as a broker-signing table row.
+- **No CONFLICT.** The related guarantees are preserved as design.md § Business-rule alignment describes:
+  - `/home/user/xstockstrat/services/xstockstrat-notify/acceptance/alert-read-unread-persistence.feature` (@feature-203 AC-1..AC-5) always has an identified caller, so it is untouched.
+  - `/home/user/xstockstrat/services/xstockstrat-analysis/acceptance/fix-analysis-owner-scope.feature` (@feature-262) sends body equal to header, so it is untouched.
+  - `/home/user/xstockstrat/services/xstockstrat-ui/acceptance/fix-ui-trader-feedback.feature` (@feature-270) is untouched.
+  - The old trading CLAUDE.md contract "admin empty user_id = all users" has no durable `@AC`. Design D-7 changes it, with user sign-off on 2026-11-20. This is a doc change for the execute steps, not a suite conflict.
+- **Overlap with the agent suite.** `/home/user/xstockstrat/services/xstockstrat-agent/acceptance/agent-broker-account-tools.feature` AC-7, on non-owner broker-account actions, is marked EXTEND in design.md. It is proven on the wire by feature 312's tests but is not a 312 scenario, so nothing is promoted for it.
+- **Create vs append.** `acceptance/` already exists for trading and notify, and the 312-named files are new. Both are CREATE, with the provenance header copied from the `fix-push-untargeted-broadcast.feature` style. The `platform.feature` block goes after the last scenario, the feature-329 Outline ending at line 2737.
+
+### Coverage check
+- Source scenarios: 6 (AC-1..AC-6; AC-4, AC-5 and AC-6 are Outlines promoted whole, with Examples intact). Planned: 6 NEW (4 trading, 1 notify, 1 platform), 0 DUP, 0 OVERLAP, 0 CONFLICT. Every @AC is accounted for and none were skipped. Counts match.
+````
