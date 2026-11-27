@@ -892,3 +892,7 @@ REPORTED: services/xstockstrat-trading/internal/service/trading.go:platform/trad
 ## Session 2026-11-27 — C-16 promotion applied (per-service suites)
 
 Per the operator ruling above, all four scenarios were promoted as NEW (no DUP / OVERLAP / CONFLICT): `@AC-1`, `@AC-2` to `services/xstockstrat-agent/acceptance/fix-agent-bearer-secret-orphan.feature`, `@AC-3` to `services/xstockstrat-ui/acceptance/fix-agent-bearer-secret-orphan.feature`, `@AC-4` to `services/xstockstrat-config/acceptance/fix-agent-bearer-secret-orphan.feature`, each tagged `@feature-328`. The Scenario/Given/When/Then/And lines were diffed against the branch's `acceptance.feature` and are identical. `status.md` stays `code-completed`.
+
+## Session 2026-11-27 — defect-report closure ruling recorded by the orchestrator (verbatim)
+
+Question: mark `docs/reports/2026-10-19-agent-bearer-secret-orphan-on-failed-register-defect.md` resolved (ref feature:328)? Operator answer: **"resolve the 328 report"**. The sidecar is now `resolved` / `ref: feature:328-fix-agent-bearer-secret-orphan`. Basis: the unbounded, unreclaimable persistence is gone because the operator-run sweep `scripts/config-heal/mcp-credential-orphan-sweep.sql` reclaims unreferenced per-user `ingest` / `mcp_credential.*` secrets after a 24 h grace; each failed register still mints one orphan row by design (secret-first write kept, `app/tools.py`). The sweep is operator-run, not scheduled; staging only.
