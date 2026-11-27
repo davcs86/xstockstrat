@@ -958,3 +958,9 @@
 - TDD: red (before Step 28): `Cannot find module './safeRedirect'` / `'./ssoRefusals'` → green: 13 passed; full `pnpm run test:coverage` 91 files, 865 passed / 2 skipped, `src/lib/**` 82.97 % lines; typecheck and lint exit 0.
 - Files modified: `services/xstockstrat-ui/src/lib/{safeRedirect,ssoRefusals}.test.ts` (new)
 - Deviations: none
+
+### Step 30 — service: Server-side config loaders (oidcConfig.ts) [done]
+- `headers.ts` gains `HEADER_INTERNAL_CALLER`; new `oidcConfig.ts` with `parseAuthMode` (identity's rules), `loadAuthMode`, `loadOidcConfig`, `loadOidcClientSecret` (only the `x-internal-caller: ui` header) and `loadAgentIssuer`: native environment, `userId: ''`, `timeoutMs: AUTH_CONFIG_TIMEOUT_MS`, GetConfig with no headers, oneof-presence reads through the registered `identity`/`ui`/`agent` receivers, any rejection → `'error'`.
+- TDD: recorded under Step 31. Verification: typecheck and lint exit 0; `check-config-wiring.mjs --declared-from …/product-spec.md` exit 0 with no output (no unattributed read). A probe renaming one receiver to `uiX` printed `oidcConfig.ts:uiX.values:oidc.issuer:unattributed`, so the scanner does see these reads; restored.
+- Files modified: `services/xstockstrat-ui/src/lib/oidcConfig.ts` (new), `services/xstockstrat-ui/src/lib/headers.ts`
+- Deviations: none. Gaps filled: a present non-string `auth.mode` value reads as absent (`local`, no log); the `sso_issuer_invalid` log-once key is reason + issuer value, so a different bad value logs again; the "timeout" leg is the transport's `timeoutMs` (a `DeadlineExceeded` rejection), with no extra `raceDeadline`.
