@@ -229,6 +229,41 @@
   F-07, P-03. Floor breaches: none in any round.
 - Status: spec-ready → design-approved.
 
+## Session 2026-11-27 — sdd-spec
+
+- Generated implementation-spec.md with 19 steps. Status → implementation-ready.
+- Tree: ccr-fe135a59-nyslbm@19d095b ≡ origin/main-dev. `feature/pipeline-job-graph` does not exist
+  on origin yet, so `main-dev` was the target; the tree-freshness check passed without a switch.
+- Discovery ran inline in this session (no `codebase-discovery` subagents). recon.md's Codebase Map
+  was reused; only what it does not cover was searched.
+- The ledger files (about 650 KB each) were read by targeted search for the affected services and
+  surfaces, not end to end.
+- Key codebase findings:
+  - Next free numbers on `origin/main-dev`: analysis migration `031`, config migration `060`.
+    Feature 345 (`authelia-sso`, implementation-ready) also plans config `060_authelia_sso_keys`;
+    whichever merges first keeps the number. No `merge-order.md` row exists yet for 367 against 345.
+  - Three pins the design and recon did not name (spec decision S-9):
+    `scripts/migration-rerun.py:1114` hard-codes the analysis clean end version `30` (Step 4);
+    `tests/test_config_zero_clamps.py:96-97` requires `AC6_ROWS` to equal `FR3_KEYS` (Step 3);
+    `tests/test_supervision.py:143-148` pins the number of `spawn(` calls in `app/main.py`
+    (Step 18).
+  - `scripts/config-wiring.json` `registry.receivers` keys a read by `<file>:<receiver>`; the reader
+    needs the two entries `…/job_graph.py:int_positive` and `…/job_graph.py:self._cfg`, and no
+    `findings` entry. The wiring gate also compares a literal read default with the seeded default.
+  - `asyncpg` is locked at 0.31.0, whose `create_pool` accepts `reset` and `min_size`. PostgreSQL 16
+    binaries are present in the sandbox, so the `real_pg` tests run here (77 baseline tests passed).
+  - No virtual-time event loop, fake job repository or job-row fixture exists in `tests/`; Steps 8
+    and 12 create them in `tests/conftest.py`.
+  - Regenerating `scripts/config-wiring-stored.json` needs a database. Feature 366 did it on a
+    throwaway local PostgreSQL 16 under an operator ruling; Step 1 lists the routes.
+- Spec-time decisions S-1..S-9 are in implementation-spec.md § Spec-time decisions (repository
+  method names; `prune_batch` as a module-level function; `control_pool_reset` in `read_budget.py`;
+  boot task names; file names; the unconditional daily ensure; one gate test moved to Step 12;
+  config docs rows in Step 1; the three unlisted pins).
+- Not run at spec time: the `xstockstrat-config` lint and test commands (`node_modules` is not
+  installed in this sandbox). In this sandbox a bare `uv run pytest` resolved a `pytest` outside the
+  service environment, so the spec's analysis commands pass `--extra dev`.
+
 ## Open Threads
 
 Carried from design.md § Open Risks; each needs an owner at `/sdd-spec` or later:
@@ -241,3 +276,10 @@ Carried from design.md § Open Risks; each needs an owner at `/sdd-spec` or late
 - Hazards H1 and H2 for an in-transaction report, and executor-thread handlers: program feature 3.
 - `docs/roadmap/program-job-graph-analysis-pipeline.md` line 81 (advisory-lock note) is corrected
   in build step 8.
+- Config migration `060` is also planned by feature 345; re-check the number at `/sdd-execute`
+  Step 1 and before the integration PR. `/sdd-review pipeline-job-graph impl-spec` owns the
+  `merge-order.md` row.
+- Step 6's asyncpg pins gate Step 9 onward; a failed pin applies the design.md fallback and is
+  recorded in the Deviation Log.
+- Step 1's stored-set regeneration starts a database for artifact generation; name the route at
+  the Phase-2 confirmation.
