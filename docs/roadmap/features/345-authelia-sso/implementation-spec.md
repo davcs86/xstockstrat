@@ -967,7 +967,7 @@ cd services/xstockstrat-agent && uv run pytest --cov=app --cov-fail-under=40 -q 
 
 ### Step 23 — service: oidc token validator, role cache, the status map and mode-gated routes
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/sso_auth.py` — create
