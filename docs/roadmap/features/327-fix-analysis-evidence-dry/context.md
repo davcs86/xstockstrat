@@ -812,3 +812,11 @@ Effect: the C-14 agent scope addition (the agent-surface scope the design propos
 - The NOT_FOUND `f-9` row is green on both trees, as the spec expects: it documents the existing pass-through and is not the regression proof.
 - Files modified: `services/xstockstrat-agent/tests/test_tool_errors.py`, `services/xstockstrat-agent/tests/test_tools.py`
 - Deviations: none
+
+### Step 18 — docs: `mcp-tools.md` score errors and AGENT-10 [done]
+- `mcp-tools.md`: the `UNAVAILABLE` pass-through bullet now lists `formula version unavailable — grade unchanged` beside the fundamentals string (`manage_strategy` score). The score error table gained the NOT_FOUND "formula <ids> is not readable" row after the fundamentals-excluded row, and the gate-off `UNAVAILABLE: formula version unavailable — grade unchanged` row after the fundamentals-unknown row. AGENT-10 now says `_SCORE_UNAVAILABLE_PASS` carries two analysis strings, the second mirroring `servicer.py#_FORMULA_VERSION_UNKNOWN_MSG`; the site count stays N=3 (one allow-list per call site). Discovery: `_FORMULA_VERSION_UNKNOWN_MSG` at `servicer.py:7666`, the allow-list at `tools.py:242-247`, the NOT_FOUND text at `servicer.py:2759-2764`.
+- TDD: N/A (docs). Baseline (`.sdd-logs/v-1.log`, exit=1): all three greps printed nothing. Green (`.sdd-logs/v-2.log`, exit=0): `109:  \`formula version unavailable — grade unchanged\` (\`manage_strategy\` score) and`, `622:| \`score\` while a referenced formula's version cannot be read (fundamentals gate off) | …`, `620:| \`score\` when a referenced formula is not readable …`, `25:| **AGENT-10** | …`.
+- Config-key wiring gate (last step, `--final`): `node scripts/check-config-wiring.mjs --final` (`.sdd-logs/v-3.log`, exit=0); it printed only two `REPORTED:` baseline findings on keys this feature does not touch (`marketdata/fundamentals.provider`, `platform/trading_state`, `readers-disagree`).
+- All 18 steps done. Status `in-progress` → `code-completed`.
+- Files modified: `docs/runbooks/mcp-tools.md`, `services/xstockstrat-agent/docs/context-constitution.md`
+- Deviations: none

@@ -822,7 +822,7 @@ ruff check . && ruff format --check .
 
 ### Step 18 — docs: `mcp-tools.md` score errors and AGENT-10
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `docs/runbooks/mcp-tools.md` — modify
