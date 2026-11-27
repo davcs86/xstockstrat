@@ -745,3 +745,40 @@ Up-front confirmation: the operator approved the plan with this record (binding,
 - TDD: green per Step 1 (unit red→green); `grep -c 'warnUnlessDone(ctx, '` = 8; both kept WARNs present.
 - Files modified: `services/xstockstrat-marketdata/internal/service/marketdata_service.go`
 - Deviations: Deviation 1 (shared).
+
+## Session 2026-11-27 — sdd-execute sequential (sdd-batch-execute), unit C (Steps 3+4)
+
+- Tree: detached at `origin/feature/fix-marketdata-miss-path-noise` @ `baf10104`. Every Step 3/4 anchor was
+  re-grepped, and all symbols are present at shifted lines: `processAccountDeregistered` `:1590`, the
+  `processPositionSync` stop closure `:1667`, `processBracketUpdate` `:1746`, `processBalanceSync` `:1794`,
+  `UpdatePositionBracket` `r.pool.Exec` `portfolio_repo.go:379`.
+- Tooling: go1.27.0 ✓ · golangci-lint ✓ v2.14.0 built with go1.27.0 (`$(go env GOPATH)/bin`, first on `PATH`).
+- Config-key wiring gate: not applicable (no config key or migration in this unit).
+
+### Step 3 — test: portfolio cancel-quiet tests (deregistration, bracket, balance) [done]
+- Unit C (Steps 3+4, one commit). Appended the nine specced tests to `portfolio_sync_cancel_test.go`, plus
+  inline payload builders (`deregisterPayload`, `bracketPayload`, `balancePayload`) and `failingCanceledDB` (C-13:
+  one consumer each, this file).
+- TDD red, run against the pre-unit tree:
+  - Deregistration: `…CanceledCtxMakesNoWrite` failed with "err = <nil>, want context.Canceled" and "execs = 2,
+    want 0". `…WriteThatSeesCancellation…` failed with "execs = 2, want 1" and "1 WARN records".
+    `…CanceledIsNeverParked` failed with "err = <nil>".
+  - Bracket: `TestProcessBracketUpdate_DoneCtxWriteFailureLogsNoWarn` hit the predicted nil-pointer panic in
+    `pgxpool.(*Pool).Exec` at `portfolio_repo.go:379`.
+  - Balance, in a supplementary run: `…DoneCtxWriteFailureLogsNoWarn` failed with "1 WARN records … upsert
+    account balance failed". The live-ctx characterization controls passed.
+- Green: Step 3's targeted tests show 28 `--- PASS` and 0 FAIL, the nine new tests included. Module total is 79.1%
+  (≥ 40%), golangci-lint reports 0 issues, and the full Verification exits 0.
+- Files modified: `services/xstockstrat-portfolio/internal/service/portfolio_sync_cancel_test.go`
+- Deviations: Deviation 2 (Verification shell framing; supplementary RED and count runs).
+
+### Step 4 — service: portfolio cancel-quiet in the deregistration, bracket and balance consumers [done]
+- Unit C. In `processAccountDeregistered`, a `stop` closure (Debug `account deregistration stopped: context done`,
+  returning `ctx.Err()`) is now checked before each delete and inside each delete's error branch. The bracket
+  and balance write-error branches log Debug and return on a done ctx; both stay void and `ackAlways`.
+  `UpdatePositionBracket` uses `r.db.Exec`. `processOrderFill`, `ackAlways`, `observed` and the wiring are
+  unchanged.
+- TDD: green per Step 3 (unit red→green). `stopped: context done` appears 4 times, both `ackAlways` wirings are
+  present, and there is no `r.pool.Exec`.
+- Files modified: `services/xstockstrat-portfolio/internal/service/portfolio_service.go`, `services/xstockstrat-portfolio/internal/repository/portfolio_repo.go`
+- Deviations: Deviation 2 (shared).

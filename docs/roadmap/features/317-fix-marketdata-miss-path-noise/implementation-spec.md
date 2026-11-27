@@ -367,7 +367,7 @@ Plus Step 1's Verification (tests, coverage, lint), which is the unit's green ru
 
 ### Step 3 — test: portfolio cancel-quiet tests (deregistration, bracket, balance)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/service/portfolio_sync_cancel_test.go` — modify (append tests)
@@ -437,7 +437,7 @@ All pass with Step 4 applied; total ≥ 40%. New logic is in excluded packages (
 
 ### Step 4 — service: portfolio cancel-quiet in the deregistration, bracket and balance consumers
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/service/portfolio_service.go` — modify
@@ -1056,3 +1056,18 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Disposition**: CI-equivalent fallback — commands and judgment unchanged; only the shell framing.
 - **Anchors**: line numbers moved after the BRANCH SYNC (e.g. `fetchAndCacheBars` `:410` → `:418`,
   `ingestRecentBarsForTimeframe` `:1410` → `:1434`); every symbol and message was found, so this is not a deviation (F-04).
+
+### Deviation 2 — Steps 3+4: union Verification shell framing; supplementary RED/count runs (2026-11-27)
+
+- **Spec said**: the Step 3 and Step 4 `**Verification**` blocks, each line run as written.
+- **Actual**: the same framing as Deviation 1. Each line ran unchanged, in its own subshell from the repo root, and
+  the lines were chained with `&&`. The pinned `golangci-lint` v2.14.0 came first on `PATH`. Step 4's
+  `r\.pool\.Exec` "no match" grep ran as `! grep …`, so a match fails the chain; its trailing `# …` comments were
+  dropped. Two runs were added beyond the Verification. Step 3's bracket nil-pointer panic (the predicted RED)
+  aborts the test binary before the balance tests, so a second RED run covered `TestProcessBalanceSync_*` alone.
+  A `-v` re-run of Step 3's first line counted the executed tests (28 PASS, 0 FAIL).
+- **Disposition**: CI-equivalent fallback. The commands and the judgment are unchanged; only the shell framing
+  differs, plus diagnostic runs.
+- **Anchors**: lines moved after BRANCH SYNC (e.g. `processAccountDeregistered` `:1569` → `:1590`,
+  `processBracketUpdate` `:1725` → `:1746`, `processBalanceSync` `:1773` → `:1794`). Every symbol was found, so
+  this is not a deviation (F-04).

@@ -376,7 +376,7 @@ func (r *PortfolioRepo) UpsertPositionFromSync(ctx context.Context, userID, symb
 // UpdatePositionBracket sets or clears a position's bracket leg order IDs. Empty ID = "cleared":
 // NULLIF maps it to NULL so scanPositionRow's COALESCE round-trips back to "".
 func (r *PortfolioRepo) UpdatePositionBracket(ctx context.Context, userID, symbol, tradingMode, accountID, stopOrderID, takeProfitOrderID string) error {
-	_, err := r.pool.Exec(ctx, `
+	_, err := r.db.Exec(ctx, `
 		UPDATE portfolio.positions
 		SET stop_order_id = NULLIF($5, ''), take_profit_order_id = NULLIF($6, '')
 		WHERE user_id = $1 AND symbol = $2 AND trading_mode = $3 AND account_id = $4
