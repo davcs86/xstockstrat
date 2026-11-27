@@ -748,3 +748,16 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - [ ] Step 16's import check may force the fallback (a second TS copy of the wire token in the fixture module); the executor must report it at the checkpoint.
 - [ ] The `sdd-batch-setup` approval record is stale (now 23 steps); `/sdd-execute` must re-confirm before Step 15.
 - [ ] The re-review the ruling asks for is this self-review; a subagent `/sdd-review ... impl-spec` run remains available.
+
+## Session 2026-11-27 — operator ruling on the card arm condition, recorded by the orchestrator (verbatim)
+
+- Operator ruling (2026-11-27). Open item raised by the re-spec, verbatim: "Step 21's arm is keyed on provenance only, as ruled. If EvaluateReadiness returns real conditions while the stored row still carries evaluation_failed, the arm hides them. You need to decide whether to also require an empty readiness row." The orchestrator's list item B4, verbatim: "308: the new card arm is keyed only on evaluation_failed provenance. Also require an empty readiness row?" Operator's answer, verbatim: "B4 yes".
+- Changed (spec only, by hand; Steps 1-14 untouched; spec hash changes, as expected):
+  - Step 21: the arm is taken only when the row's provenance includes `EVALUATION_FAILED_PROVENANCE` AND the readiness row is empty. One `noConditions` const (`!readiness || readiness.conditions.length === 0`) now defines emptiness for both the new arm and the existing "no conditions" arm. With real conditions present, the card renders them as today. Evidence, Instructions and Verification updated (a grep that the expression exists once).
+  - Step 22: adds a negative test (stored row `evaluation_failed`, `EvaluateReadiness` returns `symbolReadiness('MYSZ')` with its 2/3 conditions: conditions render, arm absent) and a mutation run (drop `&& noConditions`, confirm the negative test fails, restore). No component-level unit harness exists for this card (vitest covers `src/lib/**` in node), so the guard is e2e; extracting a helper would be speculative.
+  - Execution Summary / Decisions text: the O-9 bullet records the third ruling.
+- Self-review (no subagent tool in this run): Evidence, Instructions, Verification and TDD of Steps 21-22 are consistent; no new fixture (C-12), no color literal (C-17); the negative test is not red before Step 21, which Step 22 states, and its value is carried by the mutation run. Verdict: PASS, no ✗.
+
+### Open Threads
+
+- [x] The "arm keyed on provenance only" open thread of the 2026-11-26 readiness-card session is resolved by this ruling.

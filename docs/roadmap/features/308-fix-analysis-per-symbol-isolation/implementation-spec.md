@@ -59,6 +59,9 @@ documents it in `docs/runbooks/mcp-tools.md`.
   ruling; a second ruling the same day ("Add a card arm in 308") adds it: Steps 21-22. Before 308 a
   failing `EvaluateReadiness` raised and the card said "Failed to evaluate readiness"; Step 9 now
   returns an empty 0-of-0 row, which the card would render as "no entry conditions to evaluate".
+  A third ruling (2026-11-27, "B4 yes") narrows the arm: it renders only when the row's provenance
+  includes `evaluation_failed` AND the readiness row is empty (no conditions); real conditions from a
+  live `EvaluateReadiness` still render as today, even while the stored row is stale-marked.
 - **Degraded-rate alerting** is deferred to a named follow-up feature, slug
   `analysis-isolation-degraded-counter` (a counter `analysis.isolation.degraded{site}` plus an alert
   rule). Until it lands a sustained degraded rate shows only in WARN/ERROR logs and span attributes.
@@ -1255,6 +1258,13 @@ grep -n "MYSZ_EVALUATION_FAILED_OPPORTUNITY" e2e/fixtures/INVENTORY.md e2e/trade
   `SymbolReadiness` without the unreadable marker (Step 9; wording in Step 23 Instruction 2), where it
   used to raise and show the error line. Without an arm the card reads "no conditions" under a header
   that says "evaluation failed" (Step 19).
+- Why the arm also requires an empty row (operator ruling 2026-11-27): the stored provenance marker
+  clears only on the next recompute, so a live `EvaluateReadiness` can return real conditions while
+  the row still says `evaluation_failed`; a provenance-only arm would hide them. The existing
+  `!readiness || readiness.conditions.length === 0` expression already defines "empty" in this chain.
+- No component-level unit harness exists for this card (vitest is node-env over `src/lib/**`), and
+  extracting the condition into a `src/lib` helper would be speculative, so the guard is Step 22's
+  negative e2e case plus its mutation run.
 
 **TDD**: `red-green required`
 
@@ -1262,16 +1272,18 @@ grep -n "MYSZ_EVALUATION_FAILED_OPPORTUNITY" e2e/fixtures/INVENTORY.md e2e/trade
 
 **Instructions**:
 1. Add `EVALUATION_FAILED_PROVENANCE` to the line-13 `readinessCue` import (exported by Step 15).
-2. After `isHeld` derive
+2. After `readiness` (line 56) derive
+   `const noConditions = !readiness || readiness.conditions.length === 0;` and, after `isHeld`,
    `const evalFailed = pairRow?.provenance.includes(EVALUATION_FAILED_PROVENANCE) ?? false;`.
-3. Add an arm after the `readiness?.formulaUnreadable` arm and before the `!readiness ||
-   readiness.conditions.length === 0` arm:
+   Replace the existing chain test `!readiness || readiness.conditions.length === 0` with
+   `noConditions` so the emptiness rule lives in one place.
+3. Add an arm after the `readiness?.formulaUnreadable` arm and before the `noConditions` arm, taken
+   only when `evalFailed && noConditions`:
    `<div role="status" data-testid="readiness-evaluation-failed"><CardNotice>Evaluation failed for
    {symbol}.</CardNotice></div>`. The `error` arm still wins (a failed RPC keeps its own message). No
    color literal; `CardNotice` already carries the design tokens (C-17).
-4. Keyed on the row's provenance only, as ruled. A provenance row that is stale against a live
-   `EvaluateReadiness` that now returns conditions would also take this arm until the next recompute;
-   that edge is recorded in context.md Open Threads, not handled here.
+4. When the row carries `evaluation_failed` but `EvaluateReadiness` returns conditions, no arm is
+   taken and the conditions render exactly as today (operator ruling 2026-11-27).
 
 **Verification**:
 ```bash
@@ -1279,7 +1291,8 @@ cd services/xstockstrat-ui
 pnpm run lint
 pnpm exec tsc --noEmit
 pnpm exec playwright test e2e/trader/position-detail.spec.ts
-grep -n "readiness-evaluation-failed\|EVALUATION_FAILED_PROVENANCE" src/components/insights/SignalReadiness.tsx
+grep -n "readiness-evaluation-failed\|EVALUATION_FAILED_PROVENANCE\|noConditions" src/components/insights/SignalReadiness.tsx
+grep -c "readiness.conditions.length === 0" src/components/insights/SignalReadiness.tsx   # expect 1 (the noConditions definition)
 grep -rn "'evaluation_failed'" src | grep -v "src/lib/readinessCue.ts"   # expect no output
 ```
 
@@ -1324,8 +1337,17 @@ grep -rn "'evaluation_failed'" src | grep -v "src/lib/readinessCue.ts"   # expec
    Assert `readiness-evaluation-failed` is visible (timeout 30000) with text `Evaluation failed for
    MYSZ`, `readiness-formula-unreadable` has count 0, and `getByText('conditions to evaluate')` has
    count 0.
-3. `INVENTORY.md`: append this test to the consumer column of the Step 16 row.
-4. RED: with `SignalReadiness.tsx` checked out at the pre-Step-21 commit, the test id is absent.
+3. Negative case (operator ruling 2026-11-27), a second test in the same describe: the same setup
+   (`watchlist`, `routeEvaluationFailedRow`), but `EvaluateReadiness` is overridden with
+   `fulfillJson(route, { readiness: [symbolReadiness('MYSZ')] })` (the factory's own 2/3 conditions, no
+   override). Assert `getByText('2/3 conditions')` is visible within `signal-readiness` (timeout 30000),
+   `readiness-evaluation-failed` has count 0, and `readiness-formula-unreadable` has count 0.
+4. `INVENTORY.md`: append both tests to the consumer column of the Step 16 row.
+5. RED: with `SignalReadiness.tsx` checked out at the pre-Step-21 commit, the positive test fails
+   (test id absent); the negative test passes there and is not red. Its value is the mutation run:
+   after Step 21, temporarily change the arm to `evalFailed` alone (drop `&& noConditions`), run the
+   spec, and confirm the negative test fails; then restore. Record the failing output in the step's
+   session notes.
 
 **Verification**:
 ```bash
@@ -1335,7 +1357,8 @@ pnpm exec tsc --noEmit
 pnpm exec playwright test e2e/trader/position-detail.spec.ts
 pnpm run test:coverage   # the UI logic-layer gate (vitest); Playwright steps carry no threshold
 grep -n "from '../fixtures'\|from './fixtures'\|helpers/auth" e2e/trader/position-detail.spec.ts
-grep -n "readiness-evaluation-failed" e2e/trader/position-detail.spec.ts e2e/fixtures/INVENTORY.md
+grep -n "readiness-evaluation-failed\|2/3 conditions" e2e/trader/position-detail.spec.ts
+grep -n "readiness-evaluation-failed" e2e/fixtures/INVENTORY.md
 ```
 
 ---
