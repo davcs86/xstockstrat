@@ -1033,3 +1033,35 @@ the first body line of the re-spec commit below.
 - Files modified: `services/xstockstrat-agent/tests/test_extract_call_budget.py`,
   `services/xstockstrat-agent/tests/test_tools.py`, `services/xstockstrat-agent/tests/test_tool_deadlines.py`
 - Deviations: see the Step 5 entry.
+
+## Session 2026-11-27 — sdd-execute sequential (sdd-batch-execute, step 7)
+
+- Tooling: uv ✓, python ✓ 3.13.18 (`uv sync --extra dev` in the agent), ruff ✓ (uv). Pre-commit hook
+  check: hook=0. Discovery: every Step 7 symbol was confirmed at `origin/feature/fix-mcp-deadline-budget`
+  @ `cc1bb49c`. The anchors have drifted: the ceiling row is at `configServiceImpl.ts:153` (`maxValue: 44`),
+  the `list_opportunities` legs are at `tools.py:1977-1989`, and `_POLICY_READ_TIMEOUT_S` is at `tools.py:2895`.
+
+### Step 7 — test: `@AC-2` `list_opportunities` worst case at the SetConfig ceiling [done]
+- Added `test_ac2_worst_case_at_setconfig_ceiling_stays_under_57s`. It parses the ceiling from
+  `configServiceImpl.ts`, then composes three faked legs on an injected `_Clock`:
+  - auth: the identity stub fake advances the clock by `timeout - 0.001` and returns claims bound to
+    `AGENT_PUBLIC_URL`;
+  - policy: the `_agent_policy` fake advances by `_POLICY_READ_TIMEOUT_S - 0.001` and returns the ceiling;
+  - analysis: the `client.list_opportunities` fake advances by the `timeout` it was given and raises
+    `_rpc_error(DEADLINE_EXCEEDED)`.
+- The test asserts `deadline exceeded` and `within 44s` in the `ToolError`, and `clock.now <= 57.0`. It also
+  runs the same composition at the defect's ceiling 55 and asserts the result is `> 57`.
+- AC-2 red (working-tree mutation of the row to `maxValue: 55`, never committed), `.sdd-logs/v-2.log`:
+  `AssertionError: worst case 67.998s at ceiling 55 exceeds 57 s`, `1 failed, 848 passed`.
+- The mutation was restored with `git checkout -- services/xstockstrat-config/src/grpc/configServiceImpl.ts`.
+  Afterwards a root `git status --short` showed only the test file.
+- Green, `.sdd-logs/v-3.log`:
+  - ruff: `All checks passed!` / `80 files already formatted`;
+  - pytest: `849 passed`;
+  - coverage: `Required test coverage of 40% reached. Total coverage: 88.62%`.
+- Run `v-1` was a ruff E501 on the new test, fixed before the RED run.
+- Worst case at ceiling 44: 56.998 s (≤ 57), so the fallback to 43 does not apply.
+- Config-key wiring gate: not applicable. This test step touches no config key and no migration.
+- Files modified: `services/xstockstrat-agent/tests/test_list_opportunities_deadline.py`
+- Deviations: the Verification block's `git status` line is vacuous after its `cd`, and the block's exit
+  semantics hide the earlier exits (Deviation Log, no spec edit).

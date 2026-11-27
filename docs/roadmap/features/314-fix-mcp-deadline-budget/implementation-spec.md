@@ -749,7 +749,7 @@ website cases raise no `ToolError`, the budget-guard and real-reader cases fail 
 
 ### Step 7 — test: `@AC-2` `list_opportunities` worst case at the SetConfig ceiling
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_list_opportunities_deadline.py` — modify
@@ -1028,3 +1028,15 @@ _Populated by /sdd-execute as implementation proceeds._
   `All checks passed!`, `80 files already formatted`, `848 passed`, coverage `TOTAL … 89%` with the 40 %
   gate reached. Step 5: ruff clean, and the wiring check printed only the two pre-existing `REPORTED:`
   lines. `check-config-wiring --final` was also run on its own and exited 0. No spec edit.
+
+### Step 7 — Verification block: vacuous `git status` line and exit semantics (2026-11-27)
+- **Spec said**: Step 7's block runs `git status --short services/xstockstrat-config/` to show that the
+  RED mutation was restored, and ends with a C-13 `grep`.
+- **Actual**: the block's first line `cd`s into `services/xstockstrat-agent`, so the `git status` pathspec
+  resolves to a directory that does not exist. git prints `could not open directory
+  'services/xstockstrat-agent/services/xstockstrat-config/'` and the check passes vacuously. The block's
+  exit is the trailing grep's exit, so it also hides the ruff and pytest exits.
+- **Disposition**: the block was run verbatim and judged from its logs. The restore was checked
+  separately with `git status --short` from the worktree root, which showed only the step's test file. Run
+  `.sdd-logs/v-1.log` failed on ruff E501 in the new test, not on the behaviour, so it does not count as RED.
+  RED is `.sdd-logs/v-2.log` and GREEN is `.sdd-logs/v-3.log`. No spec edit.
