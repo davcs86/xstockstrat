@@ -60,6 +60,7 @@ const GROUPS: { tab: string; items: { label: string; href: string }[] }[] = [
       { label: 'Signal sources (admin)', href: '/config-ui/sources' },
       { label: 'Audit log', href: '/config-ui/audit' },
       { label: 'Authorized apps', href: '/accounts/authorized-apps' },
+      { label: 'Single sign-on', href: '/accounts/sso' },
       { label: 'MCP tools', href: '/accounts/mcp-tools' },
     ],
   },

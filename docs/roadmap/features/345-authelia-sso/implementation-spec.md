@@ -2006,7 +2006,7 @@ pnpm exec playwright test --list > /dev/null
 
 ### Step 53 — test: The serial SSO e2e file, the local cases and nav reachability
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/sso/sso.spec.ts` — create
