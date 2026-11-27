@@ -1,6 +1,6 @@
 # Implementation Spec: fix-orphaned-code
 
-**Status**: `pending`
+**Status**: `complete`
 **Created**: 2026-11-20
 **Feature**: `docs/roadmap/features/323-fix-orphaned-code/feature.md`
 **Total Steps**: 9
@@ -593,7 +593,7 @@ git ls-files services/xstockstrat-agent/app/config/watcher.py                   
 
 ### Step 9 — service: ui — state when the `PortfolioPanel` combined view renders
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/trader/PortfolioPanel.tsx` — modify

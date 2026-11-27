@@ -605,3 +605,23 @@ Two rulings on the open items the previous re-spec raised, relayed by the orches
 - TDD: N/A (verification-only: no agent file or test changes; commands green before and after).
 - Files modified: none outside `docs/roadmap/features/323-fix-orphaned-code/` (`context.md`, `implementation-spec.md` Status)
 - Deviations: none
+
+### Step 9 — service: ui — state when the `PortfolioPanel` combined view renders [done]
+- Added a 2-line constraint comment immediately above `if (selectedAccountId) {` in `PortfolioPanel.tsx` (now `:85-86`, the `if` at `:87`): the combined view below renders when no account is selected (none active, or the account fetch failed). No code line touched. UI findings: removed the `PortfolioPanel` row from `## Dead / orphaned code` (the struck-through `insightsBff.test.ts` row stays) and added a `RESOLVED (feature 323)` row at the head of `## Resolved` (disproved, branch kept; cites `AccountContext.tsx#firstActive`, `e2e/trader/offline-pnl.spec.ts`, durable `@AC-30`; keeps the pointer that the combined "Book" surface is `src/app/trader/portfolio/page.tsx`).
+- TDD: red N/A — comment-only, no behavior change (the step's allowed escape). Green: `git diff HEAD -- src/components/trader/PortfolioPanel.tsx | grep '^[-+][^-+]'` printed exactly the two added comment lines, no removed line; `pnpm run lint` rc 0 (0 errors, warnings only); `pnpm build` rc 0 (`checkThemeBundle: staging bundle OK (3 css files)`); `pnpm exec playwright test e2e/trader/offline-pnl.spec.ts --project=chromium --no-deps --timeout=240000`: `12 passed (1.8m)`, including both `All accounts` combined-panel tests (`@AC-30`, feature 256 `@AC-3`).
+- Harness note: the verbatim `playwright test e2e/trader/offline-pnl.spec.ts` failed twice at the `[setup] pre-warm SSR routes` project (fixed 10 s test timeout exceeded by the cold `next dev` compile; `12 did not run`), and one run hit `EADDRINUSE 127.0.0.1:9091` because a sibling session's Playwright run held the mock ports (not killed; waited for it to exit). The passing run used `--project=chromium --no-deps --timeout=240000`, which skips only the warm-up project and runs the same spec file. `python3 scripts/run-e2e.py` was not used (no image build).
+- C-12/C-17: no test, fixture, token or component added or changed.
+- Files modified: `services/xstockstrat-ui/src/components/trader/PortfolioPanel.tsx`, `services/xstockstrat-ui/docs/context-constitution-findings.md`
+- Deviations: none (the Playwright flags above change how the unchanged spec is launched, not what it asserts)
+
+## Session 2026-11-27 — sdd-execute (by hand) — session end
+
+**Steps this session**: 7, 8, 9
+**Progress**: 9 done / 9 total
+**Stopped at**: all complete (`status.md` -> `code-completed`; `feature.md` history row added; spec header `complete`). `node scripts/check-config-wiring.mjs --final` rc 0 (two unrelated `REPORTED:` readers-disagree lines, as in Step 7).
+**Next**: integration PR `feature/fix-orphaned-code` -> `main-dev`, the merge-order gate (`merge-order.md`) and the C-16 promotion of `@AC-1`..`@AC-3` are left to the batch runner with the operator's confirmation. No ledger entry written (nothing generalizable beyond the existing Step 4 lock-gate note).
+
+Accountability:
+- Out-of-scope changes: none
+- Open questions / items: stale text listed earlier in this log (`product-spec.md`, `design.md` D-3, `feature.md` Summary, `merge-order.md:129`, agent findings `:36`) remains unedited; the vestigial per-service `pnpm-lock.yaml` files are recorded in the root findings (D-11)
+- Unaddressed review warnings: none new from this session
