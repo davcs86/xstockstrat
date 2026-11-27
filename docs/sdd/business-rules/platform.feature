@@ -2093,6 +2093,7 @@ Feature: Platform-wide guarantees
     Then the registered keys are "fmp.cache_ttl_hours" and "finnhub.cache_ttl_hours"
     And the gate exits 0 and reports no prefixed-read finding for them
 
+  # Superseded by @feature-321 @AC-4 (user sign-off 2026-11-20, feature 321 design.md § Business Rules Touched); text intentionally not rewritten.
   @AC-14 @FR-4 @feature-304
   Scenario: The broker.paper defect entry is respelled and stays owned by its defect
     Given scripts/config-wiring.json holds a read-unseeded entry for namespace "trading" and key "trading.broker.paper" owned by defect 2026-11-06-trading-broker-paper-env-derived-default-unseedable
@@ -2737,3 +2738,15 @@ Feature: Platform-wide guarantees
       | Node    | xstockstrat-config     |
       | Python  | xstockstrat-analysis   |
       | Python  | xstockstrat-agent      |
+
+  # guards: docs/reports/2026-11-06-trading-broker-paper-env-derived-default-unseedable-defect.md
+  # Supersedes @feature-304 @AC-14 (the broker.paper baseline entry is removed, not respelled).
+  @AC-4 @regression @feature-321
+  Scenario: trading.broker.paper is seeded per environment and falls back to the application environment
+    Given the config catalog row for trading.broker.paper has an environment-derived default
+    When the config seed migrations run for staging and production
+    Then trading.broker.paper is stored true in staging and false in production, never one literal for both
+    And a row that already exists is left unchanged
+    And with no stored row trading resolves paper unless APPLICATION_ENV is production, whatever TRADING_MODE says
+    And staging resolves to paper and production resolves to live
+    And scripts/config-wiring.json holds no entry for trading.broker.paper and "node scripts/check-config-wiring.mjs --final" exits 0 with no read-unseeded or STALE line for it
