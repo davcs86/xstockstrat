@@ -1182,3 +1182,21 @@ Fixes, applied identically to every pending block:
 - Merge-base is used in place of bare `origin/main-dev` because the branch is not always synced to `main-dev` (Step 8's evidence records `CLAUDE.md` differing between the two trees).
 
 Steps fixed: 2, 3, 4, 5, 6, 7, 8. Re-run Step 2 onward with the updated blocks verbatim.
+
+## Session 2026-11-27 — sdd-execute sequential (sdd-batch-execute), step 2
+
+- Tooling (step 2): uv ✓ 0.11.32 · `uv sync --extra dev` in `services/xstockstrat-analysis` ⬇ (the service `.venv` resolved Python 3.12, not the 3.13 pin) · ruff ✓ 0.16.9 (host; CI installs unpinned `ruff`) · pytest ✓ (service `.venv`, put first on `PATH` for each run). Hook check hook=0.
+
+### Step 2 — service: a `system` owner degrades in the P&L consumer [done]
+- Added `is_real_owner(owner)` to `app/identity.py` (no import added); `owner_metadata`'s guard now calls it, with the raise, message and return unchanged. `pnl_pattern_consumer.py` uses it at the import, the `_compose` `meta` line (still outside the `try`), the `_compose` degrade branch, and the `_handle_order_event` window guard (ruff format wrapped that guard onto three lines). `_POISON`, `_process_with_retry`, `_synth_position_id`, `_handle_close_event` and the other `SYSTEM_IDENTITY` users are unchanged.
+- TDD (no `**Covers**`; AC-2's own test is Step 3). RED: Verification run `.sdd-logs/v-1.log` `exit=1`. ruff and the 77 tests passed, and the final `is_real_owner` count check failed because the predicate did not exist yet. A behaviour probe outside the repo (the AC-2 shape: `_process_with_retry` on `{**ORDER_PAYLOAD, "user_id": "system"}` with the `sleeps` patch, not committed) failed with `Expected mock to not have been awaited. Awaited 2 times.` and logged `attempt 3/3 failed: ValueError("owner-scoped call needs a real owner, got 'system'")` and then `parking event seq=1`. GREEN: `.sdd-logs/v-2.log` `exit=0`: `All checks passed!`, `143 files already formatted`, `77 passed`. The same probe passed (`1 passed`). Full suite `pytest --cov=app --cov-fail-under=40`: `1826 passed`, `Total coverage: 91.89%`.
+- The block reports only its last line's status, so the two other root-level checks were run separately: the `test_identity.py` diff against merge-base `f802b184` is empty, and the counts are `identity.py:2` and `pnl_pattern_consumer.py:4`.
+- Config-key wiring gate: not applicable (no config key).
+- Files modified: `services/xstockstrat-analysis/app/identity.py`, `services/xstockstrat-analysis/app/engine/pnl_pattern_consumer.py`
+- Deviations: none
+
+## Open Threads
+
+- [ ] The Step 2 Verification block's `exit=` reflects only its last command (no `set -e`), so an earlier `test` line failing would not change it. Steps 3-8 share the shape. Target: operator, or the executor re-checking each line as done here.
+- [ ] Step 3 RED must run on the pre-Step-2 tree (its instruction 4). Step 2 is now on the branch, so on the current tree the new test passes at once. The probe output above shows the expected RED message. Target: Step 3.
+- [ ] Carried: `@AC-3` PRESERVE comment file placement (operator), `**kw` spy rename risk (Step 7), two-header residual (Step 6), analysis findings `:24`/`:32` stale after Steps 2-3 (no step), merge-order row for 313/309.

@@ -246,7 +246,7 @@ grep -c '2026-11-26' debate.md                                                  
 
 ### Step 2 — service: a `system` owner degrades in the P&L consumer
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/identity.py` — modify
