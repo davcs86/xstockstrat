@@ -85,3 +85,14 @@
 - **OPERATOR (O-34): "Show me the exact text first"** — spec and scenario amendments NOT applied.
   The before/after text was shown in session; awaiting the answer.
 - **OPERATOR (design gate): "Run another round"** — round 5 started. Not approved.
+
+## Session 2026-11-27 — sdd-design round 5
+
+- Round 5 run at the operator's request. Proposer self-review and adversary audit of design.md.
+  No Floor breach, no C-16 regression. Nine new objections (O-54..O-62), four blocking.
+- Three reopen petitions are pending the operator: P-1 (D-43 slot release), P-2 (D-42 worst-case
+  figure, replaced by invariants), P-3 (D-34/D-44 heartbeat period, fixed 7.5 s). Both sides
+  recommend accepting all three.
+- O-34 (spec wording) is still with the operator; the before/after text was shown in session,
+  with a proposed `@AC-18` for the 30-day deletion.
+- design.md not yet amended for round 5; corrections wait for the operator's rulings.

@@ -2,7 +2,7 @@
 
 **State**: in-debate
 **Mode**: full (round cap lifted by operator override, context.md 2026-11-27)
-**Rounds run**: 4
+**Rounds run**: 5
 
 ## Rounds
 
@@ -12,6 +12,7 @@
 | 2 | 2026-11-27 | /sdd-design | 13 | 7 | 16 | 15 | 0 | yes |
 | 3 | 2026-11-27 | /sdd-design | 12 | 3 | 27 | 14 | 0 | yes |
 | 4 | 2026-11-27 | /sdd-design | 5 | 0 | 5 | 5 | 0 | yes |
+| 5 | 2026-11-27 | /sdd-design | 0 | 0 | 0 | 9 | 3 | yes |
 
 ## Settled Decisions
 
@@ -146,9 +147,21 @@
 | O-51 | 4 | The worst-case takeover bound left out the rest of the maintenance tick, so "170 s at defaults" was not an upper bound. | yes | closed @ round 4 (D-42) |
 | O-52 | 4 | Adoptions did not fit together: the gate could be released twice; "inside a database block" was ambiguous for a stop; no step owned the slot release; `AttemptStopped` escaping the handler task would log an ERROR. | no | closed @ round 4 (D-43) |
 | O-53 | 4 | Text corrections: control-pool statement cache, `spawn` for runner tasks, enqueue-versus-prune race, lowered `max_attempts`, no alert shipped, the overstated contract-test guard, named doc lines, conditional `@AC-17`. | no | closed @ round 4 (design.md amended; D-44, D-45) |
+| O-54 | 5 | A runner that is only retrying its report holds no slot (D-43), while the lane is assumed bounded by `worker_concurrency` writes (D-42). Under a report that fails every time, claims keep refilling slots: retrying runners, the heartbeat batch and the lane queue grow without limit, every lease self-fences, and reap and settle starve. Resolution needs petition P-1. | yes | open |
+| O-55 | 5 | The worst-case takeover figure (322 s at defaults) omits the rest of a reap that just missed the expiry and depends on O-54 and O-57; derived independently it is `lease_seconds` + 105 + 70 × `worker_concurrency` (445 s at defaults). The figure has been wrong three times; the adversary recommends stating the bounding invariants instead of a number. D-34's worst-case clause is still on record. Resolution needs petition P-2. | yes | open |
+| O-56 | 5 | Lowering `lease_seconds` at runtime (600 → 45) while the heartbeat sleeps on its old 100 s period lets a newly claimed job reach its 42 s fence before its first renewal; it self-fences and can burn two attempts. Waking the sleep is not possible under `run_supervised` (`app/supervision.py:68`) without contradicting D-32. Resolution needs petition P-3. | yes | open |
+| O-57 | 5 | A runner about to report leaves the heartbeat batch before it has the control lane; while it queues it is renewed by nobody, for up to (`worker_concurrency` + 1) × 8 s, above the 45 s floor at concurrency 5 or more. Fix within the register: take the lane first, then become `reporting`, then wait for an in-flight batch. | yes | open |
+| O-58 | 5 | Reap and settle do not say how candidate rows are locked; two instances' set-based UPDATEs can deadlock or block each other for up to 8 s. Fix: select candidates with `ORDER BY job_id FOR UPDATE SKIP LOCKED`. | no | open |
+| O-59 | 5 | Unspecified behaviour a spec author would have to decide: what the runner writes after a lost-lease or self-fence stop; the reap's `next_attempt_at`, `error_class` and `last_error`; that settle transitions are not counted as attempts; invalid `WaitOn`, round 8 and empty verdict labels; the verdict strings; gate release when the gate was never acquired; the post-acquire stop rule; a handler task that ends cancelled after a stop; disabled-tick delay; maintenance tick delay; the settle stop rule; the first-renewal window after a claim; the lag term on the normal-latency figure; the prune cutoff read once per DELETE loop; `job.db(budget)` above 30 s. | no | open |
+| O-60 | 5 | asyncpg evidence: a repo test already shows a terminated pooled connection frees its slot (`services/xstockstrat-analysis/tests/test_read_budget_real_pg.py:148-164`), so that Open Risk can be dropped; "terminate wakes an in-flight await" and `min_size=0` are still unpinned and need stated fallbacks. | no | open |
+| O-61 | 5 | A heartbeat batch already in flight when a self-fence fires can still commit and extend that lease once, delaying takeover by up to `lease_seconds` + 6 s. Not worth designing out; to be recorded as a risk. A handler that crashes the process is re-run at once on the next instance, up to `max_attempts` times. | no | open |
+| O-62 | 5 | A prune backlog that hits the 900 s attempt deadline burns attempts and can end `dead`, a false alarm. Optional fix: the handler stops starting batches after a fixed 600 s and returns success. | no | open |
 
 ## Reopen Petitions
 
 <!-- Verdict: dropped (evidence not new — already on record at <ID>) | pending user | user reopened | user declined -->
 | ID | Round | Target | New evidence | Verdict |
 |---|---|---|---|---|
+| P-1 | 5 | D-43 (slot-release clause) | D-43 and D-42 were settled in the same round and contradict each other (`design.md` Runner and Lease timing sections); the unbounded growth under a failing report was never on record (O-54). Proposed: the slot is released by a done-callback on the runner task, which ends only after the handler has ended and its report or park is written, rejected or abandoned. Both sides recommend accepting. | pending user |
+| P-2 | 5 | D-42 (worst-case formula) and the worst-case clause of D-34 | The reap-remainder term was missing and the bound depends on P-1 and O-57 (O-55). Proposed: replace the number with the bounding invariants (FIFO lane of at most `worker_concurrency` + 2 operations; lane operation at most 8 s, a runner's at most 14 s; a maintenance tick is the settle window plus at most four lane operations; idle claim delay at most 5 s), measured by `db.duration` and `oldest_ready_age`; keep the normal-latency figure. The derived expression stays in this register as evidence. | pending user |
+| P-3 | 5 | D-34 ("heartbeat period = lease/6") and D-44 ("and the period") | Trace g fails (O-56), and `app/supervision.py:68` shows the sleep cannot be woken. Proposed: a fixed heartbeat period of 7.5 s, a recorded invariant; an empty set issues no statement. Alternative: reopen D-32 and move the wait into the tick, woken by `cfg.on_change`. | pending user |
