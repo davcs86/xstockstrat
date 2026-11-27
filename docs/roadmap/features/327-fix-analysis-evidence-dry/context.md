@@ -798,3 +798,17 @@ Effect: the C-14 agent scope addition (the agent-surface scope the design propos
 - Config-key wiring gate: not applicable (no config key).
 - Files modified: `services/xstockstrat-analysis/docs/context-constitution.md`, `services/xstockstrat-analysis/docs/scoring.md`
 - Deviations: none
+
+### Step 16 — service: the agent allow-lists the new `ScoreStrategy` UNAVAILABLE message [done]
+- Atomic unit Steps 16+17 (one red→green, one commit). `_SCORE_UNAVAILABLE_PASS` now holds both analysis strings: `"fundamentals availability unknown — grade unchanged"` and `"formula version unavailable — grade unchanged"`, a byte-exact copy of `servicer.py#_FORMULA_VERSION_UNKNOWN_MSG` (Step 11), not an import. The `manage_strategy` score error sentence adds the "formula … is not readable" NOT_FOUND variant and names both verbatim UNAVAILABLE messages. No parameter, return shape or tool name changed. Discovery: Step 11's constant is at `servicer.py:7666`, its gate-off abort at `:2727-2734`; the existing `@AC-23` literal abort is still directly after `StatusCode.UNAVAILABLE,` at `:2738-2741`.
+- TDD: red as in Step 17. Green, Step 16 Verification (`.sdd-logs/v-2.log`, exit=0): the grep printed `245:        "formula version unavailable — grade unchanged",` and `1210:        unknown — grade unchanged' and 'formula version unavailable — grade unchanged' are passed`, then `185 passed`, `All checks passed!`, `79 files already formatted`.
+- Tooling: `uv sync --extra dev` in services/xstockstrat-agent (worktree-local .venv). Config-key wiring gate: not applicable (no config key).
+- Files modified: `services/xstockstrat-agent/app/tools.py`
+- Deviations: none
+
+### Step 17 — test: the new message survives the agent verbatim and is pinned to the analysis source [done]
+- Atomic unit Steps 16+17. `tests/test_tool_errors.py`: `_FORMULA_MSG` beside `_SCORE_MSG`; the assignment pin `_FORMULA_VERSION_UNKNOWN_MSG = "{_FORMULA_MSG}"` against the analysis source; the equality is now `frozenset({_SCORE_MSG, _FORMULA_MSG})`; a mapping-table row `unavail_pass_formula` with `{"pass_messages": tools._SCORE_UNAVAILABLE_PASS}`. `tests/test_tools.py` `test_server_detail_surfaces_in_error` gained the UNAVAILABLE row (327 AC-4) and a NOT_FOUND row carrying the Step 11 text for `f-9`, taken from `servicer.py:2759-2764`. Inline rows, no new fixture (C-13).
+- TDD: AC-4 red (`.sdd-logs/v-1.log`, Step 17 Verification on the pre-Step-16 tree): `FAILED tests/test_tool_errors.py::test_mapper_table[unavail_pass_formula]`, `FAILED tests/test_tool_errors.py::test_unavailable_pass_strings_match_backend_sources` (the equality; the assignment pin already held), `FAILED tests/test_tools.py::TestManageStrategyScore::test_server_detail_surfaces_in_error[UNAVAILABLE-formula version unavailable …]` with `'UNAVAILABLE: upstream unavailable; outcome unknown, verify before retrying'`, `3 failed, 182 passed`. The block's exit was 0 only because ruff runs last. Green (`.sdd-logs/v-3.log`, exit=0): `185 passed`, the `_FORMULA_MSG` grep hit lines 23/121/123/196/203, the fixture grep printed nothing, `834 passed`, `Total coverage: 88.47%`, `All checks passed!`, `79 files already formatted`.
+- The NOT_FOUND `f-9` row is green on both trees, as the spec expects: it documents the existing pass-through and is not the regression proof.
+- Files modified: `services/xstockstrat-agent/tests/test_tool_errors.py`, `services/xstockstrat-agent/tests/test_tools.py`
+- Deviations: none

@@ -741,7 +741,7 @@ grep -n "Known limitations (feature 327)\|formula version unavailable" services/
 
 ### Step 16 — service: the agent allow-lists the new `ScoreStrategy` UNAVAILABLE message
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/tools.py` — modify
@@ -781,7 +781,7 @@ ruff check . && ruff format --check .
 
 ### Step 17 — test: the new message survives the agent verbatim and is pinned to the analysis source
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_tool_errors.py` — modify
