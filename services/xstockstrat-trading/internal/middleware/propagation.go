@@ -31,13 +31,30 @@ func WithPropagationData(ctx context.Context, data PropagationData) context.Cont
 // UnaryServerInterceptor extracts x-user-id, x-access-scope, x-trace-id from incoming
 // metadata and stores them in context for use by client interceptors downstream.
 func UnaryServerInterceptor(ctx context.Context, req interface{}, _ *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+	return handler(withIncomingPropagation(ctx), req)
+}
+
+// StreamServerInterceptor gives stream handlers the same PropagationData as
+// UnaryServerInterceptor, via the wrapped stream's Context().
+func StreamServerInterceptor(srv interface{}, ss grpc.ServerStream, _ *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
+	return handler(srv, &propagatedStream{ServerStream: ss})
+}
+
+type propagatedStream struct {
+	grpc.ServerStream
+}
+
+func (s *propagatedStream) Context() context.Context {
+	return withIncomingPropagation(s.ServerStream.Context())
+}
+
+func withIncomingPropagation(ctx context.Context) context.Context {
 	md, _ := metadata.FromIncomingContext(ctx)
-	ctx = context.WithValue(ctx, propKey{}, PropagationData{
+	return context.WithValue(ctx, propKey{}, PropagationData{
 		UserID:      first(md.Get("x-user-id")),
 		AccessScope: first(md.Get("x-access-scope")),
 		TraceID:     first(md.Get("x-trace-id")),
 	})
-	return handler(ctx, req)
 }
 
 // UnaryClientInterceptor reads PropagationData from context and injects the three headers

@@ -32,8 +32,8 @@ const ACCOUNT_STREAM_PREFIX = 'account:';
 const router = createBffRouter();
 
 router.service(TradingService, {
-  // Ownership comes from the x-user-id header, so these forward unchanged. listOrders keeps an explicit
-  // user_id — there it's a cross-user filter (empty = all), which the BFF pins to the session.
+  // Ownership comes from the x-user-id header on every trading RPC; the trading service ignores the
+  // body user_id that listOrders / streamOrderUpdates still set.
   placeOrder: forward((req, opts) => tradingClient.placeOrder(req, opts), {
     timeoutMs: ORDER_MUTATION_TIMEOUT_MS,
   }),

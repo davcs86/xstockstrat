@@ -237,9 +237,11 @@ export class NotifyServiceImpl {
 
   async listAlerts(call: any, callback: any) {
     const req = call.request;
-    // Identity from the propagated x-user-id header (security tightening, design.md) — falls back to
-    // the body userId for direct gRPC test callers.
-    const userId = call.metadata?.get?.('x-user-id')?.[0]?.toString() || req.userId || null;
+    // The owner is the x-user-id header only; the body userId is ignored.
+    const userId = (call.metadata?.get?.('x-user-id')?.[0] ?? '').toString();
+    if (!userId) {
+      return callback({ code: 3, message: 'x-user-id header required' });
+    }
     // proto3 zero-default trap: `req.limit || 50` would also replace a real 0, `?? 50` would keep 0.
     const limit = req.limit > 0 ? req.limit : 50;
     try {
@@ -249,7 +251,7 @@ export class NotifyServiceImpl {
           `SELECT a.*, ar.read_at
            FROM notify.alerts a
            LEFT JOIN notify.alert_reads ar ON ar.alert_id = a.alert_id AND ar.user_id = $1
-           WHERE ($1::text IS NULL OR a.target_user_id = $1 OR a.target_user_id IS NULL)
+           WHERE (a.target_user_id = $1 OR a.target_user_id IS NULL)
              ${req.unreadOnly ? 'AND ar.alert_id IS NULL' : ''}
            ORDER BY a.created_at DESC LIMIT $2`,
           [userId, limit]
@@ -257,7 +259,7 @@ export class NotifyServiceImpl {
         this.pool.query(
           `SELECT COUNT(*) AS count
            FROM notify.alerts a
-           WHERE ($1::text IS NULL OR a.target_user_id = $1 OR a.target_user_id IS NULL)
+           WHERE (a.target_user_id = $1 OR a.target_user_id IS NULL)
              AND NOT EXISTS (
                SELECT 1 FROM notify.alert_reads ar
                WHERE ar.alert_id = a.alert_id AND ar.user_id = $1

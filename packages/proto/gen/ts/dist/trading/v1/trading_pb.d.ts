@@ -314,7 +314,10 @@ export declare const ConfirmOrderRequestSchema: GenMessage<ConfirmOrderRequest>;
  */
 export type ListOrdersRequest = Message<"xstockstrat.trading.v1.ListOrdersRequest"> & {
     /**
-     * @generated from field: string user_id = 1;
+     * DEPRECATED: ignored; the owner is resolved from the x-user-id header.
+     *
+     * @generated from field: string user_id = 1 [deprecated = true];
+     * @deprecated
      */
     userId: string;
     /**
@@ -387,7 +390,10 @@ export declare const ListOrdersResponseSchema: GenMessage<ListOrdersResponse>;
  */
 export type StreamOrderUpdatesRequest = Message<"xstockstrat.trading.v1.StreamOrderUpdatesRequest"> & {
     /**
-     * @generated from field: string user_id = 1;
+     * DEPRECATED: ignored; the owner is resolved from the x-user-id header.
+     *
+     * @generated from field: string user_id = 1 [deprecated = true];
+     * @deprecated
      */
     userId: string;
     /**
