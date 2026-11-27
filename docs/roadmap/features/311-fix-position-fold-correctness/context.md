@@ -3614,3 +3614,16 @@ Runbook `docs/runbooks/position-fold-cutover.md` §1 (staging only; production n
 | 3 | Homelab `gate deploy` exits non-zero when the VM rolls a release back | **open** | The `gate` script is on the VM, not in this repo; the workflow step runs under `bash -e`, so a non-zero exit would fail the job. Needs the VM script read. |
 
 The cutover does not start until #1 and #3 are answered "yes".
+
+## Session 2026-11-27 — O-61 #1 dry run, supplied by the operator (verbatim)
+
+The operator ran `doctl apps propose --app "$APP_ID" --spec spec-no-portfolio.yaml` against `xstockstrat-staging` (the live spec with only the `xstockstrat-portfolio` service removed; the four `${xstockstrat-portfolio.PRIVATE_DOMAIN}:50052` references left in place) and pasted the output:
+
+```
+• no
+  suggested app name xstockstrat-staging-2 · is static? no
+  static app usage 0 of 3 free · $/month 90.00 · $/month on higher tier n/a
+  $/month on lower tier n/a
+```
+
+Reading: DO returned a cost and name summary and no validation error for the spec. "suggested app name xstockstrat-staging-2" is the name-availability line (the name is already taken by the existing app), not an error. So DO's propose endpoint accepts the spec with the portfolio service removed. Limit of the evidence: `propose` validates the spec and does not deploy it, so it does not prove that the four dangling references resolve at deploy time. If the real deploy of that spec fails, DO leaves the running app unchanged and the stop is done another way (e.g. the references are replaced for the stop window); nothing is half-applied. Precondition #1: **yes**, with that limit. Precondition #3 stays open.
