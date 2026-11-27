@@ -139,3 +139,9 @@
   no C-16 regression, no register violation; FR-1..FR-9 and `@AC-1`..`@AC-18` all PASS.
 - One non-blocking reopen petition pending the operator: P-6 (claim lock strength). If declined
   it stays an Open Risk.
+
+## Session 2026-11-27 — sdd-design gate after round 7
+
+- **OPERATOR REOPEN P-6 (D-4 / D-52 claim lock): "weaker lock in the claim"** — the claim selects
+  with `FOR NO KEY UPDATE SKIP LOCKED` (D-55).
+- **OPERATOR (design gate): "Run another round"** — round 8 started. Not approved.

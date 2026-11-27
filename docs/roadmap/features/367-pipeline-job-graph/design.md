@@ -1,7 +1,7 @@
 # Design: pipeline-job-graph
 
 **Created**: 2026-11-27
-**Rounds**: 7 (full; round cap lifted by the operator; termination: pending operator approval)
+**Rounds**: 7, round 8 in progress (full; round cap lifted by the operator; termination: pending operator approval)
 **Approved by**: pending
 **Grounded in**: recon.md
 **Debate register**: debate.md
@@ -109,9 +109,11 @@ uses `bounded_txn(control_pool, 3 s)` without the lane lock.
   `next_attempt_at = now()`; when nothing is inserted, return the existing job, which keeps its
   own `run_id` and lane. If a prune removed that row in between, the insert is retried once in the
   same transaction.
-- **Claim:** `FOR UPDATE SKIP LOCKED` over ready rows whose next-attempt time has passed, filtered
-  to the kinds this process has handlers for, ordered `lane DESC, next_attempt_at, job_id`
-  (shape: `services/xstockstrat-marketdata/internal/repository/profile_repo.go:250-257`).
+- **Claim:** `FOR NO KEY UPDATE SKIP LOCKED` over ready rows whose next-attempt time has passed,
+  filtered to the kinds this process has handlers for, ordered `lane DESC, next_attempt_at, job_id`
+  (shape: `services/xstockstrat-marketdata/internal/repository/profile_repo.go:250-257`). That
+  lock conflicts with itself, so two claimers never take the same row, and it does not conflict
+  with a park's `FOR KEY SHARE` on a ready child.
 - **Reap:** expired `running` rows go to `ready` with `next_attempt_at = now()`, or to `dead` with
   `error_class = 'transient'` and `last_error = 'lease_expired'` once attempts are used up.
   Candidates are selected with `ORDER BY job_id FOR NO KEY UPDATE SKIP LOCKED`, so two instances
@@ -403,7 +405,8 @@ Step 3's real-Postgres tests gate step 4:
 - each prune DELETE uses the `(state, finished_at)` index on a seeded table, and a `dead` row aged
   `retention_days` + 1 survives;
 - a runner that waited for an in-flight heartbeat batch records no false loss;
-- a waiting parent held `FOR KEY SHARE` by another parent's open park is still settled;
+- a waiting parent held `FOR KEY SHARE` by another parent's open park is still settled, and a
+  ready child held the same way is still claimed;
 - two instances running reap and settle on the same rows neither block nor deadlock.
 
 Already pinned in the repo: a terminated pooled connection frees its pool slot
@@ -471,8 +474,6 @@ prune batch 500 with a 30 s block budget; stats every third maintenance tick (15
 - [ ] A claim that committed but whose acknowledgement was lost leaves its jobs `running` under
   tokens no instance holds; each costs one attempt and waits for lease expiry and the reap.
 - [ ] A backlog of terminal rows larger than 600 s per day delays the `succeeded` prune.
-- [ ] A ready child held `FOR KEY SHARE` by parks in progress is skipped by the claim until they
-  commit (the claim keeps `FOR UPDATE SKIP LOCKED`; reopen petition P-6 pending).
 - [ ] Throughput: one control lane and one handler gate per instance. Measurements and thresholds
   are named (D-40) for program feature 3.
 - [ ] Until program feature 4 adds a requeue, a `dead` or `failed` key blocks parents on the same
