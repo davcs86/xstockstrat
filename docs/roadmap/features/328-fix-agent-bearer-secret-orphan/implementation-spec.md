@@ -780,7 +780,7 @@ Coverage threshold: `--cov-fail-under=40` (C-08).
 
 ### Step 7 — service: UI secret-first hook comment names the orphan sweep
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/config-ui/hooks/useSignalSourceMutations.ts` — modify
@@ -958,3 +958,8 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Planned**: modify `docs/runbooks/config-rollout.md` only.
 - **Actual**: the runbook section as specced, with the operator-confirmed staging-only target table (DO dev and homelab `xstockstrat-staging` swept; DO prod and any homelab production listed as not swept). Per the operator's binding decision, one row is also added to the root `docs/context-constitution-findings.md` § Documentation that lies, logging the `operator-db-access.md:59-64` vs `config-rollout.md:303-304` homelab-production disagreement as unresolved doc drift. It is committed alone, after the step commit.
 - **Disposition**: operator-directed (2026-11-27); out-of-scope change announced at the checkpoint.
+
+### Step 7 — `tsc --noEmit` re-run against this branch's proto stubs (2026-11-27)
+- **Planned**: `pnpm exec tsc --noEmit` in `services/xstockstrat-ui` (step Verification).
+- **Actual**: the linked `node_modules/@xstockstrat/proto` resolves to the main checkout's `packages/proto/gen/ts`, which predates `04d66e66`. So `tsc` reports two `TS2339 'INCOMPLETE'` errors (`e2e/fixtures/backfillJobs.ts:39`, `src/lib/backtestBackfill.ts:95`), the same before and after the edit; the block still exits 0 because `git diff` runs last. `tsc --noEmit` re-run with a scratch tsconfig (extends the UI tsconfig; maps `@xstockstrat/proto/*` to this worktree's `packages/proto/gen/ts/dist/*`) exits 0. Lint is clean (warnings only, none in the edited file).
+- **Disposition**: CI-equivalent fallback (CI type-checks against the branch's own stubs).

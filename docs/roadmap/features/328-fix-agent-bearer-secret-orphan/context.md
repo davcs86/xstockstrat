@@ -748,3 +748,10 @@ Effect: use the defaults recorded in this file and in the implementation spec fo
 - Full suite: `834 passed`, `TOTAL 2818 325 88%` (≥ 40). The config-key wiring gate does not apply (no config key).
 - Files modified: `services/xstockstrat-agent/tests/test_tools.py`
 - Deviations: none
+
+### Step 7 — service: UI secret-first hook comment names the orphan sweep [done]
+- Comment-only edit. The last sentence of the `useRegisterMcpClientSource` JSDoc (`:36`) now reads "A failed register leaves a redacted orphan, reclaimed by the operator sweep (docs/runbooks/config-rollout.md)." The JSDoc stays at two lines, `writeOwnBearerSecret` and both hooks are untouched, and the diff is `1 insertion(+), 1 deletion(-)`.
+- TDD: red N/A — no behavior change; the characterization test is Step 8's Playwright pin. Pre-edit run (`.sdd-logs/v-1.log`): no `operator sweep` hit. Green (`.sdd-logs/v-2.log`, `exit=0`): grep `36: … reclaimed by the operator sweep (docs/runbooks/config-rollout.md).`, and lint shows warnings only, none in this file.
+- `tsc` in the linked env: 2 errors `TS2339 'INCOMPLETE'`, present before and after the edit, from the stale main-checkout proto stubs. CI-equivalent `tsc` against this branch's stubs (`.sdd-logs/v-3.log`): `exit=0`. The config-key wiring gate does not apply (no config key).
+- Files modified: `services/xstockstrat-ui/src/app/config-ui/hooks/useSignalSourceMutations.ts`
+- Deviations: CI-equivalent `tsc` fallback (see Deviation Log)
