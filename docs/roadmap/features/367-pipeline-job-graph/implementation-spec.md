@@ -67,12 +67,12 @@ Names and seams the design leaves open. Each is this spec's choice and is open t
 - **S-1. Repository method names.** design.md names the class and file only. Step 7 names the
   methods `enqueue`, `claim`, `reap`, `heartbeat`, `report`, `park`, `settle_batch`, `list_by_run`
   and `ready_stats`, plus the module-level `prune_batch`.
-- **S-2. `prune_batch` is a module-level function, not a method.** The contract test (D-33) lets
-  `app/jobs/` import "the job repository's prune batch method" and nothing else from that module,
-  and forbids the names `db_pool` and `control_pool`. A function taking `conn` satisfies both
-  without handing a handler a repository instance. Called with `cutoff=None` it computes the cutoff
-  on the database clock and returns it, so a handler reads one cutoff per DELETE loop through the
-  one permitted import.
+- **S-2. `prune_batch` is a module-level function.** design.md § Retention prune and § Handler
+  database contract name "the repository module's `prune_batch` function" (D-61). A function
+  taking `conn` lets `app/jobs/` import that one name without holding a repository instance.
+  Called with `cutoff=None` it computes the cutoff on the database clock and returns it, so a
+  handler reads one cutoff per DELETE loop through the one permitted import. That return value is
+  this spec's choice; the design is silent on how the handler obtains the loop cutoff.
 - **S-3. `control_pool_reset` lives in `app/repositories/read_budget.py`.** design.md says the
   control pool is built by a helper in `main.py` and that Step 6's tests pin the reset callback
   before the engine exists. The callback therefore lands in Step 5; `main.py` passes it in Step 17.
@@ -83,9 +83,9 @@ Names and seams the design leaves open. Each is this spec's choice and is open t
 - **S-6. The daily ensure is unconditional.** It enqueues `pipeline.retention_prune` whether or not
   the running registry has that kind, as design.md § Retention prune states. A test registry
   without the kind leaves that row `ready`.
-- **S-7. One design gate test moves.** design.md lists "a runner that waited for an in-flight
-  heartbeat batch records no false loss" among the Step-3 tests that gate the engine. It needs the
-  runner, so it lands in Step 12.
+- **S-7. The runner-versus-heartbeat test is an engine test.** design.md lists "a runner that
+  waited for an in-flight heartbeat batch records no false loss" among Step 4's real-Postgres
+  tests (D-61). It lands in Step 12.
 - **S-8. Config docs rows land in Step 1.** design.md § Config puts the docs rows in the config
   commit (C-10); they are in Step 1's **Files**, not Step 19's.
 - **S-9. Not in design.md or recon.md, found by search.** Three pins the build must update:

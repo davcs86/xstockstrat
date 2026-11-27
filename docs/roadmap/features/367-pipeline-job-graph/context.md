@@ -303,9 +303,19 @@ Carried from design.md § Open Risks; each needs an owner at `/sdd-spec` or late
   - Step 16: no `host.provider` assertion for the durable `@AC-3 @feature-337` — [x] fixed.
   - Undeclared seams — [x] recorded as S-10.
   - Step 7 (S-2): `prune_batch` is a module-level function where design.md says "method" —
-    [ ] unaddressed: needs an operator ruling on the design wording.
-  - S-7: one design gate test lands in Step 12, not before the engine — [ ] unaddressed: needs an
-    operator ruling on the design's test list.
+    [x] design.md wording corrected with operator approval (D-61).
+  - S-7: one design gate test lands in Step 12, not before the engine — [x] design.md test lists
+    corrected with operator approval (D-61).
 - Overlap findings: config migration `060` is claimed by both 367 and 345 (`authelia-sso`); no
-  `merge-order.md` row exists — [ ] unaddressed: needs operator confirmation to write the row.
+  `merge-order.md` row exists — [x] conditional row added with operator confirmation.
   All other overlaps are clean or rebase-only.
+
+## Session 2026-11-27 — operator rulings on the impl-spec review
+
+- **OPERATOR DECISION: "Add a conditional row"** — `docs/roadmap/features/merge-order.md` gains a
+  367 ↔ 345 row: whichever merges first keeps config `060`; the other renumbers and regenerates
+  the stored set. Neither waits.
+- **OPERATOR DECISION: "Correct the design text"** — design.md amended after approval, wording
+  only (D-61): the prune batch is the repository module's `prune_batch` function; the
+  runner-versus-heartbeat test is an engine test. No mechanism changed.
+- **OPERATOR: loop the impl-spec review until all warnings are addressed.**
