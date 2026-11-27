@@ -662,7 +662,7 @@ cd services/xstockstrat-portfolio && export GOWORK=off \
 
 ### Step 9 — test: portfolio owner-less event skip
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/service/portfolio_ownerless_event_test.go` — create

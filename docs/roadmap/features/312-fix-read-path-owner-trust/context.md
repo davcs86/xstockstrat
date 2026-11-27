@@ -627,3 +627,18 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Config-key wiring gate: does not apply, because no config key is declared.
 - Files modified: `services/xstockstrat-portfolio/internal/service/portfolio_service.go`
 - Deviations: none
+
+### Step 9 — test: portfolio owner-less event skip [done]
+- Added `portfolio_ownerless_event_test.go` (`package service`) with three tests on the `syncRecorderDB` recorder. `TestOwnerlessEvent_AC2_AccountEventsSkipped` covers `account.positions.synced`, `account.balance.synced` and `account.deregistered` with `user_id` absent: the handler returns nil, nothing is written, no argument is `"default"`, and exactly one WARN carries `account_id` `off-1`. `TestOwnerlessEvent_AC2_FillWithoutAccountSkipped` covers `order.filled` with no `account_id`: nothing is written and no argument is `"alpaca-default"`. `TestOwnerlessEvent_AC2_AckedNotParked` runs an owner-less event at seq 3 and a well-formed one at seq 4 through `boundedRetry` + `streamEventsFrom` (`streamLedger`), once for positions sync and once for deregistration. It asserts `lastSeq == 4`, that the seq-4 `offline_account_realized` write is recorded, that no argument is `"default"`, and `parkedCount == 0`. The tests match the WARN on its `account_id` attribute, not on `ownerlessEventMsg`. Removed the `resolveSyncUserID` mirror, its assertion in `TestPositionSyncPayload_ParsesUserID` and `TestPositionSyncPayload_FallsBackToDefault` from `portfolio_helpers_test.go`. Payload literals stay inline (C-13).
+- TDD: AC-2 red → green.
+  - RED: the step Verification ran with the new tests against the pre-Step-8 `portfolio_service.go` (`911b0f32`), restored temporarily and then reverted. Result: exit=1 (`.sdd-logs/v-1.log`).
+    - Positions and balance sync: `owner-less event was filed under the "default" owner`.
+    - Deregistration: `owner-less event wrote 2 row(s), want none`.
+    - All three: `WARN records carrying account_id off-1 = 0, want 1`.
+    - Fill: `fill without account_id was filed under "alpaca-default"` (args `[u1 AAPL 5 100 500 TRADING_MODE_PAPER alpaca-default 0 0]`).
+    - Ack positions sync: `owner-less event was filed under the "default" owner`.
+    - The deregistration ack subcase passed on the pre-fix tree, because its purge binds only `account_id`. Its skip is proven by the direct deregistration case.
+  - GREEN: the same Verification gave exit=0 (`.sdd-logs/v-2.log`) with `ok  	github.com/xstockstrat/portfolio/internal/service	11.071s`, `total:									(statements)		79.1%` (≥ 40%), no `resolveSyncUserID` match, and golangci-lint v2.14.0 `0 issues.` (`~/go/bin` first on PATH for the run). A `-v` run (`.sdd-logs/v-3.log`) showed all three tests and their five subtests `--- PASS`.
+- Config-key wiring gate: does not apply, because no config key is declared.
+- Files modified: `services/xstockstrat-portfolio/internal/service/portfolio_ownerless_event_test.go`, `services/xstockstrat-portfolio/internal/service/portfolio_helpers_test.go`
+- Deviations: none
