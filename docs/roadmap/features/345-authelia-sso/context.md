@@ -1018,3 +1018,7 @@
 - TDD: red (before Step 38): `expected "vi.fn()" to be called with arguments: [ { token: 'at' }, …(1) ]` and `expected 503 to be 403` (2 failed, 6 passed) → green: 8 passed; full `pnpm run test:coverage` 98 files, 979 passed / 2 skipped, `src/lib/**` 85.21 % lines; typecheck and lint exit 0.
 - Files modified: `services/xstockstrat-ui/src/lib/identity.test.ts`, `services/xstockstrat-ui/src/app/api/auth/login/route.test.ts` (new)
 - Deviations: none
+
+### Owner decision 2026-11-27 — Step 23 gap-fills accepted
+- The owner accepted the four Step 23 branches the spec did not state (Deviation Log "Step 23 — four branches…"). Agent surface (Steps 17–24) verified by the orchestrator: `uv lock --check`, ruff clean, 1032 passed. UI Steps 25–39 verified: typecheck 0, lint 0, `test:unit` 979 passed.
+- Logged checkpoint (no pause): agent → ui boundary passed. Open: spec-level choice 8; the Step 32 UI Docker build/boot smoke needs a host with registry access (build container cannot reach registry.npmjs.org here); Step 52 firefox `testIgnore` ⚠ pending.

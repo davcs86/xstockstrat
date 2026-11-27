@@ -2240,3 +2240,8 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Expected**: "remove one directive, `pnpm run typecheck` fails with TS2578, restore it".
 - **Actual**: removing a directive makes the guarded call a real error (`TS2345`, line 89). `TS2578: Unused '@ts-expect-error' directive` appears only when the typing the directives guard is absent: with Step 36's generic `recordAuthEvent` swapped back temporarily for an untyped `(event, reason?: string)`, all four directives report TS2578. Both runs were made and restored; the committed tree typechecks clean.
 - **Disposition**: the proof's intent (the `@ts-expect-error` cases fail under a real `tsc` if the typing regresses) holds; the recorded RED is the TS2578 run, with the TS2345 run alongside.
+
+### Step 23 — four branches the spec did not state (owner-accepted 2026-11-27)
+- **Expected**: design § 2 step 4's status map; the step names no branch for a discovery failure, the timeout label split, an inactive Resolve reply, or where the bearer is extracted.
+- **Actual**: (1) a discovery failure (`JwksError`/`httpx.HTTPError`) → 503 `jwks_unavailable`; (2) an overall timeout before the decode → `jwks_unavailable`, during Resolve → `identity_unavailable` (both 503); (3) a Resolve reply with `is_active=false` → the `account inactive` refusal, 403, not cached; (4) the three-line bearer extraction in `main.py` moved to a local `_bearer_token(scope)` shared by `_authorized` and the oidc path (local behaviour unchanged; regression net green).
+- **Disposition**: owner accepted all four as written (this session, 2026-11-27); no code change.
