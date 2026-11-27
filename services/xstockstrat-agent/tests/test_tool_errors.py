@@ -20,6 +20,7 @@ from app import client, tools
 from tests.conftest import ADMIN, _rpc_error, tools_ast_nodes
 
 _SCORE_MSG = "fundamentals availability unknown — grade unchanged"
+_FORMULA_MSG = "formula version unavailable — grade unchanged"
 _OFFLINE_MSG = "positions not published; re-confirm to retry"
 _BACKFILL_MSG = "callback_url could not be validated; no job was created"
 _ROOT = pathlib.Path(__file__).resolve().parents[3]
@@ -115,6 +116,13 @@ _ROWS = [
         f"UNAVAILABLE: {_SCORE_MSG}",
     ),
     (
+        "unavail_pass_formula",
+        "UNAVAILABLE",
+        _FORMULA_MSG,
+        {"pass_messages": tools._SCORE_UNAVAILABLE_PASS},
+        f"UNAVAILABLE: {_FORMULA_MSG}",
+    ),
+    (
         "unavail_not_listed",
         "UNAVAILABLE",
         "failed to connect to all addresses; last error: ipv4:10.0.0.1:50056",
@@ -185,13 +193,14 @@ def test_unavailable_pass_strings_match_backend_sources():
         encoding="utf-8"
     )
     assert re.search(rf'StatusCode\.UNAVAILABLE,\s*"{re.escape(_SCORE_MSG)}"', analysis)
+    assert f'_FORMULA_VERSION_UNKNOWN_MSG = "{_FORMULA_MSG}"' in analysis
     ingest = (_ROOT / "services/xstockstrat-ingest/app/handlers/servicer.py").read_text(
         encoding="utf-8"
     )
     assert re.search(rf'codes\.Unavailable,\s*"{re.escape(_OFFLINE_MSG)}"', trading)
     assert f'CALLBACK_URL_UNVALIDATED_DETAIL = "{_BACKFILL_MSG}"' in ingest
     assert re.search(r"StatusCode\.UNAVAILABLE,\s*CALLBACK_URL_UNVALIDATED_DETAIL", ingest)
-    assert tools._SCORE_UNAVAILABLE_PASS == frozenset({_SCORE_MSG})
+    assert tools._SCORE_UNAVAILABLE_PASS == frozenset({_SCORE_MSG, _FORMULA_MSG})
     assert tools._OFFLINE_UNAVAILABLE_PASS == frozenset({_OFFLINE_MSG})
     assert tools._BACKFILL_UNAVAILABLE_PASS == frozenset({_BACKFILL_MSG})
 

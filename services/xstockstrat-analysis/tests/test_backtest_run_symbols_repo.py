@@ -115,6 +115,23 @@ async def test_fetch_all_for_fingerprint_keeps_every_cell_in_shared_order():
     assert f"ORDER BY symbol, {_ELIGIBILITY_ORDER}" in eligible_sql
 
 
+@pytest.mark.asyncio
+async def test_latest_formula_fingerprint_is_owner_scoped_prefix_read():
+    repo = BacktestRunSymbolsRepository(AsyncMock())
+    repo._db.fetchval = AsyncMock(return_value="h.x")
+
+    got = await repo.latest_formula_fingerprint("alice", "s1", "h")
+
+    sql, *params = repo._db.fetchval.call_args.args
+    assert "user_id = $1" in sql
+    assert "strategy_id = $2" in sql
+    assert "starts_with(definition_fingerprint, $3)" in sql
+    assert "ORDER BY completed_at DESC" in sql
+    assert "LIMIT 1" in sql
+    assert tuple(params) == ("alice", "s1", "h.")
+    assert got == "h.x"
+
+
 def test_to_dict_none_row_is_none():
     assert _to_dict(None) is None
 

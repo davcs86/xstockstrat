@@ -15,6 +15,7 @@ from unittest.mock import AsyncMock, MagicMock
 from gen.trading.v1 import trading_pb2
 
 from app.engine.entry_backfill import _infer_open_entry_time, run_once
+from app.repositories import strategies
 from tests.conftest import RecordingStub, real_live_loop
 
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
@@ -287,6 +288,60 @@ class TestRunOnce:
         assert ("u1", "fundamentals_macd_blend", "AAPL") in live_loop._last_entry_at
         for off in ("NVDA", "COIN"):
             assert ("u1", "fundamentals_macd_blend", off) not in live_loop._last_entry_at
+
+    async def test_ac2_selects_through_the_live_enabled_predicate(self):
+        """AC-2: the strategies read is the repository's live-enabled query. S2 (active, not
+        live_enabled) and S3 (inactive, live_enabled) are excluded by the predicate itself."""
+        live_loop = _fake_live_loop()
+        recorded: list[str] = []
+
+        def _fetch(sql, *args):
+            recorded.append(sql)
+            expected = (
+                f"SELECT * FROM analysis.strategies WHERE {strategies.LIVE_ENABLED_PREDICATE_SQL}"
+            )
+            return [_strategy_row("s1")] if sql == expected else []
+
+        db_pool = AsyncMock()
+        db_pool.fetch = AsyncMock(side_effect=_fetch)
+        trading_stub = AsyncMock()
+        trading_stub.ListOrders = AsyncMock(
+            return_value=SimpleNamespace(orders=[_order(trading_pb2.ORDER_SIDE_BUY, 10.0, _T0)])
+        )
+
+        await run_once(live_loop, db_pool, trading_stub, _cfg())
+
+        assert len(recorded) == 1
+        assert strategies.LIVE_ENABLED_PREDICATE_SQL in recorded[0]
+        assert live_loop._last_entry_at[("u1", "s1", "AAPL")] == _T0
+
+    async def test_ac2_narrowed_predicate_selects_nothing(self, monkeypatch):
+        """AC-2: narrowing LIVE_ENABLED_PREDICATE_SQL narrows the backfill selection with it."""
+        original = strategies.LIVE_ENABLED_PREDICATE_SQL
+        narrowed = "live_enabled = TRUE AND active = TRUE AND strategy_id <> 's1'"
+        monkeypatch.setattr("app.repositories.strategies.LIVE_ENABLED_PREDICATE_SQL", narrowed)
+        live_loop = _fake_live_loop()
+        recorded: list[str] = []
+
+        def _fetch(sql, *args):
+            recorded.append(sql)
+            if narrowed in sql:
+                return []
+            return [_strategy_row("s1")] if original in sql else []
+
+        db_pool = AsyncMock()
+        db_pool.fetch = AsyncMock(side_effect=_fetch)
+        trading_stub = AsyncMock()
+        trading_stub.ListOrders = AsyncMock(
+            return_value=SimpleNamespace(orders=[_order(trading_pb2.ORDER_SIDE_BUY, 10.0, _T0)])
+        )
+
+        await run_once(live_loop, db_pool, trading_stub, _cfg())
+
+        assert len(recorded) == 1
+        assert narrowed in recorded[0]
+        trading_stub.ListOrders.assert_not_awaited()
+        assert live_loop._last_entry_at == {}
 
 
 def _blend_cfg():
