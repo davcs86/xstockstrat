@@ -879,7 +879,7 @@ No coverage threshold applies to the UI e2e suite; `INVENTORY.md` is unchanged (
 
 ### Step 9 — docs: remaining "orphan accepted" text, author sentinel, ledger note
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/patterns/`, `services/xstockstrat-ingest/CLAUDE.md`, `docs/roadmap/ledger/`
 **Files**:
 - `docs/patterns/config-governance.md` — modify

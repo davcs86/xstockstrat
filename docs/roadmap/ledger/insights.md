@@ -2841,6 +2841,8 @@ reusing.
   write the secret before registering the source.
 - **Rule it implies**: order two-write credential registrations secret-first and accept the
   redacted-orphan over saga complexity.
+- **Update (feature 328)**: the accepted orphan is reclaimed by the operator orphan sweep
+  (`scripts/config-heal/mcp-credential-orphan-sweep.sql`); secret-first still stands.
 
 ### 2026-09-02 — 167-watchlist-single-strategy-update — design
 - **Pattern**: Resolve authz with the existing ownership read (`loadOwned`) before a targeted single-row
