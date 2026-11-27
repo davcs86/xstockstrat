@@ -1857,7 +1857,7 @@ func TestConfirmOrder_AC48_UnconfirmHidesFeesAndFilledAt(t *testing.T) {
 	h.confirm(&tradingv1.ConfirmOrderRequest{OrderId: "ord-1", FilledQty: 10, FilledAvgPrice: 150, Fees: proto.Float64(2), FilledAt: timestamppb.New(at)})
 	resp := h.confirm(&tradingv1.ConfirmOrderRequest{OrderId: "ord-1", FilledQty: 0})
 
-	got, err := h.svc.GetOrder(context.Background(), &tradingv1.GetOrderRequest{OrderId: "ord-1"})
+	got, err := h.svc.GetOrder(ctxAsUser(testdata.S1UserID), &tradingv1.GetOrderRequest{OrderId: "ord-1"})
 	if err != nil {
 		t.Fatalf("GetOrder: %v", err)
 	}

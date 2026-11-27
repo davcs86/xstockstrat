@@ -129,16 +129,6 @@ func TestRealizedPnL_PartialOrderIndependent(t *testing.T) {
 	}
 }
 
-// resolveSyncUserID mirrors the user_id resolution in processPositionSync: use the
-// payload's user_id when present, falling back to "default" for legacy events.
-func resolveSyncUserID(sync positionSyncPayload) string {
-	userID := sync.UserID
-	if userID == "" {
-		userID = "default"
-	}
-	return userID
-}
-
 func TestPositionSyncPayload_ParsesUserID(t *testing.T) {
 	raw := `{
 		"account_id": "acct-123",
@@ -152,9 +142,6 @@ func TestPositionSyncPayload_ParsesUserID(t *testing.T) {
 	}
 	if sync.UserID != "user-abc" {
 		t.Errorf("UserID: got %q, want %q", sync.UserID, "user-abc")
-	}
-	if got := resolveSyncUserID(sync); got != "user-abc" {
-		t.Errorf("resolveSyncUserID: got %q, want %q", got, "user-abc")
 	}
 	if len(sync.Positions) != 1 || sync.Positions[0].Symbol != "AAPL" {
 		t.Errorf("Positions: got %+v", sync.Positions)
@@ -208,18 +195,6 @@ func TestPositionSyncPayload_LegacyBrokerValuationDefaultsZero(t *testing.T) {
 	p := sync.Positions[0]
 	if p.CurrentPrice != 0 || p.MarketValue != 0 || p.UnrealizedPnl != 0 || p.UnrealizedPnlPct != 0 {
 		t.Errorf("legacy valuation should default to 0, got %+v", p)
-	}
-}
-
-func TestPositionSyncPayload_FallsBackToDefault(t *testing.T) {
-	// Legacy event without user_id (pre-propagation) must fall back to "default".
-	raw := `{"account_id": "acct-123", "trading_mode": "TRADING_MODE_PAPER", "positions": []}`
-	var sync positionSyncPayload
-	if err := json.Unmarshal([]byte(raw), &sync); err != nil {
-		t.Fatalf("unmarshal: %v", err)
-	}
-	if got := resolveSyncUserID(sync); got != "default" {
-		t.Errorf("resolveSyncUserID (legacy): got %q, want %q", got, "default")
 	}
 }
 

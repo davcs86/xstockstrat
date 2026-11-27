@@ -1204,6 +1204,43 @@ describe('listAlerts — read state (feature 203)', () => {
   });
 });
 
+describe('listAlerts — owner scope (feature 312)', () => {
+  it('AC-3 rejects with code 3 when the x-user-id header is missing (no query)', async () => {
+    const pool = seqPool([[], [{ count: '0' }]]);
+    const impl = new NotifyServiceImpl(pool.obj as any, {} as any, noopFanout(), noopWebPush());
+    const err = await new Promise<any>((resolve) => impl.listAlerts(metaCall(null, {}), (e: any) => resolve(e)));
+    assert.equal(err?.code, 3);
+    assert.equal(pool.calls.length, 0);
+  });
+
+  it('AC-3 ignores the body userId: both queries bind the header owner (fake pool, proven at parameter level)', async () => {
+    const pool = seqPool([[], [{ count: '0' }]]);
+    const impl = new NotifyServiceImpl(pool.obj as any, {} as any, noopFanout(), noopWebPush());
+    await new Promise<any>((resolve, reject) =>
+      impl.listAlerts(metaCall('user-a', { userId: 'user-b' }), (e: any, r: any) => (e ? reject(e) : resolve(r))),
+    );
+    assert.equal(pool.calls.length, 2);
+    for (const call of pool.calls) {
+      assert.equal(call.params[0], 'user-a');
+      assert.ok(!call.params.includes('user-b'), 'the body userId must not reach any query');
+    }
+  });
+
+  it('AC-3 has no unscoped branch: both predicates scope to the owner and keep untargeted alerts (fake pool, proven at predicate level)', async () => {
+    const pool = seqPool([[], [{ count: '0' }]]);
+    const impl = new NotifyServiceImpl(pool.obj as any, {} as any, noopFanout(), noopWebPush());
+    await new Promise<any>((resolve, reject) =>
+      impl.listAlerts(metaCall('user-a', {}), (e: any, r: any) => (e ? reject(e) : resolve(r))),
+    );
+    assert.equal(pool.calls.length, 2);
+    for (const call of pool.calls) {
+      const sql = call.sql.replace(/\s+/g, ' ');
+      assert.doesNotMatch(sql, /\$1::text IS NULL/);
+      assert.match(sql, /a\.target_user_id = \$1 OR a\.target_user_id IS NULL/);
+    }
+  });
+});
+
 describe('getAlert (feature 344)', () => {
   const ALERT_ID = 'a1f3c0de-0000-4000-8000-000000000001';
 

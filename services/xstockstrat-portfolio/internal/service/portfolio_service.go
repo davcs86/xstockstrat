@@ -405,6 +405,8 @@ type orderFillPayload struct {
 	Fees float64 `json:"fees"`
 }
 
+const ownerlessEventMsg = "ledger event has no owner, skipping event"
+
 // processOrderFill returns a plain error only for a DB or ledger failure (retried on redelivery); a
 // malformed or unusable payload is skipped, since redelivering it can never succeed.
 func (s *PortfolioService) processOrderFill(ctx context.Context, event *ledgerv1.LedgerEvent) error {
@@ -418,6 +420,10 @@ func (s *PortfolioService) processOrderFill(ctx context.Context, event *ledgerv1
 	var fill orderFillPayload
 	if err := json.Unmarshal(raw, &fill); err != nil {
 		slog.WarnContext(ctx, "parse order fill payload", "error", err)
+		return nil
+	}
+	if fill.AccountId == "" {
+		slog.WarnContext(ctx, ownerlessEventMsg, "order_id", fill.OrderID, "event_type", event.EventType)
 		return nil
 	}
 
@@ -442,9 +448,6 @@ func (s *PortfolioService) processOrderFill(ctx context.Context, event *ledgerv1
 	}
 
 	acctID := fill.AccountId
-	if acctID == "" {
-		acctID = "alpaca-default"
-	}
 	key := repository.FillKey{Consumer: repository.ConsumerOrderFill, UserID: fill.UserID, AccountID: acctID, OrderID: fill.OrderID}
 
 	prior, err := s.repo.FillApplied(ctx, key)
@@ -1706,9 +1709,9 @@ func (s *PortfolioService) processAccountDeregistered(ctx context.Context, event
 	if payload.AccountID == "" {
 		return nil
 	}
-	userID := payload.UserID
-	if userID == "" {
-		userID = "default"
+	if payload.UserID == "" {
+		slog.WarnContext(ctx, ownerlessEventMsg, "account_id", payload.AccountID, "event_type", event.EventType)
+		return nil
 	}
 	s.positionsMu.Lock()
 	defer s.positionsMu.Unlock()
@@ -1722,7 +1725,7 @@ func (s *PortfolioService) processAccountDeregistered(ctx context.Context, event
 	if ctx.Err() != nil {
 		return stop()
 	}
-	if err := s.repo.DeletePositionsNotInSync(ctx, payload.AccountID, userID, []string{}); err != nil {
+	if err := s.repo.DeletePositionsNotInSync(ctx, payload.AccountID, payload.UserID, []string{}); err != nil {
 		if ctx.Err() != nil {
 			return stop()
 		}
@@ -1771,17 +1774,15 @@ func (s *PortfolioService) processPositionSync(ctx context.Context, event *ledge
 	if sync.AccountID == "" {
 		return nil
 	}
+	if sync.UserID == "" {
+		slog.WarnContext(ctx, ownerlessEventMsg, "account_id", sync.AccountID, "event_type", event.EventType)
+		return nil
+	}
 	var failures []error
 
 	s.positionsMu.Lock()
 	defer s.positionsMu.Unlock()
 
-	// Store synced positions under the owner's user_id so they reconcile with order-fill positions.
-	// Fall back to "default" for legacy events emitted before user_id was carried.
-	userID := sync.UserID
-	if userID == "" {
-		userID = "default"
-	}
 	presentSymbols := make([]string, 0, len(sync.Positions))
 	stop := func(sym string) error {
 		slog.DebugContext(ctx, "position sync stopped: context done", "account_id", sync.AccountID, "symbol", sym)
@@ -1801,7 +1802,7 @@ func (s *PortfolioService) processPositionSync(ctx context.Context, event *ledge
 			Source:           p.Source,
 			AsOf:             p.AsOf,
 		}
-		if err := s.repo.UpsertPositionFromSync(ctx, userID, p.Symbol, sync.TradingMode, sync.AccountID, p.Qty, p.AvgCost, val); err != nil {
+		if err := s.repo.UpsertPositionFromSync(ctx, sync.UserID, p.Symbol, sync.TradingMode, sync.AccountID, p.Qty, p.AvgCost, val); err != nil {
 			if ctx.Err() != nil {
 				return stop(p.Symbol)
 			}
@@ -1814,7 +1815,7 @@ func (s *PortfolioService) processPositionSync(ctx context.Context, event *ledge
 		if ctx.Err() != nil {
 			return stop("")
 		}
-		if err := s.repo.DeletePositionsNotInSync(ctx, sync.AccountID, userID, presentSymbols); err != nil {
+		if err := s.repo.DeletePositionsNotInSync(ctx, sync.AccountID, sync.UserID, presentSymbols); err != nil {
 			if ctx.Err() != nil {
 				return stop("")
 			}
@@ -1831,7 +1832,7 @@ func (s *PortfolioService) processPositionSync(ctx context.Context, event *ledge
 		if ctx.Err() != nil {
 			return stop("")
 		}
-		if err := s.repo.UpsertOfflineRealized(ctx, sync.AccountID, userID, sync.TradingMode, sync.offlineState()); err != nil {
+		if err := s.repo.UpsertOfflineRealized(ctx, sync.AccountID, sync.UserID, sync.TradingMode, sync.offlineState()); err != nil {
 			if ctx.Err() != nil {
 				return stop("")
 			}
@@ -1930,11 +1931,11 @@ func (s *PortfolioService) processBalanceSync(ctx context.Context, event *ledger
 	if bal.AccountID == "" {
 		return
 	}
-	userID := bal.UserID
-	if userID == "" {
-		userID = "default"
+	if bal.UserID == "" {
+		slog.WarnContext(ctx, ownerlessEventMsg, "account_id", bal.AccountID, "event_type", event.EventType)
+		return
 	}
-	if err := s.repo.UpsertAccountBalance(ctx, bal.AccountID, userID, bal.TradingMode, bal.Cash, bal.BuyingPower, bal.Equity, bal.LastEquity); err != nil {
+	if err := s.repo.UpsertAccountBalance(ctx, bal.AccountID, bal.UserID, bal.TradingMode, bal.Cash, bal.BuyingPower, bal.Equity, bal.LastEquity); err != nil {
 		if ctx.Err() != nil {
 			slog.DebugContext(ctx, "balance sync stopped: context done", "account_id", bal.AccountID)
 			return
