@@ -2148,7 +2148,7 @@ grep -n "auth.mode" services/xstockstrat-identity/CLAUDE.md && grep -n "set-auth
 
 ### Step 57 — docs: UI and agent docs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui` and `xstockstrat-agent` docs
 **Files**:
 - `services/xstockstrat-ui/CLAUDE.md` — modify

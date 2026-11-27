@@ -1143,3 +1143,9 @@
 - TDD: N/A (docs). Verification: `SEED_USER_ID` at `context-constitution.md:27`; `auth.mode` at `CLAUDE.md:28,78`; `set-auth-mode` at `operations.md:28,33,41`.
 - Files modified: `services/xstockstrat-identity/{CLAUDE.md,docs/context-constitution.md,docs/operations.md}`
 - Deviations: none
+
+### Step 57 — docs: UI and agent docs [done]
+- UI `CLAUDE.md`: `APP_URL` env var; the `identity/auth.mode`, `ui/oidc.*` (incl. the `GetSecret`-only secret) and `agent/oidc.issuer` Config Keys rows; Auth + BFF rows for the SSO routes, Link SSO (`/accounts/sso`, `/accounts/api/sso*`), `oidcConfig.ts`, `oidcClient.ts`, `ssoTxn.ts`, `sameOrigin.ts`, `ssoErrors.ts` (with the client-safe `ssoErrorCodes.ts` split); Testing names the `chromium-sso` project and the rule that every mode-changing e2e case lives in `e2e/sso/sso.spec.ts`. Agent `CLAUDE.md`: an "SSO (feature 345)" paragraph and the `identity/auth.mode` and `agent/oidc.issuer` rows. Agent constitution: AGENT-1 channels and AGENT-9 `WATCHED_NAMESPACES` now `agent`, `indicators`, `identity`, AGENT-9 sites +2 (`sso_mode.py#current_auth_mode`, `#agent_issuer`), AGENT-8 notes `sso_auth.py`'s `AGENT_PUBLIC_URL` import. `docs/oauth.md`: the `oidc` section (legacy 404s, PRM by mode, token checks, statuses).
+- TDD: N/A (docs). Verification: `APP_URL` hits UI `CLAUDE.md:178,181,232`, `chromium-sso` `:275`; AGENT-9 line `:24` contains `` `identity` ``. `check-config-wiring.mjs --doc-check` exit 0.
+- Files modified: `services/xstockstrat-ui/CLAUDE.md`, `services/xstockstrat-agent/{CLAUDE.md,docs/context-constitution.md,docs/oauth.md}`
+- Deviations: none
