@@ -2737,3 +2737,17 @@ Feature: Platform-wide guarantees
       | Node    | xstockstrat-config     |
       | Python  | xstockstrat-analysis   |
       | Python  | xstockstrat-agent      |
+
+  # ─── broker-account identity is never filed under a placeholder owner (feature 312) ──
+  # Cross-service: trading's RegisterBrokerAccount rejection and portfolio's event consumption are
+  # one guarantee. Source defect: docs/reports/2026-10-19-portfolio-default-identity-fallback-defect.md
+
+  # guards: docs/reports/2026-10-19-portfolio-default-identity-fallback-defect.md
+  @AC-2 @regression @feature-312
+  Scenario: Broker-account identity is never filed under a placeholder owner
+    Given a RegisterBrokerAccount call with no x-user-id metadata
+    When trading handles the call
+    Then the call is rejected and no broker account is persisted
+    And when portfolio consumes an account.positions.synced, account.balance.synced or account.deregistered event with user_id ""
+    Then the event is acked, logged and skipped
+    And no portfolio row is written or purged under user_id "default"
