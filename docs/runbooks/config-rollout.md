@@ -305,6 +305,73 @@ transaction:
 4. `--report` prints `config.config_heal_report_041` (per-user ids hashed); `--reveal <request.json>`
    prints plaintext only for global, non-secret rows and exits 2 for anything else.
 
+## Operator sweep: orphaned `mcp_credential` secrets (feature 328)
+
+**What and why.** The agent and the config-ui write a signal source's bearer secret first, as a per-user
+`ingest` / `mcp_credential.<uuid>` secret, and register the source second. When the register or instantiate
+fails, the secret stays behind with no source pointing at it. Nothing deletes it automatically: config has no
+delete RPC and no scheduler runs a reclaim. This sweep is the only reclaim. **Cadence:** run it on demand, and
+before each `main-dev` → `main` promotion. Orphans accumulate between runs.
+
+**Reclaim rule.** A key that no source **of the same owner** references for longer than `grace_hours`
+(default 24, floor 1) is deleted. This includes a key staged with `set_config` and meant to be attached later
+through an explicit `credentials_ref`: a source later pointed at a swept key reads "bearer not configured"
+(GetSecret `found=false`). Deletion is not reversible (no snapshot is taken); the owner re-enters the bearer.
+
+**Prerequisites.**
+
+- psql 10 or later (the scripts use `\if` and `:{?var}`): `brew install libpq` (other: the distro
+  `postgresql-client` package), per [`operator-db-access.md`](operator-db-access.md) § Prerequisites.
+- A checkout at the deployed commit, so the two scripts match what runs in the environment.
+- The DB-owner connection from [`operator-db-access.md`](operator-db-access.md) over the **direct** port
+  (DO `:25060`, homelab `:5432`). Never the pooler (`:25061` / `:6432`), never an app-console `DATABASE_URL`.
+
+**Target databases** (operator-confirmed 2026-11-27, staging only):
+
+| Database | Environment | How to connect |
+|---|---|---|
+| DO dev cluster `xstockstrat`, database `xstockstrat-staging` (`.do/app.dev.yaml`) | staging | `doctl databases connection <cluster-id> --format URI` (direct `:25060`), § Connection details |
+| homelab `xstockstrat-staging` on `db.ts.natanddavehouse.com` | staging | tailnet only, role `xstockstrat_staging`, direct `:5432`, § Homelab database |
+| DO prod (`.do/app.yaml`) | production | not swept: production out of scope (never launched; standing operator ruling) |
+| homelab production (any) | production | not swept: production out of scope (never launched; standing operator ruling) |
+
+**Procedure.** Every command carries `-v ON_ERROR_STOP=1`. `<uri>` is the direct connection URI above (for
+the homelab, pass the keyword DSN with `PGPASSWORD` as in `operator-db-access.md`).
+
+1. Privilege pre-check. The one query must return three `t`:
+   ```sql
+   SELECT has_table_privilege(current_user, 'ingest.signal_sources', 'SELECT'),
+          has_table_privilege(current_user, 'config.config_values', 'DELETE'),
+          has_table_privilege(current_user, 'config.config_audit', 'INSERT');
+   ```
+2. Confirm the database is one of the swept rows in the table above:
+   ```sql
+   SELECT current_database();
+   ```
+3. Preview (read-only). Read the rows and `total`:
+   ```bash
+   psql "<uri>?sslmode=require" -v ON_ERROR_STOP=1 -f scripts/config-heal/mcp-credential-orphan-sweep-preview.sql
+   # optional: add -v grace_hours=N before -f
+   ```
+4. Sweep. Same command with the sweep script and the same `grace_hours`; `deleted` must equal the preview's
+   `total` (or be lower if a source registered in between):
+   ```bash
+   psql "<uri>?sslmode=require" -v ON_ERROR_STOP=1 -f scripts/config-heal/mcp-credential-orphan-sweep.sql
+   ```
+5. Re-preview with the same `grace_hours`. Expect 0 rows (PLAT-N1).
+
+**Audit query.** Each deleted key has one audit row under the sweep's actor:
+
+```sql
+SELECT changed_at, user_id, key, environment
+  FROM config.config_audit
+ WHERE changed_by = 'system:config-heal-mcp-credential-sweep'
+ ORDER BY changed_at DESC;
+```
+
+**If the pre-check returns `f`:** stop. The role lacks the cross-schema rights the sweep needs. Record it in
+the feature's `context.md` and escalate; do not grant ad hoc.
+
 ## Recovery: dirty `041_heal_config_keys_to_reader_catalog`
 
 **Precondition:** valid only while 041 is config's highest up-file —

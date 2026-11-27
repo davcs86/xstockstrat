@@ -101,7 +101,8 @@ indicators backend enforces an **author-ownership** check instead (no admin over
 It is not a hardcoded-admin forwarder and was left unchanged by feature 092.
 
 `manage_signal_source`/`instantiate_template` write a source bearer as the caller's own per-user secret
-under an opaque `ingest.mcp_credential.<uuid>` key.
+under an opaque `ingest.mcp_credential.<uuid>` key. A failed register leaves the secret unreferenced;
+the operator orphan sweep (`docs/runbooks/config-rollout.md`) reclaims it.
 
 ### OAuth 2.1 edge auth (feature 049 Part B)
 
