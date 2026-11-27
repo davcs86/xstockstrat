@@ -810,3 +810,24 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 ### Open Threads
 - [ ] The token `'evaluation_failed'` now has two TS copies: `src/lib/readinessCue.ts` and `e2e/fixtures/opportunities.ts`. A Playwright-loadable home for it (a module with no icon import) would remove the copy. That is a `src/lib` change outside this step's scope; operator to decide.
 - [ ] `feature 188: mobile card shows previous-day OHLC block` (`opportunities.spec.ts:592`) failed once on the host dev server (hard-coded 5 s wait) and passed on re-run. Possible flake; it is untouched by this feature.
+
+## Session 2026-11-27 — sdd-execute sequential (sdd-batch-execute), step 17
+
+- Tooling: pnpm 9.15.9 ✓ · chromium ✓ (`/opt/pw-browsers`) · hook check hook=0. No install was run.
+- Discovery: the advisory digest read the main checkout's pre-re-spec spec, where Step 17 is docs-only. At `origin/feature/fix-analysis-per-symbol-isolation@b8322200`, Step 17 is the mobile `SignalRow` step and every evidence symbol exists. The anchors had drifted: the construction site is now `page.tsx:209` and the unreadable arm is `SectionRenderer.tsx:247`. `grep -rn "kind: 'signal"` still finds only one construction site.
+
+### Step 17 — service: `evaluation_failed` cue on the mobile `SignalRow` [done]
+- `SignalItem` gains a required `evaluationFailed: boolean`, set in `mobileSections` from `o.provenance.includes(EVALUATION_FAILED_PROVENANCE)`. The constant comes from the existing `readinessCue` import, so the file has no new import line and no literal. `SignalRow` gains an arm after `s.formulaUnreadable` and before `hasReadiness`: a `role="status"` span with `opportunity-evaluation-failed-mobile-<sym>` and `Evaluation failed for <sym>`, wrapping `<EnumBadge render={EVALUATION_FAILED_CUE} />`. The mobile header chain is unchanged.
+- TDD:
+  - RED (temporary probe spec, `.sdd-logs/v-1.log`): `getByTestId('opportunity-evaluation-failed-mobile-MYSZ')`, `element(s) not found`, with `MYSZ` visible.
+  - GREEN (`.sdd-logs/v-2.log`): `1 passed (24.0s)`. The probe was then deleted.
+- Verification:
+  - The verbatim block (`.sdd-logs/v-3.log`) exited 1, and that status comes from the last grep (no match).
+    - Lint passed, with warnings in untouched files only.
+    - The `evaluationFailed` grep hit `sections.ts:26`, `SectionRenderer.tsx:257` and `page.tsx:210`.
+    - The `'evaluation_failed'` literal grep printed nothing.
+  - tsc failed on `BackfillSymbolOutcome.INCOMPLETE` in two untouched files, because the linked proto dist is stale. Against this branch's dist it exited 0 (`.sdd-logs/v-4.log`), and `--listFilesOnly` confirmed it compiled the three step files.
+  - The Playwright warmup timed out at 10 s. A re-run with `--timeout=240000` gave `49 passed (2.9m)`, exit=0 (`.sdd-logs/v-5.log`).
+- Config-wiring gate: not applicable (no config key, no migration). Lockfile gate: `git diff --quiet origin/main-dev -- pnpm-lock.yaml` rc=0.
+- Files modified: `services/xstockstrat-ui/src/components/mobile/sections.ts`, `services/xstockstrat-ui/src/components/mobile/SectionRenderer.tsx`, `services/xstockstrat-ui/src/app/insights/opportunities/page.tsx`
+- Deviations: probe RED, the stale linked proto dist and the host-harness timeout (Deviation Log "Step 17").

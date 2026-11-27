@@ -4,7 +4,7 @@ import { CaretRight, Warning } from '@phosphor-icons/react';
 import { FundamentalsGap } from '@xstockstrat/proto/analysis/v1/analysis_pb';
 import { EnumBadge, FUNDAMENTALS_GAP } from '@/lib/opportunityShared';
 import { readinessState } from '@/lib/readinessRollup';
-import { READINESS_CUE } from '@/lib/readinessCue';
+import { EVALUATION_FAILED_CUE, READINESS_CUE } from '@/lib/readinessCue';
 import { OhlcBlock } from '@/components/shared/OhlcBlock';
 import { cn } from '../ui/utils';
 import { Alert, AlertDescription } from '../ui/alert';
@@ -253,6 +253,15 @@ function SignalRow({ item: s, showSymbol = true }: { item: SignalItem; showSymbo
                   aria-label={`Formula not readable for ${s.symbol}`}
                 >
                   <EnumBadge render={READINESS_CUE.unreadable} />
+                </span>
+              ) : s.evaluationFailed ? (
+                <span
+                  className="flex flex-1 items-center"
+                  role="status"
+                  data-testid={`opportunity-evaluation-failed-mobile-${s.symbol}`}
+                  aria-label={`Evaluation failed for ${s.symbol}`}
+                >
+                  <EnumBadge render={EVALUATION_FAILED_CUE} />
                 </span>
               ) : hasReadiness ? (
                 <>

@@ -207,6 +207,7 @@ export default function OpportunitiesPage() {
       readiness: { passing: o.passingConditions, total: o.totalConditions },
       dataUnavailable: o.dataUnavailable,
       formulaUnreadable: o.formulaUnreadable,
+      evaluationFailed: o.provenance.includes(EVALUATION_FAILED_PROVENANCE),
       fundamentalsUnavailable: o.fundamentalsUnavailable,
       fundamentalsGap: o.fundamentalsGap,
       caption: o.thesis || undefined,

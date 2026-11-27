@@ -1014,7 +1014,7 @@ grep -n "MYSZ_EVALUATION_FAILED_OPPORTUNITY" e2e/fixtures/INVENTORY.md
 
 ### Step 17 — service: `evaluation_failed` cue on the mobile `SignalRow`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/mobile/sections.ts` — modify
@@ -1648,3 +1648,29 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Disposition**: the named fallback (a second TS copy of the token), reported at the checkpoint
   (P-03), plus a CI-equivalent fallback for `tsc` and the e2e timeout. No file outside Step 16's
   **Files** is committed.
+
+### Step 17: probe RED, stale linked proto dist and host-harness timeout (2026-11-27)
+
+- **Expected**: Step Dependencies has Step 18's test capture RED for Step 17. The Verification block
+  (`lint`, `tsc --noEmit`, `playwright test` on the two specs, two greps) passes as written.
+- **Actual**:
+  - RED and GREEN came from a temporary untracked probe, `e2e/insights/tmp-step17-probe.spec.ts`. At
+    375x800 it served `MYSZ_EVALUATION_FAILED_OPPORTUNITY` through `page.route`. It asserted the
+    `opportunity-evaluation-failed-mobile-MYSZ` test id, its text and `aria-label`, and count 0 for
+    the unreadable and unavailable mobile ids. It ran with `--project=chromium --no-deps --timeout=240000`.
+    - RED: `getByTestId('opportunity-evaluation-failed-mobile-MYSZ')` `element(s) not found`, with
+      `MYSZ` visible.
+    - GREEN: `1 passed`.
+    - The probe was deleted before the commit.
+  - The verbatim block exited 1. That status comes from its last grep, which exits 1 when nothing
+    matches.
+    - Lint passed, with warnings in untouched files only.
+    - The `evaluationFailed` grep hit all three files.
+    - Two failures were environmental, the same as in Steps 15 and 16:
+      - `tsc` reported `BackfillSymbolOutcome.INCOMPLETE` in two untouched files. The cause is the
+        stale linked proto dist. Against this branch's dist, through a `paths` override under
+        `.sdd-logs/`, it exited 0.
+      - The Playwright warmup timed out at 10 s. A re-run with only `--timeout=240000` added gave
+        `49 passed (2.9m)`.
+- **Disposition**: CI-equivalent fallback. No file outside Step 17's **Files** is committed. Step 18
+  still adds the permanent Playwright test and its own RED as specced.
