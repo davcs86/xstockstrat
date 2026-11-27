@@ -7,10 +7,18 @@ import { ConfigWatcher } from '../services/configWatcher';
 import { getLogger } from '../services/logger';
 import { userIdFrom, hasAdminAccessScope, ADMIN_SCOPE_ERROR } from './authz';
 import { LedgerAudit, NOOP_LEDGER_AUDIT } from './ledgerAudit';
-import { listAdminUserIds } from './adminDirectory';
+import { hasPeerSan, listAdminUserIds } from './adminDirectory';
+import {
+  EXTERNAL_IDENTITIES_ISSUER_USER_KEY,
+  EXTERNAL_IDENTITIES_PKEY,
+  EXTERNAL_IDENTITY_PEER_SANS,
+  ExternalIdentityRpc,
+  peerDenied,
+} from './externalIdentity';
 import { readAuthMode } from '../authMode';
 import {
   recordExchangeFailure,
+  recordLinkFailure,
   recordLoginFailure,
   recordRefreshRejection,
   recordRevokeUnverifiable,
@@ -1019,5 +1027,140 @@ export class IdentityServiceImpl {
 
   async listAdminUserIds(call: any, callback: any) {
     return listAdminUserIds(this.pool, call, callback);
+  }
+
+  // SAN gate shared by the four external-identity RPCs: runs before any header or pool access.
+  private peerGate(rpc: ExternalIdentityRpc, call: any, callback: any): boolean {
+    if (hasPeerSan(call, EXTERNAL_IDENTITY_PEER_SANS[rpc])) return true;
+    callback(peerDenied(rpc));
+    return false;
+  }
+
+  async resolveExternalIdentity(call: any, callback: any) {
+    if (!this.peerGate('ResolveExternalIdentity', call, callback)) return;
+    const { issuer, subject } = call.request;
+    if (!issuer || !subject) return callback({ code: 3, message: 'issuer and subject required' });
+    try {
+      const r = await this.pool.query(
+        `SELECT u.user_id, u.roles, u.is_active FROM identity.external_identities e
+         JOIN identity.users u USING (user_id) WHERE e.issuer = $1 AND e.subject = $2`,
+        [issuer, subject]
+      );
+      if (r.rows.length === 0) return callback({ code: 9, message: 'not linked' });
+      const row = r.rows[0];
+      if (!row.is_active) return callback({ code: 9, message: 'account inactive' });
+      callback(null, { userId: row.user_id, roles: stringsToRoles(row.roles), isActive: true });
+    } catch (err: any) {
+      log.error('resolveExternalIdentity failed', { error: err?.message });
+      callback({ code: 13, message: 'resolve failed' });
+    }
+  }
+
+  async issueSessionForUser(call: any, callback: any) {
+    if (!this.peerGate('IssueSessionForUser', call, callback)) return;
+    const { userId } = call.request;
+    if (!userId) return callback({ code: 3, message: 'userId required' });
+    try {
+      const r = await this.pool.query(
+        'SELECT user_id, email, roles, is_active FROM identity.users WHERE user_id = $1',
+        [userId]
+      );
+      if (r.rows.length === 0) return callback({ code: 5, message: 'user not found' });
+      const user = r.rows[0];
+      if (!user.is_active) return callback({ code: 9, message: 'account inactive' });
+      const minted = this.mintAccessToken(user.user_id, user.email, user.roles);
+      const refreshToken = await this.issueRefreshToken(user.user_id);
+      callback(
+        null,
+        sessionResponse(minted, refreshToken, { userId: user.user_id, email: user.email, roles: user.roles }),
+      );
+    } catch (err: any) {
+      log.error('issueSessionForUser failed', { error: err?.message });
+      callback({ code: 13, message: 'session issue failed' });
+    }
+  }
+
+  async linkExternalIdentity(call: any, callback: any) {
+    if (!this.peerGate('LinkExternalIdentity', call, callback)) return;
+    const { userId, issuer, subject, password } = call.request;
+    if (!userId || !issuer || !subject || !password) {
+      return callback({ code: 3, message: 'userId, issuer, subject and password required' });
+    }
+    if (readAuthMode(this.config) !== 'both') {
+      recordLinkFailure('link_disabled');
+      return callback({ code: 9, message: 'link disabled' });
+    }
+    try {
+      const check = await this.verifyPassword({ userId }, password);
+      if (!('user' in check)) {
+        if (check.reason === 'inactive') {
+          recordLinkFailure('inactive');
+          return callback({ code: 9, message: 'account inactive' });
+        }
+        recordLinkFailure('invalid_credentials');
+        return callback({ code: 9, message: 'invalid credentials' });
+      }
+      const refusal = await this.insertLink(issuer, subject, userId);
+      if (refusal) {
+        recordLinkFailure(refusal === 'account already linked' ? 'already_linked' : 'already_linked_issuer');
+        return callback({ code: 9, message: refusal });
+      }
+      callback(null, {});
+      void this.auditSafe('identity.external.linked', userId, call.metadata, {
+        user_id: userId,
+        issuer,
+        outcome: 'linked',
+      });
+    } catch (err: any) {
+      recordLinkFailure('internal');
+      log.error('linkExternalIdentity failed', { error: err?.message });
+      callback({ code: 13, message: 'link failed' });
+    }
+  }
+
+  // Returns a refusal message, or null once the row is inserted; a unique violation is mapped by
+  // constraint name before mapDbError ever sees it (D-118).
+  private async insertLink(
+    issuer: string,
+    subject: string,
+    userId: string,
+    retried = false,
+  ): Promise<string | null> {
+    try {
+      await this.pool.query(
+        'INSERT INTO identity.external_identities (issuer, subject, user_id) VALUES ($1, $2, $3)',
+        [issuer, subject, userId]
+      );
+      return null;
+    } catch (err: any) {
+      if (err?.code !== '23505') throw err;
+      if (err.constraint === EXTERNAL_IDENTITIES_ISSUER_USER_KEY) return 'already linked to this issuer';
+      if (err.constraint !== EXTERNAL_IDENTITIES_PKEY) throw err;
+      const owner = await this.pool.query(
+        'SELECT user_id FROM identity.external_identities WHERE issuer = $1 AND subject = $2',
+        [issuer, subject]
+      );
+      if (owner.rows.length === 0) {
+        if (retried) throw err;
+        return this.insertLink(issuer, subject, userId, true);
+      }
+      return owner.rows[0].user_id === userId ? 'already linked to this issuer' : 'account already linked';
+    }
+  }
+
+  async getExternalIdentityLinks(call: any, callback: any) {
+    if (!this.peerGate('GetExternalIdentityLinks', call, callback)) return;
+    const { userId } = call.request;
+    if (!userId) return callback({ code: 3, message: 'userId required' });
+    try {
+      const r = await this.pool.query(
+        'SELECT issuer FROM identity.external_identities WHERE user_id = $1 ORDER BY issuer',
+        [userId]
+      );
+      callback(null, { issuers: r.rows.map((row: any) => row.issuer) });
+    } catch (err: any) {
+      log.error('getExternalIdentityLinks failed', { error: err?.message });
+      callback({ code: 13, message: 'link lookup failed' });
+    }
   }
 }

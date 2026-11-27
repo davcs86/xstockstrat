@@ -377,8 +377,15 @@ export type ExchangeFailureReason =
   | 'redeem_race'
   | 'internal';
 export type RefreshRejectionKind = 'first_party' | 'oauth';
+export type LinkFailureReason =
+  | 'invalid_credentials'
+  | 'inactive'
+  | 'already_linked'
+  | 'already_linked_issuer'
+  | 'link_disabled'
+  | 'internal';
 
-/** The audited user.* event types; any other `event_type` label is reported as `other`. */
+/** The audited event types; any other `event_type` label is reported as `other`. */
 export const AUDIT_EVENT_TYPES: readonly string[] = [
   'identity.user.metadata_updated',
   'identity.user.created',
@@ -386,6 +393,7 @@ export const AUDIT_EVENT_TYPES: readonly string[] = [
   'identity.user.roles_updated',
   'identity.user.activated',
   'identity.user.deactivated',
+  'identity.external.linked',
 ];
 
 const loginFailures = new BoundCounter('identity.login.failures', {
@@ -403,6 +411,9 @@ const refreshRejections = new BoundCounter('identity.refresh.rejections', {
 const revokeUnverifiable = new BoundCounter('identity.revoke.unverifiable', {
   description:
     'RevokeToken calls ignored because the token failed signature verification (forged, malformed, or pre-rotation)',
+});
+const linkFailures = new BoundCounter('identity.link.failures', {
+  description: 'LinkExternalIdentity refusals by reason',
 });
 const auditFailures = new BoundCounter('identity.audit.failures', {
   description: 'Best-effort ledger audit append failures by event type',
@@ -430,6 +441,10 @@ export function recordRefreshRejection(kind: RefreshRejectionKind): void {
 
 export function recordRevokeUnverifiable(): void {
   revokeUnverifiable.add(1);
+}
+
+export function recordLinkFailure(reason: LinkFailureReason): void {
+  linkFailures.add(1, { [KEY_REASON]: reason });
 }
 
 export function recordAuditFailure(eventType: string): void {

@@ -538,7 +538,7 @@ grep -n "fixtures/fakeConfig" src/__tests__/identityServiceImpl.test.ts src/__te
 
 ### Step 11 — service: The four SAN-gated external-identity RPCs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-identity`
 **Files**:
 - `services/xstockstrat-identity/src/grpc/adminDirectory.ts` — modify
