@@ -10,7 +10,6 @@ import time
 from dataclasses import dataclass
 
 import grpc
-import httpx
 import jwt
 
 from app import client, jwks
@@ -135,10 +134,6 @@ async def authenticate(token: str, issuer: str, trace_id: str) -> Verdict:
     phase = "jwks"
     try:
         async with asyncio.timeout_at(deadline):
-            try:
-                await jwks.discovery(issuer)
-            except (jwks.JwksError, httpx.HTTPError):
-                return _reject("jwks_unavailable", Outcome.UNAVAILABLE)
             found = await jwks.key_for(issuer, kid)
             if found == "unknown_kid":
                 return _reject("invalid_token", Outcome.UNAUTHORIZED)

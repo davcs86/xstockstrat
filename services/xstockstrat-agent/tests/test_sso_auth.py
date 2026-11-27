@@ -294,6 +294,31 @@ async def test_discovery_down_is_jwks_unavailable(oidc_mode, resolve, rejected):
     assert rejected == ["jwks_unavailable"]
 
 
+async def test_stale_discovery_with_issuer_down_is_single_flight(
+    oidc_mode, resolve, rejected, monkeypatch
+):
+    """Forged tokens never trigger per-request issuer fetches (D-31 single-flight + cooldown)."""
+    import asyncio  # noqa: PLC0415
+
+    clock = _Clock()
+    monkeypatch.setattr(jwks, "_now", clock)
+    assert (await _auth(oidc_mode, oidc_mode.token())).outcome is Outcome.OK
+    clock.t += jwks._DISCOVERY_FRESH_S + 1  # discovery stale, key set still under _JWKS_MAX_AGE_S
+    oidc_mode.discovery.mock(side_effect=httpx.ConnectError("issuer down"))
+    oidc_mode.jwks.mock(side_effect=httpx.ConnectError("issuer down"))
+    before = oidc_mode.discovery.call_count + oidc_mode.jwks.call_count
+    forged = oidc_mode.keys.mint(signer="rotated", **oidc_mode.claims())
+    rejected.clear()
+    for _ in range(2):  # two bursts inside one _JWKS_COOLDOWN_S window
+        verdicts = await asyncio.gather(*(_auth(oidc_mode, forged) for _ in range(20)))
+        await asyncio.sleep(0)
+        clock.t += 10
+    attempts = oidc_mode.discovery.call_count + oidc_mode.jwks.call_count - before
+    assert attempts <= 1, f"{attempts} outbound issuer fetches for 40 forged tokens"
+    assert all(v.outcome is Outcome.UNAUTHORIZED for v in verdicts)
+    assert set(rejected) == {"invalid_token"}
+
+
 async def test_logs_never_carry_the_token_or_a_claim(oidc_mode, resolve, caplog):
     token = oidc_mode.token(email=SENTINEL_EMAIL)
     with caplog.at_level(logging.DEBUG):
