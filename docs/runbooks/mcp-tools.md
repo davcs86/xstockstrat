@@ -213,6 +213,24 @@ Extracts raw text from email attachments (PDF or plain text) or gated URLs for a
 
 All attachments and URLs are concatenated with double newlines.
 
+The URL fetches share one whole-call budget, `agent` / `extract.call_budget_seconds` (default `35` s,
+bounds `[5,35]`, feature 314), which starts after the source lookup and the attachments. A URL that times out,
+fails in transport, or is not reached before the budget expires is skipped, and the call returns a partial
+result instead of the plain shape above:
+
+```json
+{
+  "raw_text": "<every text gathered, attachments included>",
+  "error": "PARTIAL: N of M URLs not fetched (deadline: a, transport: b)",
+  "unfetched_urls": ["<the given URLs that were not fetched, in input order>"]
+}
+```
+
+`deadline` counts per-request timeouts plus the URLs cut off by the budget; `transport` counts the other
+transport failures. The 35 s budget is a new cap: a fetch that used to finish slowly after 35 s (a per-request
+connect 10 s + read 30 s allowed up to 40 s) is now cut off. An egress refusal or an HTTP error status still
+fails the whole call (rows below).
+
 **Errors**
 
 | Condition | Error |
@@ -251,6 +269,8 @@ Fetches a registered website source and returns the **whole response body** as `
 | Source has no `url` in `config_json` | `ToolError: Source '<slug>' has no url in config_json` |
 | Source requires credentials (`has_credentials=true`) | `ToolError: secure per-source credential resolution is not supported yet …` (feature 093) |
 | The `config_json.url` (or a redirect from it) targets a non-public address, a DNS-rebinding host, or a non-http(s) scheme, or the response exceeds the configured size/redirect limits | `ToolError: content fetch refused by egress policy` (SSRF hardening, feature 207 — deliberately generic; no internal host/IP/port is leaked back to the model) |
+| The fetch does not finish within the whole-call budget `agent` / `extract.call_budget_seconds` (default `35` s, feature 314) | `ToolError: DEADLINE_EXCEEDED: content fetch did not complete within Ns` (the URL is never echoed) |
+| A transport failure, a per-request connect/read timeout included | `ToolError: FETCH_FAILED: <ExceptionClass>` (feature 314 — names only the exception class, never the URL) |
 
 ---
 
@@ -1276,7 +1296,7 @@ client-side, carried on no wire field.
 
 **Errors** — a backend `AioRpcError` surfaces as a `ToolError` `<CODE>: <message>`.
 A hung analysis read fails after the `agent.opportunities.read_timeout_seconds` deadline (default
-`40`s, bounds `[30,55]`) with `DEADLINE_EXCEEDED: upstream did not respond within Ns (deadline exceeded); retry shortly`.
+`40`s, bounds `[30,44]` so the worst case stays under the MCP client's 60 s timeout — feature 314) with `DEADLINE_EXCEEDED: upstream did not respond within Ns (deadline exceeded); retry shortly`.
 A saturated opportunities store returns `UNAVAILABLE: upstream unavailable; retry shortly` (the backend's own text is withheld and logged).
 
 ---

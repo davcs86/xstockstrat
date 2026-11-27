@@ -1065,3 +1065,35 @@ the first body line of the re-spec commit below.
 - Files modified: `services/xstockstrat-agent/tests/test_list_opportunities_deadline.py`
 - Deviations: the Verification block's `git status` line is vacuous after its `cd`, and the block's exit
   semantics hide the earlier exits (Deviation Log, no spec edit).
+
+## Session 2026-11-27 — sdd-execute sequential (sdd-batch-execute, step 8)
+
+- Tooling: uv ✓ (`uv sync --extra dev` in the agent), node ✓ v24 (`/opt/node24`). Pre-commit hook check: hook=0.
+  Discovery: every Step 8 anchor was re-read at `origin/feature/fix-mcp-deadline-budget` @ `2fe0271b`. Drift:
+  the feature-227 row is at `config-governance.md:489` (spec `:455`), and the `list_opportunities` bound line is
+  at `mcp-tools.md:1299` (spec `:1279`).
+
+### Step 8 — docs: key tables, tool contract, rollout runbook, findings [done]
+- Docs now describe the shipped behaviour:
+  - the new key row and the `[30,44]` bound, in the agent CLAUDE.md and in `config-governance.md` (the
+    feature-314 entry and its sentinel row);
+  - the cross-key rule, in the portfolio CLAUDE.md;
+  - the `PARTIAL` / `DEADLINE_EXCEEDED` / `FETCH_FAILED` shapes and the 35 s cap, in `mcp-tools.md`;
+  - the cross-key write order and the migration rollout (queries, old-image window, "unenumerated" fallback),
+    in `config-rollout.md`;
+  - the enforcement and the agent chains, in PLAT-13.
+- Findings:
+  - the root and portfolio cross-key rows moved to § Resolved;
+  - the config cross-key row is `◐ PARTIAL`, because its retention-floor example is still unchecked;
+  - new config doc-drift row: the `041` stored description still says `[30,55]`;
+  - new root § Resolved row for the `httpx` INFO URL log (the Steps 5+6 follow-up).
+- TDD: N/A (docs). Verification `.sdd-logs/v-1.log` `exit=0`: the `[30,55]` grep printed nothing, and the parity
+  suites gave `45 passed`. `--doc-check` alone, `.sdd-logs/v-2.log`: `exit=0`, no output. Config-wiring step-time
+  gate, `.sdd-logs/v-3.log`: `exit=0`, no output. The other `mcp-tools.md` suites, `.sdd-logs/v-4.log`:
+  `191 passed`.
+- Files modified: `services/xstockstrat-agent/CLAUDE.md`, `services/xstockstrat-portfolio/CLAUDE.md`,
+  `docs/patterns/config-governance.md`, `docs/runbooks/mcp-tools.md`, `docs/runbooks/config-rollout.md`,
+  `docs/context-constitution.md`, `docs/context-constitution-findings.md`,
+  `services/xstockstrat-config/docs/context-constitution-findings.md`,
+  `services/xstockstrat-portfolio/docs/context-constitution-findings.md`
+- Deviations: the placement of the `httpx` row, the partial config row, and the node PATH (Deviation Log).

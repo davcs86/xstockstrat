@@ -819,7 +819,7 @@ grep -n "def .*fixture\|from .conftest\|conftest" tests/test_list_opportunities_
 
 ### Step 8 — docs: key tables, tool contract, rollout runbook, findings
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/`, `services/*/CLAUDE.md`
 **Files**:
 - `services/xstockstrat-agent/CLAUDE.md` — modify
@@ -1040,3 +1040,15 @@ _Populated by /sdd-execute as implementation proceeds._
   separately with `git status --short` from the worktree root, which showed only the step's test file. Run
   `.sdd-logs/v-1.log` failed on ruff E501 in the new test, not on the behaviour, so it does not count as RED.
   RED is `.sdd-logs/v-2.log` and GREEN is `.sdd-logs/v-3.log`. No spec edit.
+
+### Step 8 — findings-row placement, a partial config row, and the node PATH (2026-11-27)
+- **Spec said**: the Steps 5+6 entry above says "Step 8 adds the findings row" for the `httpx` logger change.
+  Instruction 7 says to remove or resolve the config cross-key row (`:24`). Step 8's Verification runs `node`.
+- **Actual**: the agent's own findings file is not in Step 8's **Files**. So the `httpx` row went into the root
+  findings § Resolved table, which already holds agent-specific rows. The config row also names an invariant
+  feature 314 does not enforce (retention floor > lookback ceiling), so it was marked `◐ PARTIAL (feature 314)`
+  in place instead of resolved. The default PATH node is v22, so the block ran with `/opt/node24/bin` first on
+  PATH, as in the earlier steps.
+- **Disposition**: the block was run verbatim and judged from `.sdd-logs/v-1.log` (`exit=0`; the
+  `[30,55]` grep printed nothing; `45 passed`). `--doc-check` was also run alone (`.sdd-logs/v-2.log`, `exit=0`,
+  no output). No spec edit.
