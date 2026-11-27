@@ -1046,7 +1046,7 @@ uv run pytest tests/test_oauth.py -q   # (guard) AC-42: local MCP keeps the buil
 
 ### Step 25 — service: UI typecheck script and CI step
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/package.json` — modify

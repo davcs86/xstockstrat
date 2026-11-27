@@ -815,6 +815,11 @@ jobs:
       - name: build proto stubs
         run: pnpm --filter @xstockstrat/proto run build
 
+      - name: typecheck (xstockstrat-ui)
+        if: matrix.service == 'xstockstrat-ui'
+        working-directory: services/xstockstrat-ui
+        run: pnpm run typecheck
+
       - name: test with coverage
         working-directory: services/${{ matrix.service }}
         run: pnpm run test:coverage

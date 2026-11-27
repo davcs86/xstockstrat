@@ -928,3 +928,9 @@
 - TDD: red (before Step 23): collection `ImportError: cannot import name 'sso_auth' from 'app'` → green: the three files 61 passed; full `pytest --cov=app --cov-fail-under=40` 1032 passed (89.69 %; `sso_auth.py` 100 %, `jwks.py` 95 %, `sso_mode.py` 100 %); ruff clean; `def sso_keys` `conftest.py:404`, `def oidc_mode` `:431`; (guard) AC-42 `pytest tests/test_oauth.py` 26 passed unchanged.
 - Files modified: `services/xstockstrat-agent/tests/{test_sso_auth,test_sso_auth_deadline,test_sso_routes,conftest}.py`
 - Deviations: none
+
+### Step 25 — service: UI typecheck script and CI step [done]
+- `typecheck: tsc --noEmit` script, `tsconfig.json` excludes `.next`, and a `typecheck (xstockstrat-ui)` step before `test with coverage` in `node-test`.
+- TDD: N/A (tooling gate; RED proof recorded under Step 37). First `pnpm run typecheck` on the tree: exit 0, no output (no pre-existing errors, so no file was touched for D-93's widening); `pnpm run lint` exit 0 (warnings only); `grep` finds the CI step at `ci.yml:818`.
+- Files modified: `services/xstockstrat-ui/package.json`, `services/xstockstrat-ui/tsconfig.json`, `.github/workflows/ci.yml`
+- Deviations: none
