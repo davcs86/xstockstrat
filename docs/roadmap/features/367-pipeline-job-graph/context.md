@@ -145,3 +145,12 @@
 - **OPERATOR REOPEN P-6 (D-4 / D-52 claim lock): "weaker lock in the claim"** — the claim selects
   with `FOR NO KEY UPDATE SKIP LOCKED` (D-55).
 - **OPERATOR (design gate): "Run another round"** — round 8 started. Not approved.
+
+## Session 2026-11-27 — sdd-design round 8
+
+- Round 8 run with a full row-lock audit and a (phase, event) audit of an attempt's life.
+  The adversary judged the debate converged. The proposer found one substance item that predates
+  this round's changes: the prune's guard could miss an edge committed after its snapshot
+  (O-74 → D-56). Two small undecided points (park's parent lock mode; give-up clock start) and
+  wording were fixed (D-57). No Floor breach, no C-16 regression, no register violation, no
+  petition. `@AC-2` confirmed under the weaker claim lock; no deadlock cycle.

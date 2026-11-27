@@ -2,7 +2,7 @@
 
 **State**: in-debate
 **Mode**: full (round cap lifted by operator override, context.md 2026-11-27)
-**Rounds run**: 7 (round 8 in progress)
+**Rounds run**: 8
 
 ## Rounds
 
@@ -15,6 +15,7 @@
 | 5 | 2026-11-27 | /sdd-design | 5 | 0 | 10 | 9 | 3 | yes |
 | 6 | 2026-11-27 | /sdd-design | 3 | 0 | 8 | 8 | 2 | yes |
 | 7 | 2026-11-27 | /sdd-design | 2 | 0 | 3 | 3 | 1 | yes |
+| 8 | 2026-11-27 | /sdd-design | 2 | 0 | 4 | 4 | 0 | yes |
 
 ## Settled Decisions
 
@@ -76,6 +77,8 @@
 | D-53 | 6 | `worker_enabled` is read again after the limiter returns and after the control lane is taken, immediately before the claim, and before each maintenance step. A heartbeat batch is in flight from the synchronous snapshot-and-register step until its transaction exits (signalled in a `finally`); a runner becomes `reporting` and checks for one in a single synchronous step and bounds its wait with its own 6 s timer; a committed result omitting the key of an attempt already `reporting` declares no loss. The self-fence does not stop an attempt in `retry_wait`. At the 300 s give-up the runner logs at ERROR and counts `report_abandoned`; `ParkRace` re-runs share that give-up. A `job.db(budget)` outside (0, 30] s raises `PermanentJobError`. Refines D-21, D-32 and D-50. | O-63, O-65, O-69; FR-9; `@AC-17` | settled |
 | D-54 | 7 | The self-fence and the 900 s deadline stop only an attempt whose handler task is still running. Once the handler has ended (waiting for the lane, `reporting` or `retry_wait`) the attempt only writes its fenced report or park, and ends when that is written or rejected, when a committed heartbeat omits its pair while it is not `reporting`, or at the 300 s give-up. Expiry alone does not end a lease; a reap does: the heartbeat and report predicates test token and state, not expiry. Maintenance order is reap, settle, ensure, stats. Refines D-20 and D-53. | O-71; FR-2 | settled |
 | D-55 | 7 | The claim selects with `FOR NO KEY UPDATE SKIP LOCKED`. Two claimers still exclude each other because that lock conflicts with itself; a park's `FOR KEY SHARE` on a ready child no longer hides it. Only the prune keeps `FOR UPDATE`, which it needs so a delete conflicts with a park's key-share lock. Supersedes the lock strength of D-4 and the claim clause of D-52 (user reopen, P-6). | O-73; `@AC-2` | settled |
+| D-56 | 8 | A prune batch is two statements in one transaction: an unordered candidate `SELECT … FOR UPDATE SKIP LOCKED LIMIT 500` with the unfinished-parent guard, then `DELETE … WHERE job_id = ANY(<locked ids>)` that repeats the guard under a snapshot taken after the locks are held. Locked rows that fail the repeated guard are kept. Makes D-22's "the prune never deletes a child of an unfinished parent" true under READ COMMITTED; refines D-38 and D-52. | O-74; FR-4; `@AC-9` | settled |
+| D-57 | 8 | Park locks its parent `FOR NO KEY UPDATE`. The 300 s give-up is measured from the end of the handler task and checked before each queueing for the lane, when the lane is granted and before each retry sleep; a started try completes. Fence and deadline timers are cancelled in the handler task's done-callback. An attempt whose handler has ended and that is not `reporting` and whose pair a committed heartbeat omits writes nothing and counts `lost_heartbeat` once. A lost-lease or self-fence stop replaces a pending deadline stop, never the reverse. A handler that ends within the stop grace of a deadline stop is reported with the outcome it returned, or as `attempt_timeout` if it ended cancelled or with `AttemptStopped`. A park follows the report's rules. Refines D-21, D-22, D-53 and D-54. | O-75, O-76, O-77 | settled |
 
 ## Rejected Alternatives (locked)
 
@@ -179,6 +182,10 @@
 | O-71 | 7 | An attempt whose handler has ended but which is still waiting for the control lane is in phase `running`; a self-fence (or the 900 s deadline) in that window would discard a finished result, although the same wait as a retry is allowed to report. Found independently by both sides. | yes | closed @ round 7 (D-54) |
 | O-72 | 7 | Wording a spec author would otherwise decide: the heartbeat predicate (no expiry test); maintenance step order; what a late kill-switch read does; the exception for a refused database block; a sentence left over from D-49 that could never apply; "starting none" versus "queueing none" in invariant 3; missing decision IDs in headings; two unrecorded risks (lost claim acknowledgement; terminal backlog delaying the succeeded prune). | no | closed @ round 7 (text in design.md) |
 | O-73 | 7 | The claim still selects with `FOR UPDATE SKIP LOCKED`, which conflicts with a park's `FOR KEY SHARE` on an already-`ready` child, so that child is skipped while the park's transaction is open. A delay, not a correctness issue. The proposer petitions (P-6); the adversary does not re-raise it. | no | closed @ round 7 (D-55) |
+| O-74 | 8 | The prune's unfinished-parent guard is evaluated against the DELETE statement's snapshot. A park can commit an edge to a finished child after that snapshot and before the prune locks the row; the lock then succeeds, the guard is not re-checked, the child is deleted and the committed edge cascades away. A waiting parent could then be woken wrongly or never settle. Present since D-22; not caused by D-55. FR-4, `@AC-9`. | yes | closed @ round 8 (D-56) |
+| O-75 | 8 | Park's "fence and lock the parent" has no lock mode; `FOR UPDATE` would deadlock with a grandparent's park that references the parent as a child (resolved by the database's deadlock detector as a retried park, not a wrong result). | no | closed @ round 8 (D-57) |
+| O-76 | 8 | The start of the 300 s give-up is undefined; started at the first failed report, a slot could be held far longer than the design claims. | no | closed @ round 8 (D-57) |
+| O-77 | 8 | Undetermined (phase, event) pairs in an attempt's life: timer cancellation at handler end; what a loss while waiting for the lane counts and writes; park parity with report; precedence between a deadline stop and a later self-fence or loss; "with its lease still valid" undefined under D-54; who counts an attempt after a lost lease; missing decision IDs in headings. | no | closed @ round 8 (D-57; text in design.md) |
 
 ## Reopen Petitions
 
