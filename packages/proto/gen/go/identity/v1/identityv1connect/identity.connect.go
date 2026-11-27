@@ -98,6 +98,18 @@ const (
 	// IdentityServiceListAdminUserIdsProcedure is the fully-qualified name of the IdentityService's
 	// ListAdminUserIds RPC.
 	IdentityServiceListAdminUserIdsProcedure = "/xstockstrat.identity.v1.IdentityService/ListAdminUserIds"
+	// IdentityServiceResolveExternalIdentityProcedure is the fully-qualified name of the
+	// IdentityService's ResolveExternalIdentity RPC.
+	IdentityServiceResolveExternalIdentityProcedure = "/xstockstrat.identity.v1.IdentityService/ResolveExternalIdentity"
+	// IdentityServiceIssueSessionForUserProcedure is the fully-qualified name of the IdentityService's
+	// IssueSessionForUser RPC.
+	IdentityServiceIssueSessionForUserProcedure = "/xstockstrat.identity.v1.IdentityService/IssueSessionForUser"
+	// IdentityServiceLinkExternalIdentityProcedure is the fully-qualified name of the IdentityService's
+	// LinkExternalIdentity RPC.
+	IdentityServiceLinkExternalIdentityProcedure = "/xstockstrat.identity.v1.IdentityService/LinkExternalIdentity"
+	// IdentityServiceGetExternalIdentityLinksProcedure is the fully-qualified name of the
+	// IdentityService's GetExternalIdentityLinks RPC.
+	IdentityServiceGetExternalIdentityLinksProcedure = "/xstockstrat.identity.v1.IdentityService/GetExternalIdentityLinks"
 )
 
 // IdentityServiceClient is a client for the xstockstrat.identity.v1.IdentityService service.
@@ -135,6 +147,18 @@ type IdentityServiceClient interface {
 	// Active admin user IDs for notify's push audience (feature 242). Authorized by mTLS peer SAN
 	// xstockstrat-notify only; every request header is ignored.
 	ListAdminUserIds(context.Context, *connect.Request[v1.ListAdminUserIdsRequest]) (*connect.Response[v1.ListAdminUserIdsResponse], error)
+	// Maps an OIDC (issuer, subject) to its linked user (feature 345). Authorized by mTLS peer SAN
+	// xstockstrat-ui or xstockstrat-agent only; every request header is ignored.
+	ResolveExternalIdentity(context.Context, *connect.Request[v1.ResolveExternalIdentityRequest]) (*connect.Response[v1.ResolveExternalIdentityResponse], error)
+	// Mints a session for an SSO-resolved user (feature 345). Authorized by mTLS peer SAN
+	// xstockstrat-ui only; every request header is ignored.
+	IssueSessionForUser(context.Context, *connect.Request[v1.IssueSessionForUserRequest]) (*connect.Response[v1.AuthTokenResponse], error)
+	// Links an OIDC identity after a password re-check (feature 345). Authorized by mTLS peer SAN
+	// xstockstrat-ui only; every request header is ignored.
+	LinkExternalIdentity(context.Context, *connect.Request[v1.LinkExternalIdentityRequest]) (*connect.Response[v1.LinkExternalIdentityResponse], error)
+	// Lists the issuers a user is linked to (feature 345). Authorized by mTLS peer SAN
+	// xstockstrat-ui only; every request header is ignored.
+	GetExternalIdentityLinks(context.Context, *connect.Request[v1.GetExternalIdentityLinksRequest]) (*connect.Response[v1.GetExternalIdentityLinksResponse], error)
 }
 
 // NewIdentityServiceClient constructs a client for the xstockstrat.identity.v1.IdentityService
@@ -280,33 +304,61 @@ func NewIdentityServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			connect.WithSchema(identityServiceMethods.ByName("ListAdminUserIds")),
 			connect.WithClientOptions(opts...),
 		),
+		resolveExternalIdentity: connect.NewClient[v1.ResolveExternalIdentityRequest, v1.ResolveExternalIdentityResponse](
+			httpClient,
+			baseURL+IdentityServiceResolveExternalIdentityProcedure,
+			connect.WithSchema(identityServiceMethods.ByName("ResolveExternalIdentity")),
+			connect.WithClientOptions(opts...),
+		),
+		issueSessionForUser: connect.NewClient[v1.IssueSessionForUserRequest, v1.AuthTokenResponse](
+			httpClient,
+			baseURL+IdentityServiceIssueSessionForUserProcedure,
+			connect.WithSchema(identityServiceMethods.ByName("IssueSessionForUser")),
+			connect.WithClientOptions(opts...),
+		),
+		linkExternalIdentity: connect.NewClient[v1.LinkExternalIdentityRequest, v1.LinkExternalIdentityResponse](
+			httpClient,
+			baseURL+IdentityServiceLinkExternalIdentityProcedure,
+			connect.WithSchema(identityServiceMethods.ByName("LinkExternalIdentity")),
+			connect.WithClientOptions(opts...),
+		),
+		getExternalIdentityLinks: connect.NewClient[v1.GetExternalIdentityLinksRequest, v1.GetExternalIdentityLinksResponse](
+			httpClient,
+			baseURL+IdentityServiceGetExternalIdentityLinksProcedure,
+			connect.WithSchema(identityServiceMethods.ByName("GetExternalIdentityLinks")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // identityServiceClient implements IdentityServiceClient.
 type identityServiceClient struct {
-	authenticateUser        *connect.Client[v1.AuthenticateUserRequest, v1.AuthTokenResponse]
-	validateToken           *connect.Client[v1.ValidateTokenRequest, v1.TokenClaims]
-	refreshToken            *connect.Client[v1.RefreshTokenRequest, v1.AuthTokenResponse]
-	revokeToken             *connect.Client[v1.RevokeTokenRequest, v1.RevokeTokenResponse]
-	registerOAuthClient     *connect.Client[v1.RegisterOAuthClientRequest, v1.OAuthClient]
-	getOAuthClient          *connect.Client[v1.GetOAuthClientRequest, v1.OAuthClient]
-	issueAuthCode           *connect.Client[v1.IssueAuthCodeRequest, v1.IssueAuthCodeResponse]
-	exchangeAuthCode        *connect.Client[v1.ExchangeAuthCodeRequest, v1.OAuthTokenResponse]
-	refreshOAuthToken       *connect.Client[v1.RefreshOAuthTokenRequest, v1.OAuthTokenResponse]
-	listAuthorizedApps      *connect.Client[v1.ListAuthorizedAppsRequest, v1.ListAuthorizedAppsResponse]
-	revokeAuthorizedApp     *connect.Client[v1.RevokeAuthorizedAppRequest, v1.RevokeAuthorizedAppResponse]
-	getUserMetadata         *connect.Client[v1.GetUserMetadataRequest, v1.GetUserMetadataResponse]
-	updateUserMetadata      *connect.Client[v1.UpdateUserMetadataRequest, v1.UpdateUserMetadataResponse]
-	adminGetUserMetadata    *connect.Client[v1.AdminGetUserMetadataRequest, v1.GetUserMetadataResponse]
-	adminUpdateUserMetadata *connect.Client[v1.AdminUpdateUserMetadataRequest, v1.UpdateUserMetadataResponse]
-	createUser              *connect.Client[v1.CreateUserRequest, v1.CreateUserResponse]
-	listUsers               *connect.Client[v1.ListUsersRequest, v1.ListUsersResponse]
-	getUser                 *connect.Client[v1.GetUserRequest, v1.GetUserResponse]
-	updatePassword          *connect.Client[v1.UpdatePasswordRequest, v1.UpdatePasswordResponse]
-	setUserRoles            *connect.Client[v1.SetUserRolesRequest, v1.SetUserRolesResponse]
-	setUserActive           *connect.Client[v1.SetUserActiveRequest, v1.SetUserActiveResponse]
-	listAdminUserIds        *connect.Client[v1.ListAdminUserIdsRequest, v1.ListAdminUserIdsResponse]
+	authenticateUser         *connect.Client[v1.AuthenticateUserRequest, v1.AuthTokenResponse]
+	validateToken            *connect.Client[v1.ValidateTokenRequest, v1.TokenClaims]
+	refreshToken             *connect.Client[v1.RefreshTokenRequest, v1.AuthTokenResponse]
+	revokeToken              *connect.Client[v1.RevokeTokenRequest, v1.RevokeTokenResponse]
+	registerOAuthClient      *connect.Client[v1.RegisterOAuthClientRequest, v1.OAuthClient]
+	getOAuthClient           *connect.Client[v1.GetOAuthClientRequest, v1.OAuthClient]
+	issueAuthCode            *connect.Client[v1.IssueAuthCodeRequest, v1.IssueAuthCodeResponse]
+	exchangeAuthCode         *connect.Client[v1.ExchangeAuthCodeRequest, v1.OAuthTokenResponse]
+	refreshOAuthToken        *connect.Client[v1.RefreshOAuthTokenRequest, v1.OAuthTokenResponse]
+	listAuthorizedApps       *connect.Client[v1.ListAuthorizedAppsRequest, v1.ListAuthorizedAppsResponse]
+	revokeAuthorizedApp      *connect.Client[v1.RevokeAuthorizedAppRequest, v1.RevokeAuthorizedAppResponse]
+	getUserMetadata          *connect.Client[v1.GetUserMetadataRequest, v1.GetUserMetadataResponse]
+	updateUserMetadata       *connect.Client[v1.UpdateUserMetadataRequest, v1.UpdateUserMetadataResponse]
+	adminGetUserMetadata     *connect.Client[v1.AdminGetUserMetadataRequest, v1.GetUserMetadataResponse]
+	adminUpdateUserMetadata  *connect.Client[v1.AdminUpdateUserMetadataRequest, v1.UpdateUserMetadataResponse]
+	createUser               *connect.Client[v1.CreateUserRequest, v1.CreateUserResponse]
+	listUsers                *connect.Client[v1.ListUsersRequest, v1.ListUsersResponse]
+	getUser                  *connect.Client[v1.GetUserRequest, v1.GetUserResponse]
+	updatePassword           *connect.Client[v1.UpdatePasswordRequest, v1.UpdatePasswordResponse]
+	setUserRoles             *connect.Client[v1.SetUserRolesRequest, v1.SetUserRolesResponse]
+	setUserActive            *connect.Client[v1.SetUserActiveRequest, v1.SetUserActiveResponse]
+	listAdminUserIds         *connect.Client[v1.ListAdminUserIdsRequest, v1.ListAdminUserIdsResponse]
+	resolveExternalIdentity  *connect.Client[v1.ResolveExternalIdentityRequest, v1.ResolveExternalIdentityResponse]
+	issueSessionForUser      *connect.Client[v1.IssueSessionForUserRequest, v1.AuthTokenResponse]
+	linkExternalIdentity     *connect.Client[v1.LinkExternalIdentityRequest, v1.LinkExternalIdentityResponse]
+	getExternalIdentityLinks *connect.Client[v1.GetExternalIdentityLinksRequest, v1.GetExternalIdentityLinksResponse]
 }
 
 // AuthenticateUser calls xstockstrat.identity.v1.IdentityService.AuthenticateUser.
@@ -419,6 +471,26 @@ func (c *identityServiceClient) ListAdminUserIds(ctx context.Context, req *conne
 	return c.listAdminUserIds.CallUnary(ctx, req)
 }
 
+// ResolveExternalIdentity calls xstockstrat.identity.v1.IdentityService.ResolveExternalIdentity.
+func (c *identityServiceClient) ResolveExternalIdentity(ctx context.Context, req *connect.Request[v1.ResolveExternalIdentityRequest]) (*connect.Response[v1.ResolveExternalIdentityResponse], error) {
+	return c.resolveExternalIdentity.CallUnary(ctx, req)
+}
+
+// IssueSessionForUser calls xstockstrat.identity.v1.IdentityService.IssueSessionForUser.
+func (c *identityServiceClient) IssueSessionForUser(ctx context.Context, req *connect.Request[v1.IssueSessionForUserRequest]) (*connect.Response[v1.AuthTokenResponse], error) {
+	return c.issueSessionForUser.CallUnary(ctx, req)
+}
+
+// LinkExternalIdentity calls xstockstrat.identity.v1.IdentityService.LinkExternalIdentity.
+func (c *identityServiceClient) LinkExternalIdentity(ctx context.Context, req *connect.Request[v1.LinkExternalIdentityRequest]) (*connect.Response[v1.LinkExternalIdentityResponse], error) {
+	return c.linkExternalIdentity.CallUnary(ctx, req)
+}
+
+// GetExternalIdentityLinks calls xstockstrat.identity.v1.IdentityService.GetExternalIdentityLinks.
+func (c *identityServiceClient) GetExternalIdentityLinks(ctx context.Context, req *connect.Request[v1.GetExternalIdentityLinksRequest]) (*connect.Response[v1.GetExternalIdentityLinksResponse], error) {
+	return c.getExternalIdentityLinks.CallUnary(ctx, req)
+}
+
 // IdentityServiceHandler is an implementation of the xstockstrat.identity.v1.IdentityService
 // service.
 type IdentityServiceHandler interface {
@@ -455,6 +527,18 @@ type IdentityServiceHandler interface {
 	// Active admin user IDs for notify's push audience (feature 242). Authorized by mTLS peer SAN
 	// xstockstrat-notify only; every request header is ignored.
 	ListAdminUserIds(context.Context, *connect.Request[v1.ListAdminUserIdsRequest]) (*connect.Response[v1.ListAdminUserIdsResponse], error)
+	// Maps an OIDC (issuer, subject) to its linked user (feature 345). Authorized by mTLS peer SAN
+	// xstockstrat-ui or xstockstrat-agent only; every request header is ignored.
+	ResolveExternalIdentity(context.Context, *connect.Request[v1.ResolveExternalIdentityRequest]) (*connect.Response[v1.ResolveExternalIdentityResponse], error)
+	// Mints a session for an SSO-resolved user (feature 345). Authorized by mTLS peer SAN
+	// xstockstrat-ui only; every request header is ignored.
+	IssueSessionForUser(context.Context, *connect.Request[v1.IssueSessionForUserRequest]) (*connect.Response[v1.AuthTokenResponse], error)
+	// Links an OIDC identity after a password re-check (feature 345). Authorized by mTLS peer SAN
+	// xstockstrat-ui only; every request header is ignored.
+	LinkExternalIdentity(context.Context, *connect.Request[v1.LinkExternalIdentityRequest]) (*connect.Response[v1.LinkExternalIdentityResponse], error)
+	// Lists the issuers a user is linked to (feature 345). Authorized by mTLS peer SAN
+	// xstockstrat-ui only; every request header is ignored.
+	GetExternalIdentityLinks(context.Context, *connect.Request[v1.GetExternalIdentityLinksRequest]) (*connect.Response[v1.GetExternalIdentityLinksResponse], error)
 }
 
 // NewIdentityServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -596,6 +680,30 @@ func NewIdentityServiceHandler(svc IdentityServiceHandler, opts ...connect.Handl
 		connect.WithSchema(identityServiceMethods.ByName("ListAdminUserIds")),
 		connect.WithHandlerOptions(opts...),
 	)
+	identityServiceResolveExternalIdentityHandler := connect.NewUnaryHandler(
+		IdentityServiceResolveExternalIdentityProcedure,
+		svc.ResolveExternalIdentity,
+		connect.WithSchema(identityServiceMethods.ByName("ResolveExternalIdentity")),
+		connect.WithHandlerOptions(opts...),
+	)
+	identityServiceIssueSessionForUserHandler := connect.NewUnaryHandler(
+		IdentityServiceIssueSessionForUserProcedure,
+		svc.IssueSessionForUser,
+		connect.WithSchema(identityServiceMethods.ByName("IssueSessionForUser")),
+		connect.WithHandlerOptions(opts...),
+	)
+	identityServiceLinkExternalIdentityHandler := connect.NewUnaryHandler(
+		IdentityServiceLinkExternalIdentityProcedure,
+		svc.LinkExternalIdentity,
+		connect.WithSchema(identityServiceMethods.ByName("LinkExternalIdentity")),
+		connect.WithHandlerOptions(opts...),
+	)
+	identityServiceGetExternalIdentityLinksHandler := connect.NewUnaryHandler(
+		IdentityServiceGetExternalIdentityLinksProcedure,
+		svc.GetExternalIdentityLinks,
+		connect.WithSchema(identityServiceMethods.ByName("GetExternalIdentityLinks")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/xstockstrat.identity.v1.IdentityService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case IdentityServiceAuthenticateUserProcedure:
@@ -642,6 +750,14 @@ func NewIdentityServiceHandler(svc IdentityServiceHandler, opts ...connect.Handl
 			identityServiceSetUserActiveHandler.ServeHTTP(w, r)
 		case IdentityServiceListAdminUserIdsProcedure:
 			identityServiceListAdminUserIdsHandler.ServeHTTP(w, r)
+		case IdentityServiceResolveExternalIdentityProcedure:
+			identityServiceResolveExternalIdentityHandler.ServeHTTP(w, r)
+		case IdentityServiceIssueSessionForUserProcedure:
+			identityServiceIssueSessionForUserHandler.ServeHTTP(w, r)
+		case IdentityServiceLinkExternalIdentityProcedure:
+			identityServiceLinkExternalIdentityHandler.ServeHTTP(w, r)
+		case IdentityServiceGetExternalIdentityLinksProcedure:
+			identityServiceGetExternalIdentityLinksHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -737,4 +853,20 @@ func (UnimplementedIdentityServiceHandler) SetUserActive(context.Context, *conne
 
 func (UnimplementedIdentityServiceHandler) ListAdminUserIds(context.Context, *connect.Request[v1.ListAdminUserIdsRequest]) (*connect.Response[v1.ListAdminUserIdsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.identity.v1.IdentityService.ListAdminUserIds is not implemented"))
+}
+
+func (UnimplementedIdentityServiceHandler) ResolveExternalIdentity(context.Context, *connect.Request[v1.ResolveExternalIdentityRequest]) (*connect.Response[v1.ResolveExternalIdentityResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.identity.v1.IdentityService.ResolveExternalIdentity is not implemented"))
+}
+
+func (UnimplementedIdentityServiceHandler) IssueSessionForUser(context.Context, *connect.Request[v1.IssueSessionForUserRequest]) (*connect.Response[v1.AuthTokenResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.identity.v1.IdentityService.IssueSessionForUser is not implemented"))
+}
+
+func (UnimplementedIdentityServiceHandler) LinkExternalIdentity(context.Context, *connect.Request[v1.LinkExternalIdentityRequest]) (*connect.Response[v1.LinkExternalIdentityResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.identity.v1.IdentityService.LinkExternalIdentity is not implemented"))
+}
+
+func (UnimplementedIdentityServiceHandler) GetExternalIdentityLinks(context.Context, *connect.Request[v1.GetExternalIdentityLinksRequest]) (*connect.Response[v1.GetExternalIdentityLinksResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.identity.v1.IdentityService.GetExternalIdentityLinks is not implemented"))
 }

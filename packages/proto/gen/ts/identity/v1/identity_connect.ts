@@ -3,7 +3,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { AdminGetUserMetadataRequest, AdminUpdateUserMetadataRequest, AuthenticateUserRequest, AuthTokenResponse, CreateUserRequest, CreateUserResponse, ExchangeAuthCodeRequest, GetOAuthClientRequest, GetUserMetadataRequest, GetUserMetadataResponse, GetUserRequest, GetUserResponse, IssueAuthCodeRequest, IssueAuthCodeResponse, ListAdminUserIdsRequest, ListAdminUserIdsResponse, ListAuthorizedAppsRequest, ListAuthorizedAppsResponse, ListUsersRequest, ListUsersResponse, OAuthClient, OAuthTokenResponse, RefreshOAuthTokenRequest, RefreshTokenRequest, RegisterOAuthClientRequest, RevokeAuthorizedAppRequest, RevokeAuthorizedAppResponse, RevokeTokenRequest, RevokeTokenResponse, SetUserActiveRequest, SetUserActiveResponse, SetUserRolesRequest, SetUserRolesResponse, TokenClaims, UpdatePasswordRequest, UpdatePasswordResponse, UpdateUserMetadataRequest, UpdateUserMetadataResponse, ValidateTokenRequest } from "./identity_pb.js";
+import { AdminGetUserMetadataRequest, AdminUpdateUserMetadataRequest, AuthenticateUserRequest, AuthTokenResponse, CreateUserRequest, CreateUserResponse, ExchangeAuthCodeRequest, GetExternalIdentityLinksRequest, GetExternalIdentityLinksResponse, GetOAuthClientRequest, GetUserMetadataRequest, GetUserMetadataResponse, GetUserRequest, GetUserResponse, IssueAuthCodeRequest, IssueAuthCodeResponse, IssueSessionForUserRequest, LinkExternalIdentityRequest, LinkExternalIdentityResponse, ListAdminUserIdsRequest, ListAdminUserIdsResponse, ListAuthorizedAppsRequest, ListAuthorizedAppsResponse, ListUsersRequest, ListUsersResponse, OAuthClient, OAuthTokenResponse, RefreshOAuthTokenRequest, RefreshTokenRequest, RegisterOAuthClientRequest, ResolveExternalIdentityRequest, ResolveExternalIdentityResponse, RevokeAuthorizedAppRequest, RevokeAuthorizedAppResponse, RevokeTokenRequest, RevokeTokenResponse, SetUserActiveRequest, SetUserActiveResponse, SetUserRolesRequest, SetUserRolesResponse, TokenClaims, UpdatePasswordRequest, UpdatePasswordResponse, UpdateUserMetadataRequest, UpdateUserMetadataResponse, ValidateTokenRequest } from "./identity_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -225,6 +225,54 @@ export const IdentityService = {
       name: "ListAdminUserIds",
       I: ListAdminUserIdsRequest,
       O: ListAdminUserIdsResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * Maps an OIDC (issuer, subject) to its linked user (feature 345). Authorized by mTLS peer SAN
+     * xstockstrat-ui or xstockstrat-agent only; every request header is ignored.
+     *
+     * @generated from rpc xstockstrat.identity.v1.IdentityService.ResolveExternalIdentity
+     */
+    resolveExternalIdentity: {
+      name: "ResolveExternalIdentity",
+      I: ResolveExternalIdentityRequest,
+      O: ResolveExternalIdentityResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * Mints a session for an SSO-resolved user (feature 345). Authorized by mTLS peer SAN
+     * xstockstrat-ui only; every request header is ignored.
+     *
+     * @generated from rpc xstockstrat.identity.v1.IdentityService.IssueSessionForUser
+     */
+    issueSessionForUser: {
+      name: "IssueSessionForUser",
+      I: IssueSessionForUserRequest,
+      O: AuthTokenResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * Links an OIDC identity after a password re-check (feature 345). Authorized by mTLS peer SAN
+     * xstockstrat-ui only; every request header is ignored.
+     *
+     * @generated from rpc xstockstrat.identity.v1.IdentityService.LinkExternalIdentity
+     */
+    linkExternalIdentity: {
+      name: "LinkExternalIdentity",
+      I: LinkExternalIdentityRequest,
+      O: LinkExternalIdentityResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * Lists the issuers a user is linked to (feature 345). Authorized by mTLS peer SAN
+     * xstockstrat-ui only; every request header is ignored.
+     *
+     * @generated from rpc xstockstrat.identity.v1.IdentityService.GetExternalIdentityLinks
+     */
+    getExternalIdentityLinks: {
+      name: "GetExternalIdentityLinks",
+      I: GetExternalIdentityLinksRequest,
+      O: GetExternalIdentityLinksResponse,
       kind: MethodKind.Unary,
     },
   }

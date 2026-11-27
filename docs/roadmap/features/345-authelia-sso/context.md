@@ -790,3 +790,11 @@
     `:105-134` (conditional `firefox` `:120-133`); Step 4/55 config-governance "Baseline" is a bold bullet at `:90`.
 - Still open, flagged to the owner at mode entry: spec-level choice 8 (seed idempotence "replayed by
   `migration-rerun`") no longer holds since 318; the seed stays idempotent via `ON CONFLICT DO NOTHING` (Step 3/4 rule).
+
+- Tooling setup (steps 1–58): node ⬇ 24.22.3 (`/opt/node24`; host default is 22) · pnpm ✓ 9.15.9 · uv ✓ · agent deps ⬇ (`uv sync --extra dev`) · docker ✓ 29.9.3 but the `Dockerfile.codegen` base-image pull got Docker Hub 429 → host-native codegen: buf ⬇ 1.72.0, protoc-gen-go ⬇ v1.36.11, protoc-gen-go-grpc ⬇ v1.6.2, protoc-gen-connect-go ⬇ v1.19.2, grpcio-tools ⬇ 1.80.0 (CI `proto-freshness` pins) · no database.
+
+### Steps 1+2 — proto + proto-gen: four external-identity RPCs [done]
+- Added `ResolveExternalIdentity`, `IssueSessionForUser`, `LinkExternalIdentity`, `GetExternalIdentityLinks` (each with a SAN comment) and their seven messages to `identity.proto`; regenerated the TS/Python/Go identity stubs.
+- Verification: `pnpm --filter @xstockstrat/proto run build` exit=0; second `buf-gen.sh` run leaves `git diff --exit-code packages/proto/gen/` clean (exit=0, after reverting the two reflow files below); `buf lint` + `buf breaking --against …#branch=feature/authelia-sso` exit=0 (the branch exists, so the impl-review `buf breaking` fallback ⚠ is cleared without a fallback). TDD: N/A.
+- Files modified: `packages/proto/identity/v1/identity.proto`, `packages/proto/gen/{go,python,ts}/identity/v1/*`, `packages/proto/gen/ts/dist/identity/v1/*`.
+- Deviations: host-native codegen fallback; incidental `analysis.pb.go`/`trading.pb.go` doc-comment reflow not committed (Deviation Log).

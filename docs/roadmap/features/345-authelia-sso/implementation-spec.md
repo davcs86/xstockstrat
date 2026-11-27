@@ -131,7 +131,7 @@ Retired IDs (never reused): AC-5, AC-8, AC-9, AC-18, AC-19, AC-26, AC-37, AC-39,
 
 ### Step 1 — proto: Add ResolveExternalIdentity, LinkExternalIdentity, GetExternalIdentityLinks and IssueSessionForUser
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/identity/v1/identity.proto` — modify
@@ -174,7 +174,7 @@ cd packages/proto && buf lint && buf breaking --against "../../.git#branch=featu
 
 ### Step 2 — proto-gen: Regenerate stubs for the identity additions
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/gen/ts/identity/v1/*` + `packages/proto/gen/ts/dist/identity/v1/*` — modify (generated)
@@ -2220,3 +2220,8 @@ echo GREEN
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+### Steps 1+2 — codegen toolchain and incidental Go reflow
+- **Expected**: `./scripts/buf-gen.sh` via the Docker codegen image; commit every path it changes.
+- **Actual**: the image's `golang:1.27-trixie` pull got Docker Hub `429 Too Many Requests`; ran `buf-gen.sh` host-native with the CI `proto-freshness` pins. That toolchain also reflowed two doc comments in `gen/go/analysis/v1/analysis.pb.go` and `gen/go/trading/v1/trading.pb.go` (no identity change; trunk's committed output, which CI produces, lacks the reflow).
+- **Disposition**: CI-equivalent fallback; the two non-identity files were reverted, not committed (CI `proto-freshness` re-checks the gen tree).

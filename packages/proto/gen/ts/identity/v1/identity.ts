@@ -322,6 +322,39 @@ export interface ListAdminUserIdsResponse {
   userIds: string[];
 }
 
+export interface ResolveExternalIdentityRequest {
+  issuer: string;
+  subject: string;
+}
+
+export interface ResolveExternalIdentityResponse {
+  userId: string;
+  roles: Role[];
+  isActive: boolean;
+}
+
+export interface IssueSessionForUserRequest {
+  userId: string;
+}
+
+export interface LinkExternalIdentityRequest {
+  userId: string;
+  issuer: string;
+  subject: string;
+  password: string;
+}
+
+export interface LinkExternalIdentityResponse {
+}
+
+export interface GetExternalIdentityLinksRequest {
+  userId: string;
+}
+
+export interface GetExternalIdentityLinksResponse {
+  issuers: string[];
+}
+
 function createBaseAuthenticateUserRequest(): AuthenticateUserRequest {
   return { email: "", password: "" };
 }
@@ -3797,6 +3830,547 @@ export const ListAdminUserIdsResponse: MessageFns<ListAdminUserIdsResponse> = {
   },
 };
 
+function createBaseResolveExternalIdentityRequest(): ResolveExternalIdentityRequest {
+  return { issuer: "", subject: "" };
+}
+
+export const ResolveExternalIdentityRequest: MessageFns<ResolveExternalIdentityRequest> = {
+  encode(message: ResolveExternalIdentityRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.issuer !== "") {
+      writer.uint32(10).string(message.issuer);
+    }
+    if (message.subject !== "") {
+      writer.uint32(18).string(message.subject);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ResolveExternalIdentityRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseResolveExternalIdentityRequest();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.issuer = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.subject = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): ResolveExternalIdentityRequest {
+    return {
+      issuer: isSet(object.issuer) ? globalThis.String(object.issuer) : "",
+      subject: isSet(object.subject) ? globalThis.String(object.subject) : "",
+    };
+  },
+
+  toJSON(message: ResolveExternalIdentityRequest): unknown {
+    const obj: any = {};
+    if (message.issuer !== "") {
+      obj.issuer = message.issuer;
+    }
+    if (message.subject !== "") {
+      obj.subject = message.subject;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<ResolveExternalIdentityRequest>, I>>(base?: I): ResolveExternalIdentityRequest {
+    return ResolveExternalIdentityRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ResolveExternalIdentityRequest>, I>>(
+    object: I,
+  ): ResolveExternalIdentityRequest {
+    const message = createBaseResolveExternalIdentityRequest();
+    message.issuer = object.issuer ?? "";
+    message.subject = object.subject ?? "";
+    return message;
+  },
+};
+
+function createBaseResolveExternalIdentityResponse(): ResolveExternalIdentityResponse {
+  return { userId: "", roles: [], isActive: false };
+}
+
+export const ResolveExternalIdentityResponse: MessageFns<ResolveExternalIdentityResponse> = {
+  encode(message: ResolveExternalIdentityResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.userId !== "") {
+      writer.uint32(10).string(message.userId);
+    }
+    writer.uint32(18).fork();
+    for (const v of message.roles) {
+      writer.int32(roleToNumber(v));
+    }
+    writer.join();
+    if (message.isActive !== false) {
+      writer.uint32(24).bool(message.isActive);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ResolveExternalIdentityResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseResolveExternalIdentityResponse();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.userId = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag === 16) {
+            message.roles.push(roleFromJSON(reader.int32()));
+
+            continue;
+          }
+
+          if (tag === 18) {
+            const end2 = reader.uint32() + reader.pos;
+            while (reader.pos < end2) {
+              message.roles.push(roleFromJSON(reader.int32()));
+            }
+
+            continue;
+          }
+
+          break;
+        }
+        case 3: {
+          if (tag !== 24) {
+            break;
+          }
+
+          message.isActive = reader.bool();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): ResolveExternalIdentityResponse {
+    return {
+      userId: isSet(object.userId)
+        ? globalThis.String(object.userId)
+        : isSet(object.user_id)
+        ? globalThis.String(object.user_id)
+        : "",
+      roles: globalThis.Array.isArray(object?.roles) ? object.roles.map((e: any) => roleFromJSON(e)) : [],
+      isActive: isSet(object.isActive)
+        ? globalThis.Boolean(object.isActive)
+        : isSet(object.is_active)
+        ? globalThis.Boolean(object.is_active)
+        : false,
+    };
+  },
+
+  toJSON(message: ResolveExternalIdentityResponse): unknown {
+    const obj: any = {};
+    if (message.userId !== "") {
+      obj.userId = message.userId;
+    }
+    if (message.roles?.length) {
+      obj.roles = message.roles.map((e) => roleToJSON(e));
+    }
+    if (message.isActive !== false) {
+      obj.isActive = message.isActive;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<ResolveExternalIdentityResponse>, I>>(base?: I): ResolveExternalIdentityResponse {
+    return ResolveExternalIdentityResponse.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ResolveExternalIdentityResponse>, I>>(
+    object: I,
+  ): ResolveExternalIdentityResponse {
+    const message = createBaseResolveExternalIdentityResponse();
+    message.userId = object.userId ?? "";
+    message.roles = object.roles?.map((e) => e) || [];
+    message.isActive = object.isActive ?? false;
+    return message;
+  },
+};
+
+function createBaseIssueSessionForUserRequest(): IssueSessionForUserRequest {
+  return { userId: "" };
+}
+
+export const IssueSessionForUserRequest: MessageFns<IssueSessionForUserRequest> = {
+  encode(message: IssueSessionForUserRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.userId !== "") {
+      writer.uint32(10).string(message.userId);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): IssueSessionForUserRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseIssueSessionForUserRequest();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.userId = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): IssueSessionForUserRequest {
+    return {
+      userId: isSet(object.userId)
+        ? globalThis.String(object.userId)
+        : isSet(object.user_id)
+        ? globalThis.String(object.user_id)
+        : "",
+    };
+  },
+
+  toJSON(message: IssueSessionForUserRequest): unknown {
+    const obj: any = {};
+    if (message.userId !== "") {
+      obj.userId = message.userId;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<IssueSessionForUserRequest>, I>>(base?: I): IssueSessionForUserRequest {
+    return IssueSessionForUserRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<IssueSessionForUserRequest>, I>>(object: I): IssueSessionForUserRequest {
+    const message = createBaseIssueSessionForUserRequest();
+    message.userId = object.userId ?? "";
+    return message;
+  },
+};
+
+function createBaseLinkExternalIdentityRequest(): LinkExternalIdentityRequest {
+  return { userId: "", issuer: "", subject: "", password: "" };
+}
+
+export const LinkExternalIdentityRequest: MessageFns<LinkExternalIdentityRequest> = {
+  encode(message: LinkExternalIdentityRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.userId !== "") {
+      writer.uint32(10).string(message.userId);
+    }
+    if (message.issuer !== "") {
+      writer.uint32(18).string(message.issuer);
+    }
+    if (message.subject !== "") {
+      writer.uint32(26).string(message.subject);
+    }
+    if (message.password !== "") {
+      writer.uint32(34).string(message.password);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): LinkExternalIdentityRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseLinkExternalIdentityRequest();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.userId = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.issuer = reader.string();
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.subject = reader.string();
+          continue;
+        }
+        case 4: {
+          if (tag !== 34) {
+            break;
+          }
+
+          message.password = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): LinkExternalIdentityRequest {
+    return {
+      userId: isSet(object.userId)
+        ? globalThis.String(object.userId)
+        : isSet(object.user_id)
+        ? globalThis.String(object.user_id)
+        : "",
+      issuer: isSet(object.issuer) ? globalThis.String(object.issuer) : "",
+      subject: isSet(object.subject) ? globalThis.String(object.subject) : "",
+      password: isSet(object.password) ? globalThis.String(object.password) : "",
+    };
+  },
+
+  toJSON(message: LinkExternalIdentityRequest): unknown {
+    const obj: any = {};
+    if (message.userId !== "") {
+      obj.userId = message.userId;
+    }
+    if (message.issuer !== "") {
+      obj.issuer = message.issuer;
+    }
+    if (message.subject !== "") {
+      obj.subject = message.subject;
+    }
+    if (message.password !== "") {
+      obj.password = message.password;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<LinkExternalIdentityRequest>, I>>(base?: I): LinkExternalIdentityRequest {
+    return LinkExternalIdentityRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<LinkExternalIdentityRequest>, I>>(object: I): LinkExternalIdentityRequest {
+    const message = createBaseLinkExternalIdentityRequest();
+    message.userId = object.userId ?? "";
+    message.issuer = object.issuer ?? "";
+    message.subject = object.subject ?? "";
+    message.password = object.password ?? "";
+    return message;
+  },
+};
+
+function createBaseLinkExternalIdentityResponse(): LinkExternalIdentityResponse {
+  return {};
+}
+
+export const LinkExternalIdentityResponse: MessageFns<LinkExternalIdentityResponse> = {
+  encode(_: LinkExternalIdentityResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): LinkExternalIdentityResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseLinkExternalIdentityResponse();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(_: any): LinkExternalIdentityResponse {
+    return {};
+  },
+
+  toJSON(_: LinkExternalIdentityResponse): unknown {
+    const obj: any = {};
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<LinkExternalIdentityResponse>, I>>(base?: I): LinkExternalIdentityResponse {
+    return LinkExternalIdentityResponse.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<LinkExternalIdentityResponse>, I>>(_: I): LinkExternalIdentityResponse {
+    const message = createBaseLinkExternalIdentityResponse();
+    return message;
+  },
+};
+
+function createBaseGetExternalIdentityLinksRequest(): GetExternalIdentityLinksRequest {
+  return { userId: "" };
+}
+
+export const GetExternalIdentityLinksRequest: MessageFns<GetExternalIdentityLinksRequest> = {
+  encode(message: GetExternalIdentityLinksRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.userId !== "") {
+      writer.uint32(10).string(message.userId);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): GetExternalIdentityLinksRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseGetExternalIdentityLinksRequest();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.userId = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): GetExternalIdentityLinksRequest {
+    return {
+      userId: isSet(object.userId)
+        ? globalThis.String(object.userId)
+        : isSet(object.user_id)
+        ? globalThis.String(object.user_id)
+        : "",
+    };
+  },
+
+  toJSON(message: GetExternalIdentityLinksRequest): unknown {
+    const obj: any = {};
+    if (message.userId !== "") {
+      obj.userId = message.userId;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<GetExternalIdentityLinksRequest>, I>>(base?: I): GetExternalIdentityLinksRequest {
+    return GetExternalIdentityLinksRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<GetExternalIdentityLinksRequest>, I>>(
+    object: I,
+  ): GetExternalIdentityLinksRequest {
+    const message = createBaseGetExternalIdentityLinksRequest();
+    message.userId = object.userId ?? "";
+    return message;
+  },
+};
+
+function createBaseGetExternalIdentityLinksResponse(): GetExternalIdentityLinksResponse {
+  return { issuers: [] };
+}
+
+export const GetExternalIdentityLinksResponse: MessageFns<GetExternalIdentityLinksResponse> = {
+  encode(message: GetExternalIdentityLinksResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    for (const v of message.issuers) {
+      writer.uint32(10).string(v!);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): GetExternalIdentityLinksResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseGetExternalIdentityLinksResponse();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.issuers.push(reader.string());
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): GetExternalIdentityLinksResponse {
+    return {
+      issuers: globalThis.Array.isArray(object?.issuers) ? object.issuers.map((e: any) => globalThis.String(e)) : [],
+    };
+  },
+
+  toJSON(message: GetExternalIdentityLinksResponse): unknown {
+    const obj: any = {};
+    if (message.issuers?.length) {
+      obj.issuers = message.issuers;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<GetExternalIdentityLinksResponse>, I>>(
+    base?: I,
+  ): GetExternalIdentityLinksResponse {
+    return GetExternalIdentityLinksResponse.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<GetExternalIdentityLinksResponse>, I>>(
+    object: I,
+  ): GetExternalIdentityLinksResponse {
+    const message = createBaseGetExternalIdentityLinksResponse();
+    message.issuers = object.issuers?.map((e) => e) || [];
+    return message;
+  },
+};
+
 export type IdentityServiceService = typeof IdentityServiceService;
 export const IdentityServiceService = {
   authenticateUser: {
@@ -4042,6 +4616,68 @@ export const IdentityServiceService = {
       Buffer.from(ListAdminUserIdsResponse.encode(value).finish()),
     responseDeserialize: (value: Buffer): ListAdminUserIdsResponse => ListAdminUserIdsResponse.decode(value),
   },
+  /**
+   * Maps an OIDC (issuer, subject) to its linked user (feature 345). Authorized by mTLS peer SAN
+   * xstockstrat-ui or xstockstrat-agent only; every request header is ignored.
+   */
+  resolveExternalIdentity: {
+    path: "/xstockstrat.identity.v1.IdentityService/ResolveExternalIdentity" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: ResolveExternalIdentityRequest): Buffer =>
+      Buffer.from(ResolveExternalIdentityRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): ResolveExternalIdentityRequest => ResolveExternalIdentityRequest.decode(value),
+    responseSerialize: (value: ResolveExternalIdentityResponse): Buffer =>
+      Buffer.from(ResolveExternalIdentityResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): ResolveExternalIdentityResponse =>
+      ResolveExternalIdentityResponse.decode(value),
+  },
+  /**
+   * Mints a session for an SSO-resolved user (feature 345). Authorized by mTLS peer SAN
+   * xstockstrat-ui only; every request header is ignored.
+   */
+  issueSessionForUser: {
+    path: "/xstockstrat.identity.v1.IdentityService/IssueSessionForUser" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: IssueSessionForUserRequest): Buffer =>
+      Buffer.from(IssueSessionForUserRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): IssueSessionForUserRequest => IssueSessionForUserRequest.decode(value),
+    responseSerialize: (value: AuthTokenResponse): Buffer => Buffer.from(AuthTokenResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): AuthTokenResponse => AuthTokenResponse.decode(value),
+  },
+  /**
+   * Links an OIDC identity after a password re-check (feature 345). Authorized by mTLS peer SAN
+   * xstockstrat-ui only; every request header is ignored.
+   */
+  linkExternalIdentity: {
+    path: "/xstockstrat.identity.v1.IdentityService/LinkExternalIdentity" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: LinkExternalIdentityRequest): Buffer =>
+      Buffer.from(LinkExternalIdentityRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): LinkExternalIdentityRequest => LinkExternalIdentityRequest.decode(value),
+    responseSerialize: (value: LinkExternalIdentityResponse): Buffer =>
+      Buffer.from(LinkExternalIdentityResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): LinkExternalIdentityResponse => LinkExternalIdentityResponse.decode(value),
+  },
+  /**
+   * Lists the issuers a user is linked to (feature 345). Authorized by mTLS peer SAN
+   * xstockstrat-ui only; every request header is ignored.
+   */
+  getExternalIdentityLinks: {
+    path: "/xstockstrat.identity.v1.IdentityService/GetExternalIdentityLinks" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: GetExternalIdentityLinksRequest): Buffer =>
+      Buffer.from(GetExternalIdentityLinksRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): GetExternalIdentityLinksRequest =>
+      GetExternalIdentityLinksRequest.decode(value),
+    responseSerialize: (value: GetExternalIdentityLinksResponse): Buffer =>
+      Buffer.from(GetExternalIdentityLinksResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): GetExternalIdentityLinksResponse =>
+      GetExternalIdentityLinksResponse.decode(value),
+  },
 } as const;
 
 export interface IdentityServiceServer extends UntypedServiceImplementation {
@@ -4088,6 +4724,26 @@ export interface IdentityServiceServer extends UntypedServiceImplementation {
    * xstockstrat-notify only; every request header is ignored.
    */
   listAdminUserIds: handleUnaryCall<ListAdminUserIdsRequest, ListAdminUserIdsResponse>;
+  /**
+   * Maps an OIDC (issuer, subject) to its linked user (feature 345). Authorized by mTLS peer SAN
+   * xstockstrat-ui or xstockstrat-agent only; every request header is ignored.
+   */
+  resolveExternalIdentity: handleUnaryCall<ResolveExternalIdentityRequest, ResolveExternalIdentityResponse>;
+  /**
+   * Mints a session for an SSO-resolved user (feature 345). Authorized by mTLS peer SAN
+   * xstockstrat-ui only; every request header is ignored.
+   */
+  issueSessionForUser: handleUnaryCall<IssueSessionForUserRequest, AuthTokenResponse>;
+  /**
+   * Links an OIDC identity after a password re-check (feature 345). Authorized by mTLS peer SAN
+   * xstockstrat-ui only; every request header is ignored.
+   */
+  linkExternalIdentity: handleUnaryCall<LinkExternalIdentityRequest, LinkExternalIdentityResponse>;
+  /**
+   * Lists the issuers a user is linked to (feature 345). Authorized by mTLS peer SAN
+   * xstockstrat-ui only; every request header is ignored.
+   */
+  getExternalIdentityLinks: handleUnaryCall<GetExternalIdentityLinksRequest, GetExternalIdentityLinksResponse>;
 }
 
 export interface IdentityServiceClient extends Client {
@@ -4441,6 +5097,82 @@ export interface IdentityServiceClient extends Client {
     metadata: Metadata,
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: ListAdminUserIdsResponse) => void,
+  ): ClientUnaryCall;
+  /**
+   * Maps an OIDC (issuer, subject) to its linked user (feature 345). Authorized by mTLS peer SAN
+   * xstockstrat-ui or xstockstrat-agent only; every request header is ignored.
+   */
+  resolveExternalIdentity(
+    request: ResolveExternalIdentityRequest,
+    callback: (error: ServiceError | null, response: ResolveExternalIdentityResponse) => void,
+  ): ClientUnaryCall;
+  resolveExternalIdentity(
+    request: ResolveExternalIdentityRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: ResolveExternalIdentityResponse) => void,
+  ): ClientUnaryCall;
+  resolveExternalIdentity(
+    request: ResolveExternalIdentityRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: ResolveExternalIdentityResponse) => void,
+  ): ClientUnaryCall;
+  /**
+   * Mints a session for an SSO-resolved user (feature 345). Authorized by mTLS peer SAN
+   * xstockstrat-ui only; every request header is ignored.
+   */
+  issueSessionForUser(
+    request: IssueSessionForUserRequest,
+    callback: (error: ServiceError | null, response: AuthTokenResponse) => void,
+  ): ClientUnaryCall;
+  issueSessionForUser(
+    request: IssueSessionForUserRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: AuthTokenResponse) => void,
+  ): ClientUnaryCall;
+  issueSessionForUser(
+    request: IssueSessionForUserRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: AuthTokenResponse) => void,
+  ): ClientUnaryCall;
+  /**
+   * Links an OIDC identity after a password re-check (feature 345). Authorized by mTLS peer SAN
+   * xstockstrat-ui only; every request header is ignored.
+   */
+  linkExternalIdentity(
+    request: LinkExternalIdentityRequest,
+    callback: (error: ServiceError | null, response: LinkExternalIdentityResponse) => void,
+  ): ClientUnaryCall;
+  linkExternalIdentity(
+    request: LinkExternalIdentityRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: LinkExternalIdentityResponse) => void,
+  ): ClientUnaryCall;
+  linkExternalIdentity(
+    request: LinkExternalIdentityRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: LinkExternalIdentityResponse) => void,
+  ): ClientUnaryCall;
+  /**
+   * Lists the issuers a user is linked to (feature 345). Authorized by mTLS peer SAN
+   * xstockstrat-ui only; every request header is ignored.
+   */
+  getExternalIdentityLinks(
+    request: GetExternalIdentityLinksRequest,
+    callback: (error: ServiceError | null, response: GetExternalIdentityLinksResponse) => void,
+  ): ClientUnaryCall;
+  getExternalIdentityLinks(
+    request: GetExternalIdentityLinksRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: GetExternalIdentityLinksResponse) => void,
+  ): ClientUnaryCall;
+  getExternalIdentityLinks(
+    request: GetExternalIdentityLinksRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: GetExternalIdentityLinksResponse) => void,
   ): ClientUnaryCall;
 }
 
