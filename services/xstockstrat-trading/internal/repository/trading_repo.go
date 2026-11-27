@@ -14,8 +14,8 @@ import (
 	tradingv1 "github.com/xstockstrat/contracts/gen/go/trading/v1"
 )
 
-// dbQuerier is the query subset extracted so the LATERAL-join reads can be exercised with pgxmock
-// (this service has no live-DB test harness). Both *pgxpool.Pool and pgxmock satisfy it.
+// dbQuerier is the query subset extracted so the LATERAL-join reads can be exercised with pgxmock.
+// Both *pgxpool.Pool and pgxmock satisfy it.
 type dbQuerier interface {
 	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
 	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)

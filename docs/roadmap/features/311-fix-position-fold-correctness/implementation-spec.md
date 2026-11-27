@@ -952,7 +952,7 @@ New logic is in excluded packages — no coverage threshold applies to it.
 
 ### Step 21 — test: real-Postgres proof for trading bracket-leg SQL (dbtest)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/repository/dbtest_helpers_test.go` — create
@@ -1537,3 +1537,15 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Spec said** (Instruction 3): a mixed orders-plus-legs row set for one symbol sums with the right signs, and a tombstone row with 0 leaves the sum equal to the orders row alone.
 - **Actual**: pgxmock does not execute SQL, so `SUM` and the sign `CASE` run only on a server. `TestNetFilledQtyBySymbol_AddsBracketLegsObservedQty` asserts the SQL shape: the one sign `CASE` wraps both branches, and the leg branch reads `observed_filled_qty` with no status filter, so a tombstone adds its 0. It also asserts that the server's total is returned unchanged.
 - **Disposition**: the summed values are proven by Step 21 (`TestTradingRepoLegsDB_NetFilledQtyBySymbol`, `10 - 3 - 4 = 3`), as A-5 assigns. No step body changed.
+
+### Step 21 — Verification block stops after its first line; the DB lines cannot run here (2026-11-27)
+- **Spec said**: an eight-command block whose lines each start `cd services/xstockstrat-trading && …` or name a repo-root-relative path; the test line sets `TRADING_DB_TEST_URL=<url>` "with a migrated database available", and the next line expects `0` `--- SKIP` lines.
+- **Actual**: the same pattern as Steps 3-20. Inside the one subshell the first line's `cd` persists, so every later line fails with `cd: services/xstockstrat-trading: No such file or directory` (the greps print `No such file or directory`). Run verbatim (`.sdd-logs/v-1.log`, `exit=1`), only `go vet -tags dbtest ./internal/repository/...` ran, and it printed nothing. No database is available and none may be started; `<url>` is a placeholder that bash reads as a redirect from a file named `url`.
+- **Disposition**: every line that had not run was run alone from the repo root, each with its own log. The `-list` line (`v-2.log`) names all 10 cases. The `TRADING_DB_TEST_URL` grep (`v-3.log`) prints `1`, and the `NOT_OPEN_AT_ADOPTION` grep (`v-4.log`) prints `0`. The test line ran without the placeholder and with the URL unset (`v-5.log`, `exit 0`): every case compiles and runs, and all 20 subtests print `--- SKIP`, so the skip count is `20`, not `0`. That `0` holds only in the `trading-db-test` job (Step 22), which sets the URL; the helper is fatal under `CI=true` without it. Lint (`v-6.log`, v2.14.0 first on `PATH`) printed `0 issues.`. The coverage line (`v-7.log`) printed `total: (statements) 84.9%`. The step body was not changed (F-09).
+
+### Step 21 — how Instructions 1-3 were met (2026-11-27)
+- **`seedParentOrder` order id.** An empty `orderID` argument gets the fresh UUID that Instruction 1 names. A non-empty one writes a second `trading.orders` row for the same order, which the two-row cases (candidate (a), the `DISTINCT ON` sell order) need.
+- **Shared helpers.** `dbtestID` (the per-test id built from the prefix, `t.Name()` and `UnixNano`), the two `broker_type` constants and `legParent` are used by both test files, so they sit in `dbtest_helpers_test.go` with the prefix and `execModes` (C-13).
+- **The empty-string `KnownBrokerOrderIDs` member.** The case seeds one bracket whose leg columns are `''` and one whose columns are NULL. It queries real ids only and asserts the result has no `""` key. If `""` were in the input it would match a `''` column. No caller is known to pass `""`, and this step does not test that input.
+- **The atomicity case** asserts SQLSTATE `22021` for a NUL byte in `Symbol`. This was not run against a server. If the CI server returns another code or rejects the value client-side, the case fails loudly. The fix is then the step's named fallback (a non-UUID `parent.OrderID`) with the same three assertions.
+- **Disposition**: these stay within the listed **Files** and the instructions' intent. No step body changed.

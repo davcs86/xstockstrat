@@ -3361,3 +3361,37 @@ Tooling (steps 18+19+20): go1.27.0 ✓ · golangci-lint ✓ v2.14.0 (built with 
 - Deviations: Deviation Log, "Steps 18+19+20 — Verification blocks stop after their first line" and "Step 20 — the pgxmock form of the mixed orders-plus-legs sum".
 - Context read: the execution sessions (2026-11-20 sdd-design approval to here) were read in full. The design-round sessions (lines 1-2874) were read at lines 1-33 and searched for `ActivateBracket` and `trading_mode`. The hits (filled_qty 0 on activation, empty ids skipped, a failed tx alerted and accepted, the join filling every parent-derived column) match this unit.
 - Open: `git diff --quiet origin/main-dev -- pnpm-lock.yaml` printed `rc=1`. The cause is `main-dev` commit `eb3839d9` (feature fix-orphaned-code), which changed the lockfile after the merge base `f802b184`. This branch has no commit touching `pnpm-lock.yaml`. Nothing in this unit is Node.
+
+## Session 2026-11-27 — sdd-execute sequential (sdd-batch-execute), Step 21
+
+Tooling (step 21): go1.27.0 ✓ · golangci-lint ✓ v2.14.0 (built with go1.27.0, at `/root/go/bin`, put first on `PATH` for the lint run) · `TRADING_DB_TEST_URL` ✗ (unset; no database started, per the HARD CONSTRAINTS)
+
+### Step 21 — test: real-Postgres proof for trading bracket-leg SQL (dbtest) [done]
+- New `dbtest_helpers_test.go` (`//go:build dbtest`):
+  - `testPool` reads `TRADING_DB_TEST_URL`. It skips locally and is fatal under `CI=true`, naming the `trading-db-test` job. It sets `lock_timeout` 500ms and registers `pool.Close` first, then cleans up `trading.orders`, `trading.order_brackets` and `trading.bracket_legs` by the `it-311-` prefix. The cleanups run in the reverse order: legs, brackets, orders, then the pool close.
+  - Also here: `execModes` (default and `QueryExecModeExec`), `dbtestID`, `seedParentOrder` (through `UpsertOrder`), `seedBracket` (through `CreateBracket`), the ALPACA=1 and IBKR=2 constants, and `legParent`.
+- New `bracket_legs_dbtest_test.go`: the 8 named `TestBracketLegsDB_*` cases, each run once per exec mode:
+  - activation rows;
+  - the `ON CONFLICT` duplicate guard, where the cursor stays at 4;
+  - an empty take-profit, checked as NULL with a raw SELECT;
+  - rollback, from a NUL in `Symbol`: a `PgError` with code 22021, the bracket keeping its pre-call status and `''` ids, and no leg rows;
+  - `ListTrackedLegs` ordering and the retired filter;
+  - `ListAdoptionCandidates` seeds (a)-(f) under `{3,4}` and `{3}`;
+  - `InsertAdoptedLeg`: true, then false with nothing changed, and a retired insert that drops a candidate;
+  - observation, then the emit cursor moving 4 then 10 and the leg retiring (`@AC-5` at the SQL layer).
+- New `trading_repo_legs_dbtest_test.go`:
+  - `KnownBrokerOrderIDs`: a broker id, `order_brackets`-only ids, resize-blanked ids held only in `bracket_legs`, and a retired id are all returned. An unknown id is not, the same ids under another account return nothing, and there is no `""` member.
+  - `NetFilledQtyBySymbol`: AAPL is `10 - 3 - 4 = 3`, with the retired, other-account and outside-symbol legs ignored. MSFT is held only by a leg and returns `-2`.
+- `trading_repo.go:17-18`: the false "(this service has no live-DB test harness)" was deleted, with no replacement.
+- TDD: red N/A locally — skipped without `TRADING_DB_TEST_URL`; the `trading-db-test` job (Step 22) is the proof. The mutation RED (removing the `bracket_legs` branch from `KnownBrokerOrderIDs` and `NetFilledQtyBySymbol`) needs a database and was not shown. GREEN, local layer only:
+  - `v-1.log`: `go vet -tags dbtest ./internal/repository/...` printed nothing.
+  - `v-2.log`: `-list` names all 10 cases.
+  - `v-3.log`: the `TRADING_DB_TEST_URL` grep printed `1`; `v-4.log`: the `NOT_OPEN_AT_ADOPTION` grep printed `0`.
+  - `v-5.log`: `exit 0` and `ok …/internal/repository`; all 20 subtests `--- SKIP` (count `20`).
+  - `v-6.log`: lint printed `0 issues.`.
+  - `v-7.log`: every package `ok`, `total: (statements) 84.9%`.
+- The config-wiring gate does not apply: the step declares no key.
+- Files modified: `services/xstockstrat-trading/internal/repository/dbtest_helpers_test.go`, `services/xstockstrat-trading/internal/repository/bracket_legs_dbtest_test.go`, `services/xstockstrat-trading/internal/repository/trading_repo_legs_dbtest_test.go`, `services/xstockstrat-trading/internal/repository/trading_repo.go`
+- Deviations: Deviation Log, "Step 21 — Verification block stops after its first line; the DB lines cannot run here" and "Step 21 — how Instructions 1-3 were met".
+- Step 22 needs to know: the job must set `TRADING_DB_TEST_URL` and apply every trading migration (`012` included). Its green run must show 0 `--- SKIP`. The first real run of the 22021 atomicity case is there; on a different code, use the step's non-UUID `OrderID` fallback.
+- Context read: this file was read in full (lines 1-3363) before the step.
