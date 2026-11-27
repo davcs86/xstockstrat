@@ -25,6 +25,7 @@
 | 2026-11-27 | `implementation-ready` (unchanged) | owner | Owner decisions: no tokens on stale keys (D-138 via P-6, AC-79; Steps 19, 20, 24, 54 amended before execution) and no Claude Code clients on the homelab (Step 54 runbook) |
 | 2026-11-27 | `implementation-ready` (unchanged) | owner | Spike S17: Link requests send `prompt=login` + `max_age=1`, not `max_age=0` (D-139 via P-7; AC-65 text, same ID; Steps 32, 33, 43, 53, 54 amended before execution); cutover gate 2 proven on the spike |
 | 2026-11-27 | `implementation-ready` (unchanged) | owner | Specs re-grounded on `main-dev@187e9f8` (docs only): config seed `056` → `060`, Tree header, shifted line citations; `merge-order.md` 345 rows resolved |
+| 2026-11-27 | `implementation-ready` (unchanged) | /sdd-execute | Sequential re-spec gate on `main-dev@4edfa94` (owner: targeted re-spec): Step 10 gains `revokeToken.test.ts` (8th inline config mock, added by 319); citation-only fixes in Steps 11, 13, 27, 31, 32, 46, 47, 52, 55 |
 
 ---
 

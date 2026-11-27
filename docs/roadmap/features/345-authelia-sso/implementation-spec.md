@@ -100,7 +100,7 @@ Retired IDs (never reused): AC-5, AC-8, AC-9, AC-18, AC-19, AC-26, AC-37, AC-39,
   import `identity_pb2`).
 - Steps 9 + 10 land together: Step 9 adds `this.config.getString(...)` to `authenticateUser`, and every identity
   config mock has only `getInt` (`identityServiceImpl.test.ts:58,292,357,1141,1388`,
-  `identityServiceImpl.otlp.test.ts:40`, `identityTelemetry.test.ts:13`; recon R-6), so every existing
+  `identityServiceImpl.otlp.test.ts:40`, `identityTelemetry.test.ts:13`, `revokeToken.test.ts:12`; recon R-6), so every existing
   password-login test throws until Step 10 replaces them with `fakeConfig()`.
 - Step 4 seeds the keys; their readers land in Steps 7 (identity), 17 (agent) and 30 (UI), on three consumer
   surfaces, so they cannot form one §C unit. The bridge is step-time `check-config-wiring.mjs`: a missing leg prints
@@ -367,7 +367,7 @@ grep -n "__tests__/fixtures" src/__tests__/autheliaSsoSeedMigration.test.ts || e
    - `"services/xstockstrat-identity/src/authMode.ts:config": "identity"`;
    - `"services/xstockstrat-agent/app/sso_mode.py:identity_config": "identity"`, `"services/xstockstrat-agent/app/sso_mode.py:agent_config": "agent"`;
    - `"services/xstockstrat-ui/src/lib/oidcConfig.ts:identity.values": "identity"`, `"…:ui.values": "ui"`, `"…:agent.values": "agent"`.
-   - No `findings` baseline entry (`docs/patterns/config-governance.md` § Baseline).
+   - No `findings` baseline entry (`docs/patterns/config-governance.md` **Baseline.** bullet, `:90`).
 3. **`ci.yml`**: append `'scripts/testdata/oidc-issuer-vectors.json'` to the `xstockstrat-agent` (`:59`), `xstockstrat-identity` (`:62`) and `xstockstrat-ui` (`:64`) filters.
 4. Hand-check the JSON once against both engines (D-88 practice): every `issuer` row through Python `re.fullmatch` and Node `new RegExp(...).test` gives its `valid`; record the output in the step's evidence.
 
@@ -500,12 +500,13 @@ grep -c "sessionResponse(" src/grpc/identityServiceImpl.ts   # definition + 2 ca
 - `services/xstockstrat-identity/src/__tests__/identityServiceImpl.test.ts` — modify
 - `services/xstockstrat-identity/src/__tests__/identityServiceImpl.otlp.test.ts` — modify
 - `services/xstockstrat-identity/src/__tests__/identityTelemetry.test.ts` — modify
+- `services/xstockstrat-identity/src/__tests__/revokeToken.test.ts` — modify
 - `services/xstockstrat-identity/src/__tests__/telemetryAllowlist.test.ts` — modify
 
 **Reviewers**: `xstockstrat-identity` owner — JWT expiry and rotation
 
 **Codebase Evidence**:
-- Config mocks with only `getInt`: `identityServiceImpl.test.ts:58,292,357,1141,1388`, `identityServiceImpl.otlp.test.ts:40`, `identityTelemetry.test.ts:13` (grep `getInt\|getString\|getBool` over `src/__tests__`). Seven consumers → one fixture (C-13, R-6).
+- Config mocks with only `getInt`: `identityServiceImpl.test.ts:58,292,357,1141,1388`, `identityServiceImpl.otlp.test.ts:40`, `identityTelemetry.test.ts:13`, `revokeToken.test.ts:12` (added by 319, #1610) (grep `getInt\|getString\|getBool` over `src/__tests__`). Eight consumers → one fixture (C-13, R-6).
 - Node fixture home exists: `src/__tests__/fixtures/` (`collectingReader.ts`, `otlpReceiver.ts`).
 - `telemetryAllowlist.test.ts` drives the closed label sets.
 
@@ -517,7 +518,7 @@ grep -c "sessionResponse(" src/grpc/identityServiceImpl.ts   # definition + 2 ca
 
 **Instructions**:
 1. `fixtures/fakeConfig.ts`: `export function fakeConfig(overrides: { ints?: Record<string, number>; strings?: Record<string, string> } = {})` returning `{ getInt(k, d), getString(k, d) }` (absent key → default). Header comment: a call-builder fixture, not domain data, so no inventory row (`docs/patterns/test-data-inventory.md`).
-2. Replace all seven mock sites with `fakeConfig(...)` (the `:292` site keeps `jwt.access_ttl_seconds = 1800`).
+2. Replace all eight mock sites with `fakeConfig(...)` (the `:292` site keeps `jwt.access_ttl_seconds = 1800`).
 3. Cases in `identityServiceImpl.test.ts`:
    - **@AC-16:** `strings: {'auth.mode': 'oidc'}` → code 7 "password login disabled", **zero** `pool.query` calls, `password_login_disabled` counted;
    - **@AC-17:** `'both'` → today's token pair;
@@ -550,7 +551,7 @@ grep -n "fixtures/fakeConfig" src/__tests__/identityServiceImpl.test.ts src/__te
 **Codebase Evidence**:
 - `adminDirectory.ts`: header "No relative imports (loads under strip-types). Header-blind by design" (`:1-2`); `AdminDirectoryCall` (`:8-10`); module-private `peerDnsSans` (`:12-19`) and `hasAdminDirectoryPeer` (`:21-25`); denial before `pool.query` (`:37-40`).
 - Delegation precedent `identityServiceImpl.ts:997` `async listAdminUserIds(call, callback)`.
-- `mintAccessToken` (`:304-324`), `issueRefreshToken(userId, clientId?, db)` (`:330-343`), `stringsToRoles` (`:40-43`), `mapDbError` (`:116-120`), `auditSafe` (`:777-788`).
+- `mintAccessToken` (`:304-324`), `issueRefreshToken(userId, clientId?, db)` (`:330-343`), `stringsToRoles` (`:40-43`), `mapDbError` (`:116-120`), `auditSafe` (`:782-791`).
 - `AUDIT_EVENT_TYPES` `telemetry.ts:381-388` with the doc comment "The audited user.* event types" (`:380`); `recordAuditFailure` `:434-437`; `BoundCounter` used for `identity.login.failures` (`:390`).
 - Server wiring binds methods by camelCase name (`src/index.ts:43-46`).
 
@@ -641,7 +642,7 @@ grep -n "25061/production" ../../.do/app.yaml | head -1 && grep -n "25061/stagin
 
 **Codebase Evidence**:
 - `SECRET_CALLER_ALLOWLIST` at `authz.ts:143-162`; the last grant is `notify` with `peerSan: 'xstockstrat-notify'` (`:157-160`).
-- `hasSecretCallerAuthority` requires `HEADER_INTERNAL_CALLER` (`:74`), the callerID, the key and, for a grant with `peerSan`, that exact DNS SAN (`:175-184`).
+- `hasSecretCallerAuthority` requires `HEADER_INTERNAL_CALLER` (`:74`), the callerID, the key and, for a grant with `peerSan`, that exact DNS SAN (`:182-202`; `peerDnsSans` `:175-180`).
 
 **TDD**: red-green required (paired test: Step 14)
 
@@ -1131,7 +1132,7 @@ grep -n "APP_URL: http://localhost:3000" ../../docker-compose.yml && docker comp
 
 **Codebase Evidence**:
 - `vitest.config.ts:19` node environment, `include: ['src/**/*.test.ts']` (`:24`); coverage over `src/lib/**` with thresholds 40 (`:29`, `:33-37`); `import.meta.url` path idiom at `:16`.
-- `serverLog.test.ts` exists (50 lines, last changed `d711817`): its "no provider" test must run first, since the OTel logger
+- `serverLog.test.ts` exists (50 lines, last changed `d758013`): its "no provider" test must run first, since the OTel logger
   provider can be set only once.
 
 **TDD**: red-green required
@@ -1260,7 +1261,7 @@ cd ../.. && node scripts/check-config-wiring.mjs --declared-from docs/roadmap/fe
 **Reviewers**: `xstockstrat-ui` owner — environment (`production`/`staging`) scope correctness
 
 **Codebase Evidence**:
-- `vi.mock('@/lib/connectClients')` pattern in `src/lib/__tests__/insightsBff.test.ts`.
+- `vi.mock('@/lib/connectClients')` pattern in `src/lib/insightsBff.test.ts:11`.
 
 **TDD**: red-green required
 
@@ -1299,7 +1300,7 @@ cd services/xstockstrat-ui && pnpm run typecheck && pnpm run lint && pnpm run te
 **Codebase Evidence**:
 - `package.json` has `"jose": "^5.0.0"` (`:46`) and no OIDC client (recon).
 - openid-client 6.8.9 API (`discovery`, `ClientSecretBasic`, `enableNonRepudiationChecks`, `allowInsecureRequests`, `randomState`/`randomNonce`/`randomPKCECodeVerifier`/`calculatePKCECodeChallenge`, `buildAuthorizationUrl`, `authorizationCodeGrant`, `buildEndSessionUrl`) verified by the orchestrator (D-29, D-34, D-89); `tokens.claims()` returns the validated ID-token claims and `auth_time` is optional without `maxAge` (D-127).
-- Leaf Dockerfiles use the root lockfile (insights.md:2948-2955); `next.config.js` `output: 'standalone'`.
+- Leaf Dockerfiles use the root lockfile (insights.md:2946-2954); `next.config.js` `output: 'standalone'`.
 
 **TDD**: red-green required (paired test: Step 33)
 
@@ -1791,7 +1792,7 @@ grep -n "/accounts/sso" src/components/shared/navGroups.tsx src/components/share
 **Reviewers**: `xstockstrat-ui` owner — Trading UI correctness
 
 **Codebase Evidence**:
-- `PlatformHeader.tsx:246-249`: `<div className="flex items-center gap-2 ml-auto">{actions}<AlertStream /><CopilotToggle />`, then the `sm:hidden` sidebar block.
+- `PlatformHeader.tsx:248-251`: `<div className="flex items-center gap-2 ml-auto">{actions}<AlertStream /><CopilotToggle />`, then the `sm:hidden` sidebar block.
 - `Button` in `src/components/ui/button.tsx` (icon size convention, D-63).
 - **Not found**: no logout caller in `src/` (recon).
 
@@ -1823,7 +1824,7 @@ cd services/xstockstrat-ui && pnpm run typecheck && pnpm run lint && pnpm run bu
 **Reviewers**: `xstockstrat-ui` owner — no secret values rendered in UI, environment scope correctness
 
 **Codebase Evidence**:
-- `authorized-apps/page.tsx` (270 lines): `'use client'` (`:1`), `useAgentUrl()` (`:68`), `apiFetch('/accounts/api/authorized-apps')` (`:80`, `:113`), `columns` memo (`:127`), `copyAgentUrl` (`:160`), connector field with `aria-label="MCP connector URL"` (`:209-221`), list `Card` (`:245-264`).
+- `authorized-apps/page.tsx` (270 lines): `'use client'` (`:1`), `useAgentUrl()` (`:68`), `apiFetch('/accounts/api/authorized-apps')` (`:80`, `:113`), `columns` memo (`:127`), `copyAgentUrl` (`:160`), connector field with `aria-label="MCP connector URL"` (`:208-228`), list `Card` (`:245-267`).
 - `accounts/layout.tsx:19` reads `AGENT_PUBLIC_URL` server-side into `AgentUrlProvider`; untouched.
 
 **TDD**: red-green required (RED/GREEN via the Step 53 e2e and the existing `auth.spec.ts` list cases)
@@ -1983,7 +1984,7 @@ pnpm exec playwright test e2e/auth.spec.ts --project=chromium   # default state 
 **Reviewers**: `xstockstrat-ui` owner — Trading UI correctness
 
 **Codebase Evidence**:
-- `playwright.config.ts`: `fullyParallel: true` (`:83`), `workers: isCI ? 2 : undefined` (`:85`), `retries` (`:86`), `use.baseURL: 'http://localhost:3000'` (`:101`), `projects` (`:105-132`: `setup`, `chromium`), `webServer` (`:135`) with `AGENT_PUBLIC_URL: 'http://127.0.0.1:9099'` (`:175`).
+- `playwright.config.ts`: `fullyParallel: true` (`:83`), `workers: isCI ? 2 : undefined` (`:85`), `retries` (`:86`), `use.baseURL: 'http://localhost:3000'` (`:101`), `projects` (`:105-134`: `setup`, `chromium`, conditional `firefox` `:120-133`), `webServer` (`:135`) with `AGENT_PUBLIC_URL: 'http://127.0.0.1:9099'` (`:175`).
 - `@playwright/test` `1.62.1` (`package.json:67`) has a project-level `workers` option, so no separate CI invocation is needed; CI `frontend-e2e` runs every project (`ci.yml:611`).
 
 **TDD**: N/A (test configuration; RED→GREEN via Step 53)
@@ -2092,7 +2093,7 @@ for s in "openid profile email" "preferred_username" "auth_time" "max_age=1" "/a
 **Reviewers**: none
 
 **Codebase Evidence**:
-- `docs/patterns/config-governance.md` § Per-Feature Registered Keys and § Baseline; root `CLAUDE.md` § Inter-Service Dependencies (the `xstockstrat-notify → xstockstrat-identity (ListAdminUserIds …)` line).
+- `docs/patterns/config-governance.md` § Per-Feature Registered Keys and the **Baseline.** bullet (`:90`, under § Wiring check); root `CLAUDE.md` § Inter-Service Dependencies (the `xstockstrat-notify → xstockstrat-identity (ListAdminUserIds …)` line).
 
 **TDD**: N/A (docs)
 

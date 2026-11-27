@@ -774,3 +774,19 @@
   none and leaves the two `ui/oidc.mcp_client_id_claude_code*` keys empty (Step 54's cutover runbook already says so).
   The open thread at the 2026-11-27 entries above (FR-level owner call) is closed. FR-13's citation of the retired
   homelab-edge spike item S9 stays as the redirect's design reference for those deployments; no spec text changes.
+
+## Session 2026-11-27 — sdd-execute (sequential), re-spec gate
+
+- Tree: `feature/authelia-sso@4edfa94 ≡ origin/feature/authelia-sso` (created from `main-dev@4edfa94`).
+- Mode: `sequential`, owner-confirmed in this session (mode entry, targeted re-spec, proceed). Owner chose **no
+  checkpoints**: the run stops only for blockers or owner decisions; checkpoint reports are logged here instead.
+- Re-spec gate (read-only validation of all 58 steps; every CREATE target absent; identity `007` and config `060` free):
+  - **Step 10** (real mismatch): feature 319 (#1610) added an 8th inline `{ getInt }` config mock at
+    `src/__tests__/revokeToken.test.ts:12`; Step 10's own `! grep "{ getInt:"` check would fail. Files, evidence,
+    instruction 2 and the Step Dependencies bullet now list it (eight sites).
+  - Citation-only: Step 11 `auditSafe` `:782-791`; Step 13 `hasSecretCallerAuthority` `:182-202`; Step 27
+    `serverLog.test.ts` last changed `d758013`; Step 31 `src/lib/insightsBff.test.ts:11`; Step 32 `insights.md:2946-2954`;
+    Step 46 `PlatformHeader.tsx:248-251`; Step 47 field `:208-228`, list `Card` `:245-267`; Step 52 `projects`
+    `:105-134` (conditional `firefox` `:120-133`); Step 4/55 config-governance "Baseline" is a bold bullet at `:90`.
+- Still open, flagged to the owner at mode entry: spec-level choice 8 (seed idempotence "replayed by
+  `migration-rerun`") no longer holds since 318; the seed stays idempotent via `ON CONFLICT DO NOTHING` (Step 3/4 rule).
