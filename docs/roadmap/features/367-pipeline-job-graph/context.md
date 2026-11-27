@@ -110,3 +110,13 @@
   `@AC-4`, `@AC-12`, `@AC-15`) and `@AC-17`, `@AC-18` appended. These change an approved spec
   with explicit operator sign-off.
 - Reopens require another round: round 6 started over the amended design.md. Not approved.
+
+## Session 2026-11-27 — sdd-design round 6
+
+- Round 6 run over the amended design (required by the round-5 reopens). No Floor breach, no
+  C-16 regression, no register violation. Every lease-timing figure was recomputed by both sides
+  and confirmed. Eight new objections (O-63..O-70); O-63 is a functional gap (a claim after the
+  kill switch), found independently by both sides.
+- Two reopen petitions pending the operator: P-4 (D-49 lock strength) and P-5 (D-47 invariants 1
+  and 3). One spec wording follow-up pending the operator (the 4 s lag in the lease constraint).
+- design.md not yet amended for round 6.
