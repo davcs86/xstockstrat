@@ -774,3 +774,100 @@ Effect: use the defaults recorded in this file and in the implementation spec fo
 - Feature-final gate: `node scripts/check-config-wiring.mjs --final` (`.sdd-logs/v-3.log`) `exit=0`. It reports only two pre-existing `REPORTED:` `readers-disagree` lines (`fundsignal_loop.py` `marketdata/fundamentals.provider`, `trading.go` `platform/trading_state`), neither a key of this feature. Status: `in-progress` → `code-completed`. No new insights ledger line; the lesson is the edited feature-166 entry.
 - Files modified: `docs/patterns/config-governance.md`, `docs/patterns/inter-service-mtls.md`, `services/xstockstrat-ingest/CLAUDE.md`, `docs/roadmap/ledger/insights.md`
 - Deviations: none
+
+## Session 2026-11-27 — sdd-batch-execute promotion plan (awaiting operator confirm)
+
+````sdd-batch-promotion-plan
+## Promotion plan — fix-agent-bearer-secret-orphan (feature 328)
+
+Source: /home/user/xstockstrat/docs/roadmap/features/328-fix-agent-bearer-secret-orphan/acceptance.feature. I read it from the working tree, not from `origin/feature/fix-agent-bearer-secret-orphan`, because I have no git access. The orchestrator should confirm the working-tree copy matches the branch copy before writing. The path in the task text (`docs/roadmap/features/docs/roadmap/features/328-...`) was doubled, so I used the real path.
+
+### Verdicts
+| @AC | target suite (path) | CREATE/APPEND | verdict | note |
+|---|---|---|---|---|
+| AC-1 | services/xstockstrat-agent/acceptance/fix-agent-bearer-secret-orphan.feature | CREATE | NEW | Subject is the `manage_signal_source` register tool call and its mapped ALREADY_EXISTS error. |
+| AC-2 | services/xstockstrat-agent/acceptance/fix-agent-bearer-secret-orphan.feature | CREATE | NEW | Subject is the `instantiate_template` signal_source tool call. |
+| AC-3 | services/xstockstrat-ui/acceptance/fix-agent-bearer-secret-orphan.feature | CREATE | NEW | Subject is the config-ui register error display. |
+| AC-4 | services/xstockstrat-config/acceptance/fix-agent-bearer-secret-orphan.feature | CREATE | NEW | Subject is the config-owned orphan sweep (referenced key survives, orphan deleted). |
+
+None of the three files exists yet, so each is CREATEd. Their `acceptance/` directories already exist.
+
+### Ready-to-write blocks
+The source scenarios carry no `@FR-*` tags, so only `@feature-328` is added. Given/When/Then and the `# guards:` comments are unchanged.
+
+--- /home/user/xstockstrat/services/xstockstrat-agent/acceptance/fix-agent-bearer-secret-orphan.feature (CREATE) ---
+```
+# Promoted from docs/roadmap/features/328-fix-agent-bearer-secret-orphan/acceptance.feature
+# Source: @AC-1, @AC-2 - agent scenarios. @feature-328 marks provenance. Do not hand-author or rewrite.
+Feature: fix-agent-bearer-secret-orphan (agent)
+  Regression guard for defect report: signal-source bearer secret is orphaned when the source
+  register fails. Written for the operator's sweep ruling (2026-11-10): a failed register may leave the secret until the orphan sweep runs.
+
+  # guards: docs/reports/2026-10-19-agent-bearer-secret-orphan-on-failed-register-defect.md
+  @AC-1 @regression @feature-328
+  Scenario: a failed manage_signal_source register leaves no unreferenced bearer secret
+    Given user U already has a signal source with slug "dup-src"
+    When U calls manage_signal_source register with source_type "mcp_client", a bearer_token and slug "dup-src"
+    And ingest rejects the register with ALREADY_EXISTS
+    And U retries the same call twice
+    Then each call returns the mapped already-exists error
+    And after the mcp_credential orphan sweep runs, list_config_keys namespace "ingest" for U shows no mcp_credential.<uuid> key that no source's credentials_ref references
+
+  # guards: docs/reports/2026-10-19-agent-bearer-secret-orphan-on-failed-register-defect.md
+  @AC-2 @regression @feature-328
+  Scenario: a failed instantiate_template signal_source leaves no unreferenced bearer secret
+    Given user U already has a signal source with slug "dup-src"
+    When U calls instantiate_template with kind "signal_source", a bearer_token and slug "dup-src"
+    And ingest rejects the instantiation with ALREADY_EXISTS
+    Then the call returns the mapped already-exists error
+    And after the mcp_credential orphan sweep runs, list_config_keys namespace "ingest" for U shows no mcp_credential.<uuid> key that no source's credentials_ref references
+```
+
+--- /home/user/xstockstrat/services/xstockstrat-ui/acceptance/fix-agent-bearer-secret-orphan.feature (CREATE) ---
+```
+# Promoted from docs/roadmap/features/328-fix-agent-bearer-secret-orphan/acceptance.feature
+# Source: @AC-3 - ui scenario. @feature-328 marks provenance. Do not hand-author or rewrite.
+Feature: fix-agent-bearer-secret-orphan (ui)
+  Regression guard for defect report: signal-source bearer secret is orphaned when the source
+  register fails. Written for the operator's sweep ruling (2026-11-10): a failed register may leave the secret until the orphan sweep runs.
+
+  # guards: docs/reports/2026-10-19-agent-bearer-secret-orphan-on-failed-register-defect.md
+  @AC-3 @regression @feature-328
+  Scenario: a failed config-ui signal-source register leaves no unreferenced bearer secret
+    Given user U already has a signal source with slug "dup-src"
+    When U registers an mcp_client source with a bearer token and slug "dup-src" from the config-ui
+    And ingest rejects the register
+    Then the config-ui shows the register error
+    And after the mcp_credential orphan sweep runs, no mcp_credential.<uuid> key under namespace "ingest" for U is left unreferenced by any source
+```
+
+--- /home/user/xstockstrat/services/xstockstrat-config/acceptance/fix-agent-bearer-secret-orphan.feature (CREATE) ---
+```
+# Promoted from docs/roadmap/features/328-fix-agent-bearer-secret-orphan/acceptance.feature
+# Source: @AC-4 - config scenario. @feature-328 marks provenance. Do not hand-author or rewrite.
+Feature: fix-agent-bearer-secret-orphan (config)
+  Regression guard for defect report: signal-source bearer secret is orphaned when the source
+  register fails. Written for the operator's sweep ruling (2026-11-10): a failed register may leave the secret until the orphan sweep runs.
+
+  # guards: docs/reports/2026-10-19-agent-bearer-secret-orphan-on-failed-register-defect.md
+  @AC-4 @regression @feature-328
+  Scenario: the orphan sweep never deletes a referenced bearer secret
+    Given user U has a registered mcp_client source whose credentials_ref is mcp_credential.<uuid-A>
+    And an orphaned mcp_credential.<uuid-B> that no source references
+    When the mcp_credential orphan sweep runs
+    Then mcp_credential.<uuid-A> still exists and the source still authenticates
+    And mcp_credential.<uuid-B> is deleted
+```
+
+### Notes / ambiguities / conflicts
+- **Attribution call.** AC-1 to AC-3 each assert on two things: the writer surface (agent tool or config-ui) and the post-sweep state of `ingest.mcp_credential.*` keys. I routed each to the surface its first `Then` asserts on: agent for AC-1 and AC-2, ui for AC-3. AC-4 asserts only on the config-owned sweep (`scripts/config-heal/mcp-credential-orphan-sweep.sql`), so it goes to config.
+- **Alternative.** The "no unreferenced bearer secret" guarantee could also be read as spanning agent, ui and config, which would put all four in `docs/sdd/business-rules/platform.feature`. I did not do that because each `Then` has a single owning surface. Switch if you prefer one cross-cutting suite.
+- **Preserved provenance.** Design.md and implementation-spec.md say `@AC-1..4` are all covered by the config SQL test and the sweep assertion at `scripts/migration-assertions/config-mcp-credential-sweep.sql`. That is consistent with config owning the sweep guarantee. The agent and ui suites still pin the writer-side observable behavior.
+- **Dedup.** I grepped all `services/*/acceptance/*.feature` and `docs/sdd/business-rules/platform.feature` for `orphan`, `unreferenced`, `ALREADY_EXISTS`, `mcp_credential`, `credentials_ref` and `@feature-328`. No existing scenario asserts the same outcome, so there are no DUP or OVERLAP verdicts.
+- **Related, not overlapping.** `services/xstockstrat-agent/acceptance/fix-config-audit-author-spoof.feature` (feature 241) covers the same two tools but asserts only the outbound `SetConfigRequest.author` and `x-user-id`. `docs/sdd/business-rules/platform.feature` around lines 260-325 covers per-owner bearer resolution and ALREADY_EXISTS for a different owner. Neither contradicts these scenarios, so there is no CONFLICT.
+- **No `@FR-*` tags.** The source scenarios have none, so I added none. Only `@feature-328` was added.
+
+### Coverage check
+- Source scenarios: 4 (`@AC-1` to `@AC-4`). Planned: 4 NEW, 0 DUP, 0 OVERLAP, 0 CONFLICT, none skipped.
+- Counts match: agent has 2, ui has 1, config has 1.
+````
