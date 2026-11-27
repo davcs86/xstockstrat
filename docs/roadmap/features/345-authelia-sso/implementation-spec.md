@@ -2116,7 +2116,7 @@ grep -n "ResolveExternalIdentity" CLAUDE.md docs/patterns/inter-service-mtls.md 
 
 ### Step 56 — docs: Identity docs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-identity` docs
 **Files**:
 - `services/xstockstrat-identity/CLAUDE.md` — modify

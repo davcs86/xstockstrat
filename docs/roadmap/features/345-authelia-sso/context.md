@@ -1137,3 +1137,9 @@
 - TDD: N/A (docs). Verification: `check-config-wiring.mjs --doc-check` exit 0; the greps hit `CLAUDE.md:307-308`, `inter-service-mtls.md:67`, `database.md:24`, `config-governance.md:146,161`.
 - Files modified: `docs/patterns/{frontend-auth,database,inter-service-mtls,config-governance}.md`, `CLAUDE.md`
 - Deviations: none. Gap filled: `database.md`'s schema map is hypertables-only, so the new table is named in the plain-table paragraph below it, beside the IDENTITY-15 line.
+
+### Step 56 — docs: Identity docs [done]
+- Identity `CLAUDE.md`: an "SSO (feature 345)" paragraph (`identity/auth.mode`, the `ui/oidc.*` keys, `agent/oidc.issuer`, Link SSO), the four RPCs and their SANs under Ports, `007_external_identities`, the `auth.mode` Config Keys row, and `identity.external.linked`, `identity.link.failures{reason}` and `password_login_disabled` under Observability. Constitution: IDENTITY-12 extended to the per-RPC SAN lists; IDENTITY-15 gains the `SEED_USER_ID` / `admin@localhost` rule. `operations.md`: `set-auth-mode` and `unlink-sso` usage and break-glass.
+- TDD: N/A (docs). Verification: `SEED_USER_ID` at `context-constitution.md:27`; `auth.mode` at `CLAUDE.md:28,78`; `set-auth-mode` at `operations.md:28,33,41`.
+- Files modified: `services/xstockstrat-identity/{CLAUDE.md,docs/context-constitution.md,docs/operations.md}`
+- Deviations: none
