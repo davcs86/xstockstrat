@@ -259,3 +259,8 @@ Up-front confirmation: the operator approved the plan with this record (binding,
 - Deviations: a third stale stored description (`ibkr.handshake_timeout_ms`) recorded (Deviation Log "Step 12 — a third stale stored description…").
 - TDD: N/A (docs). Verification (`.sdd-logs/v-1.log`): exit=0; per-line re-run (`.sdd-logs/v-2.log`): `line1 rc=0` (no `IBKRRequestTimeout` in trading CLAUDE.md), `feature 321` counts 1 / 7 / 1 (`line2 rc=0`), `line3 rc=0` (append-only, no removed line), `line4 rc=0` (`--doc-check`), "OK - all context-map and doc references resolve." `line5 rc=0`. Config-key wiring gate (step-time, `--declared-from product-spec.md`): exit=0, no findings printed.
 - Not edited (out of the step's instructions): the trading CLAUDE.md constitution-pointer blurb still says "(dead retry config, IBKR timeout oversight)" — both now resolved; the `:103` `syncPositions` sentence is unchanged.
+
+## Session 2026-11-27 — operator ruling recorded by the orchestrator (verbatim)
+
+Question (Step 13 blocker, operator-only stored-state check): who runs the live read-back of `trading/broker.timeout_ms` and `trading/order_intent.stale_multiplier` on DO staging and homelab staging, plus the `config.config_audit` rows?
+Operator answer: **"Defer Step 13"** — Step 13 stays `pending` and the feature stays `in-progress`, with the draft gate held until just before the integration PR leaves draft. Pass condition unchanged: `timeout_ms` is an int >= 10000 and `stale_multiplier` >= 4.0; a reverted value is re-applied through SetConfig, never a migration. Production is out of scope (standing ruling).
