@@ -496,7 +496,7 @@ grep -rn "pipeline_job" services/xstockstrat-analysis/migrations/ | grep -v "031
 
 ### Step 5 — service: `bounded_txn` and the control-pool reset callback
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/repositories/read_budget.py` — modify (additions only)
@@ -1628,3 +1628,14 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Steps 1+2+3, tooling.** Config lint and tests ran on Node 22.23.5 with pnpm 9.15.9 (the sandbox has no
   Node 24); the analysis venv uses the service's `.python-version` (3.12). **Disposition**: CI-equivalent
   fallback; CI runs the pinned versions.
+- **Step 6 (execute, 2026-11-27) — control-pool reset pin.** design.md § Bounded database access,
+  "Control pool reset … raises if a connection is released inside a transaction", cannot hold on asyncpg
+  0.31.0: `PoolConnectionHolder.release` runs `Connection._reset()` first, which sends `ROLLBACK` for an open
+  transaction and reports "Resetting connection with an active transaction" through the loop's exception
+  handler, and only then calls the `reset=` callback, which sees a clean connection. **OPERATOR DECISION:
+  "Adopt asyncpg's behaviour"** — `control_pool_reset` is a no-op whose job is to skip `RESET ALL` (a
+  release sends no query). Re-pinned: a stray in-transaction release is rolled back and reported, never
+  handed on in a transaction; and `bounded_txn` never releases a connection inside a transaction. The
+  other pins hold with no fallback: terminate wakes an in-flight await (a frozen backend is cut at about
+  budget + 2 s), and `create_pool(reset=…)` and `min_size=0` work. **Disposition**: operator-approved
+  design correction; Step 17 builds the control pool with `min_size=0` and `reset=control_pool_reset` as specced.

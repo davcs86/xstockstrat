@@ -456,3 +456,15 @@ Carried from design.md § Open Risks; each needs an owner at `/sdd-spec` or late
 - Files modified: `services/xstockstrat-analysis/migrations/031_pipeline_job_graph.{up,down}.sql`,
   `scripts/migration-rerun.py`.
 - Deviations: none.
+
+### Step 5 — `bounded_txn` and the control-pool reset callback [done]
+- `bounded_txn(pool, budget_s, *, on_acquired=None, on_terminate=None, monotonic=time.monotonic)` with
+  `BoundedTxn` (`fetch`/`fetchrow`/`fetchval`/`execute`/`abort()`, `terminated`, `expired`,
+  `begin_sent_at`), `DbBudgetExceeded`, `TxnNotCommitted` (the COMMIT-tag error, also transient) and
+  `control_pool_reset`, appended beside the untouched `budgeted_read`.
+- The client timer is `loop.call_later`; no `asyncio.timeout` wraps the transaction. `monotonic=` is
+  an added keyword so Step 6's unit tests inject the clock (item 5).
+- TDD: behaviour gated by Step 6 (red/green recorded there). Gate: ruff clean; `test_read_budget*.py`
+  pass; 148 additions, 0 deletions against `origin/main-dev`.
+- Files modified: `services/xstockstrat-analysis/app/repositories/read_budget.py`.
+- Deviations: `control_pool_reset` is a no-op (Step 6 ruling, Deviation Log).
