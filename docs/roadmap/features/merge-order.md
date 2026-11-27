@@ -457,3 +457,12 @@ note, not a table row (statuses read 2026-11-26; none has merged):
   `emitEvent` next to 315's `emitRiskAlert`), different functions; rebase-only.
 
 Recorded as a prose note (315 debate.md D-11) so it does not gate either integration PR.
+
+## Textual overlap: 323 ↔ 324 (2026-11-27, non-blocking)
+
+`fix-orphaned-code` (323) and `fix-ci-enforcement-gaps` (324, `implementation-ready`) both edit the four Node-leaf
+`package.json` files (`services/xstockstrat-{ledger,config,identity,notify}`; 324's coverage-script lines sit 2-3 lines from
+323's `"migrate"` deletion at `:11`) and both rewrite the root `pnpm-lock.yaml`. There is no hard ordering, so this is a
+prose note, not a table row: the table gates a final integration PR until the other feature is `launched`. Whichever
+merges second rebases and regenerates the lock under 323 Step 4's protocol (`pnpm install --lockfile-only` with pnpm
+`9.15.9`, then `pnpm install --frozen-lockfile`); nobody resolves `pnpm-lock.yaml` by hand.

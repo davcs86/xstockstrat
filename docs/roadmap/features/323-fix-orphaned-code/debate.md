@@ -31,6 +31,8 @@
 | D-12 | 3 | Step 3's spec makes the local `pnpm install --frozen-lockfile` output and the `docker compose build` output for the touched leaves required evidence recorded in context.md. No CI guard is added in this feature. | .github/workflows/ci.yml:564,789,995 (--no-frozen-lockfile for Node leaves) vs :305; services/xstockstrat-*/Dockerfile:17 (--frozen-lockfile); product-spec Out of Scope; peer 324 owns CI gaps | settled |
 | D-13 | 3 | Under (b): the identity edit is package.json:11,55 only; the identity compose build gate is unconditional; no identity doc edit; expected `pnpm why node-pg-migrate` is zero dependents across all importers (identity only under (a)); expected `pnpm why bcrypt jsonwebtoken` is identity only. The identity C-16 sweep records fix-identity-ledger-test-suites.feature @AC-1 @feature-252 as PRESERVE, with the Then clause discharged by `pnpm build && pnpm test:coverage` and the mutation clause recorded as unaffected (no src/ change). | services/xstockstrat-identity/Dockerfile:13,17; docker-compose.yml:181,185; services/xstockstrat-identity/CLAUDE.md:118; root pnpm-lock.yaml:136,251,360,481; identity package.json:34-35,48-49; fix-identity-ledger-test-suites.feature:4-9 | settled |
 
+> **Ruling note 2026-11-26 (append-only; the settled rows above are not edited).** D-3 (and the R-rows that assume its scope) is superseded in part: Superseded 2026-11-26 by operator rulings O-1/O-2: signal_extraction.md and noop.py are kept; see context.md. `example_simple_email.py`, `tests/test_extractor.py` and the five non-MCP dataclasses are still removed, and `tests/test_noop_extractor.py` is added.
+
 ## Rejected Alternatives (locked)
 
 <!-- Status: locked → reopened @ round N (user, context.md <ISO>) -->
