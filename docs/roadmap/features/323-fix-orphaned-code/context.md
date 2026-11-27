@@ -558,3 +558,14 @@ Two rulings on the open items the previous re-spec raised, relayed by the orches
 - Files modified: `services/xstockstrat-{ledger,config,identity,notify}/package.json`, `pnpm-lock.yaml`, `services/xstockstrat-ledger/CLAUDE.md`, `services/xstockstrat-ledger/docs/context-constitution-findings.md`, `services/xstockstrat-notify/CLAUDE.md`, `services/xstockstrat-notify/docs/context-constitution-findings.md`, `docs/context-constitution-findings.md`, `docs/roadmap/features/merge-order.md`
 - Deviations: ledger banner names the two other open Latent-bugs rows because the large-payload stub row is already RESOLVED (feature 248); emptied Dead/orphaned tables replaced by `_None open._` — full detail in Deviation Log.
 
+## Session 2026-11-27 — sdd-execute sequential (sdd-batch-execute), step 5
+
+- Tooling setup (step 5): go1.27.0 ✓ · golangci-lint ✓ v2.14.0 built with go1.27.0 at `/root/go/bin` (put first on `PATH` for the runs; `/usr/local/bin` still holds the old one). Nothing installed.
+- Discovery re-verified at `origin/feature/fix-orphaned-code` @ `1cc3b665`: `AlpacaAsset` at `internal/alpaca/client.go:817-825` (last declaration, file 825 lines, `ListAssets` closes at `:815`); findings row `:35`, `## Resolved` at `:48`; the only other non-feature hit is the struck-through trading findings note `:37` (left unchanged, as specced). Peer 322's Step 27 hunks (`client.go:50,94-98,113` at its stamp) are disjoint from this tail deletion.
+
+### Step 5 — service: marketdata — delete the unreferenced `AlpacaAsset` type [done]
+- Deleted the `AlpacaAsset` comment and struct (and the blank line before it), so `client.go` ends at `ListAssets`'s closing brace; removed findings row `:35` from `## Dead / orphaned code` (the `Watcher.tradingMode` row stays) and added a `**RESOLVED (feature 323)**` bullet under `## Resolved`.
+- TDD: red (pre-edit, `.sdd-logs/v-1.log`, `exit=0`): `git grep -n "AlpacaAsset" -- '*.go' '*.ts' '*.py'` printed `client.go:817` and `:818` → green (`.sdd-logs/v-2.log`, `exit=0`): the grep prints nothing; build and vet clean; `go test -race` 18 packages `ok` (1 with no test files); coverage `total: (statements) 87.5%` (≥ 40%); `golangci-lint` `0 issues.` Config-key wiring gate: N/A (no key touched).
+- Files modified: `services/xstockstrat-marketdata/internal/alpaca/client.go`, `services/xstockstrat-marketdata/docs/context-constitution-findings.md`
+- Deviations: none
+

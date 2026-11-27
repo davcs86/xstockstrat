@@ -393,7 +393,7 @@ grep -n "Textual overlap: 323" docs/roadmap/features/merge-order.md             
 
 ### Step 5 — service: marketdata — delete the unreferenced `AlpacaAsset` type
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/alpaca/client.go` — modify
