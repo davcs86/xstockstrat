@@ -194,7 +194,7 @@ ruff check . && ruff format --check .
 
 ### Step 3 — service: pure fingerprint helpers (`_formula_digest`, `_evidence_fingerprint`)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/handlers/servicer.py` — modify
@@ -237,7 +237,7 @@ ruff check . && ruff format --check .
 
 ### Step 4 — test: digest classification, pin tests and fingerprint shape
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_evidence_fingerprint.py` — create

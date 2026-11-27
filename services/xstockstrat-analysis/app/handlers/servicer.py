@@ -23,6 +23,7 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
+from typing import NamedTuple
 
 import asyncpg
 import grpc
@@ -280,6 +281,14 @@ class _GradeInputsUnknown(Exception):
     def __init__(self, symbol: str):
         super().__init__(f"{symbol}: fundamentals availability unknown")
         self.symbol = symbol
+
+
+class _FormulaVersionUnknown(_GradeInputsUnknown):
+    """A formula could not be read, so the evidence fingerprint is unknown; keep the old grade."""
+
+    def __init__(self, formula_id: str):
+        Exception.__init__(self, f"{formula_id}: formula version unavailable")
+        self.formula_id = formula_id
 
 
 class _FundamentalsUnknown(Exception):
@@ -7502,6 +7511,70 @@ def _definition_fingerprint(definition_json: dict) -> str:
     }
     canonical = json.dumps(filtered, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+# Every FormulaDefinition/FormulaParameter/FormulaOutput field must sit in exactly one set; the
+# descriptor-walk test fails on an unclassified proto field. `author` stays DISPLAY (legacy repair).
+_FORMULA_BEHAVIOURAL_FIELDS = frozenset(
+    {"source", "input_schema", "parameters", "outputs", "warmup_period", "fundamental_inputs"}
+)
+_FORMULA_DISPLAY_FIELDS = frozenset(
+    {
+        "formula_id",
+        "name",
+        "description",
+        "author",
+        "created_at",
+        "updated_at",
+        "is_public",
+        "deleted",
+        "origin",
+    }
+)
+_FORMULA_PARAMETER_BEHAVIOURAL_FIELDS = frozenset(
+    {"name", "type", "default_value", "required", "min", "max"}
+)
+_FORMULA_PARAMETER_DISPLAY_FIELDS = frozenset({"description"})
+_FORMULA_OUTPUT_BEHAVIOURAL_FIELDS = frozenset({"name"})
+_FORMULA_OUTPUT_DISPLAY_FIELDS = frozenset({"description"})
+
+
+def _formula_digest(formula) -> str:
+    """sha256 of a formula's behavioural content; a display-only edit leaves it unchanged."""
+    raw = json_format.MessageToDict(formula, preserving_proto_field_name=True)
+    kept = {k: v for k, v in raw.items() if k in _FORMULA_BEHAVIOURAL_FIELDS}
+    if "parameters" in kept:
+        kept["parameters"] = [
+            {k: v for k, v in p.items() if k in _FORMULA_PARAMETER_BEHAVIOURAL_FIELDS}
+            for p in kept["parameters"]
+        ]
+    if "outputs" in kept:
+        kept["outputs"] = [
+            {k: v for k, v in o.items() if k in _FORMULA_OUTPUT_BEHAVIOURAL_FIELDS}
+            for o in kept["outputs"]
+        ]
+    canonical = json.dumps(kept, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+# A refused formula's digest marker; an object(), never a string, so it can never be hashed.
+_UNREADABLE = object()
+
+
+class _FormulaRead(NamedTuple):
+    metrics: list
+    digest: object  # hex str, _UNREADABLE, or None for an outage
+
+
+def _evidence_fingerprint(definition_json: dict, digests: dict) -> str:
+    """The evidence-cell key: the definition hash, plus a formula suffix when digests exist."""
+    def_hash = _definition_fingerprint(definition_json)
+    if not digests:
+        return def_hash
+    if any(not isinstance(d, str) for d in digests.values()):
+        raise ValueError("a refused or unknown formula digest cannot be stamped")
+    joined = ";".join(f"{fid}={digests[fid]}" for fid in sorted(digests))
+    return def_hash + "." + hashlib.sha256(joined.encode("utf-8")).hexdigest()
 
 
 def _row_to_strategy_template(row: dict) -> "analysis_pb2.StrategyTemplate":

@@ -651,3 +651,16 @@ Effect: the C-14 agent scope addition (the agent-surface scope the design propos
 - Tooling: `uv sync --extra dev` in services/xstockstrat-analysis (worktree-local .venv). Config-key wiring gate: not applicable.
 - Files modified: `services/xstockstrat-analysis/tests/test_entry_backfill.py`
 - Deviations: none
+
+### Step 3 — service: pure fingerprint helpers (`_formula_digest`, `_evidence_fingerprint`) [done]
+- Atomic unit Steps 3+4 (one red→green, one commit). Added `from typing import NamedTuple`; `_FormulaVersionUnknown(_GradeInputsUnknown)` after `_GradeInputsUnknown` (calls `Exception.__init__`, sets only `formula_id`); after `_definition_fingerprint`: the six `_FORMULA_*_FIELDS` frozensets, `_formula_digest`, `_UNREADABLE = object()`, `_FormulaRead(NamedTuple)` and `_evidence_fingerprint` (empty digests → `def_hash` unchanged; a non-`str` digest raises `ValueError`). Nothing calls them yet.
+- TDD: red with Step 3's symbols as `NotImplementedError` stubs and empty constants (`.sdd-logs/v-1.log`, exit=1): `26 failed in 2.58s` (`AssertionError: assert {'description', 'name'} == frozenset()`, `NotImplementedError`) → green (`.sdd-logs/v-2.log`, exit=0): the grep printed 5 hits (`286:class _FormulaVersionUnknown`, `7542:def _formula_digest`, `7561:_UNREADABLE = object()`, `7564:class _FormulaRead`, `7569:def _evidence_fingerprint`), `26 passed in 0.38s`, `All checks passed!`, `144 files already formatted`.
+- Config-key wiring gate: not applicable (no config key).
+- Files modified: `services/xstockstrat-analysis/app/handlers/servicer.py`
+- Deviations: none
+
+### Step 4 — test: digest classification, pin tests and fingerprint shape [done]
+- Atomic unit Steps 3+4. Created `tests/test_evidence_fingerprint.py` with inline formula literals (C-13): the descriptor walk over `FormulaDefinition`/`FormulaParameter`/`FormulaOutput`; 9 display pins (digest unchanged, `author` included); 7 behavioural pins (digest changes, parameter `min` unset vs `0.0` included); the `_evidence_fingerprint` byte-identity, shape, insertion-order, digest-change and `None`/`_UNREADABLE` → `ValueError` cases; the `_FormulaVersionUnknown("f-9")` subclass check.
+- TDD: AC-1 red: `FAILED tests/test_evidence_fingerprint.py::test_behavioural_edit_changes_digest[_set_source]` within `26 failed` (`.sdd-logs/v-1.log`, exit=1) → green (`.sdd-logs/v-3.log`, exit=0): `26 passed in 0.26s`, `11 passed, 399 deselected` (existing fingerprint/DeadSignalParams tests), the conftest grep printed no lines, `1854 passed`, `Total coverage: 91.92%`, `All checks passed!`, `144 files already formatted`.
+- Files modified: `services/xstockstrat-analysis/tests/test_evidence_fingerprint.py`
+- Deviations: none
