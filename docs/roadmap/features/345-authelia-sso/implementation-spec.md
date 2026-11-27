@@ -1649,7 +1649,7 @@ grep -n "fixtures/users\|helpers/auth" src/app/api/auth/sso/callback/route.test.
 
 ### Step 42 — service: Link SSO routes (/accounts/api/sso, /link, /confirm)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/accounts/api/sso/route.ts` — create
