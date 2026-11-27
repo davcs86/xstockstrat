@@ -820,3 +820,90 @@ Effect: the C-14 agent scope addition (the agent-surface scope the design propos
 - All 18 steps done. Status `in-progress` → `code-completed`.
 - Files modified: `docs/runbooks/mcp-tools.md`, `services/xstockstrat-agent/docs/context-constitution.md`
 - Deviations: none
+
+## Session 2026-11-27 — sdd-batch-execute promotion plan (awaiting operator confirm)
+
+```sdd-batch-promotion-plan
+## Promotion plan — fix-analysis-evidence-dry (feature 327)
+
+Source: docs/roadmap/features/327-fix-analysis-evidence-dry/acceptance.feature, 5 scenarios (@AC-1..@AC-5). I read the working-tree copy, because I have no git access here. The caller should confirm it matches origin/feature/fix-analysis-evidence-dry before writing. I checked the other 327 artifacts (feature.md, design.md) and the analysis and platform suites.
+
+### Verdicts
+| @AC | target suite (path) | CREATE/APPEND | verdict | note |
+|---|---|---|---|---|
+| @AC-1 | /home/user/xstockstrat/services/xstockstrat-analysis/acceptance/fix-analysis-evidence-dry.feature | CREATE | NEW | Subject is ScoreStrategy and the evidence fingerprint, so it is analysis-owned. Nothing in any suite asserts formula-content-aware evidence eligibility. |
+| @AC-2 | same | CREATE (same file) | NEW | Subject is entry_backfill and StrategiesRepository.list_live_enabled, so it is analysis-owned. Features 262 and 193 cover the same backfill but assert other outcomes (owner scoping, blend universe). |
+| @AC-3 | same | CREATE (same file) | NEW | Subject is ScoreStrategy evidence resolution. See Notes for the interaction with @AC-23 @feature-289. |
+| @AC-4 | same | CREATE (same file) | NEW | The gate-off GetFormula outage is new. @AC-23/@AC-25 @feature-289 cover gate-on only. |
+| @AC-5 | same | CREATE (same file) | NEW | Subject is ManageStrategy UPDATE and the stored grade. Feature 194 @AC-2 is related but asserts a different outcome. |
+
+No service other than analysis owns any of these guarantees, and none spans services. Nothing goes to docs/sdd/business-rules/platform.feature.
+
+### Ready-to-write blocks
+--- /home/user/xstockstrat/services/xstockstrat-analysis/acceptance/fix-analysis-evidence-dry.feature (CREATE) ---
+# Promoted from docs/roadmap/features/327-fix-analysis-evidence-dry/acceptance.feature at launch
+# (Constitution C-16). Source-feature provenance is carried on every scenario's `@feature-327` tag.
+
+Feature: fix-analysis-evidence-dry (bug fix)
+  Regression guard for defect reports: evidence fingerprint ignores referenced formula content;
+  entry-backfill duplicates the live-enabled gate SQL.
+
+  # guards: docs/reports/2026-10-19-analysis-fingerprint-ignores-formula-version-defect.md
+  @AC-1 @regression @feature-327
+  Scenario: editing a referenced custom formula stops pre-edit evidence feeding the grade
+    Given a strategy with a CUSTOM_FORMULA component on formula F
+    And evidence cells from backtests of several symbols under F's current source
+    When UpdateFormula changes F's source materially
+    And ScoreStrategy runs for the strategy
+    Then the headline grade does not aggregate the evidence cells produced before the edit
+
+  # guards: docs/reports/2026-10-19-analysis-live-gate-sql-duplicated-defect.md
+  @AC-2 @regression @feature-327
+  Scenario: the boot entry-backfill selects strategies through LIVE_ENABLED_PREDICATE_SQL
+    Given strategies S1 (active, live_enabled), S2 (active, not live_enabled) and S3 (inactive, live_enabled)
+    When the boot entry-time backfill selects strategies
+    Then it selects exactly the strategies StrategiesRepository.list_live_enabled returns (S1)
+    And when a test narrows LIVE_ENABLED_PREDICATE_SQL so that S1 no longer matches, the backfill selects no strategy, with no edit to entry_backfill.py
+
+  # design.md step 7 (D-9): a score-time refusal resolves through the newest formula-aware fingerprint
+  @AC-3 @regression @feature-327
+  Scenario: a score-time formula refusal grades on the newest formula-aware evidence, never on pre-feature cells
+    Given a strategy "s-1" with a CUSTOM_FORMULA component on formula "f-9"
+    And evidence cells stamped with the bare definition hash "<def_hash>" (pre-feature) for AAPL and MSFT
+    And evidence cells stamped with the formula-aware fingerprint "<def_hash>.<suffix>" for AAPL
+    When GetFormula for "f-9" fails with NOT_FOUND and ScoreStrategy runs for "s-1"
+    Then the grade aggregates only the "<def_hash>.<suffix>" cells (evidence_symbols is 1)
+    And with no formula-aware cells at all it aborts NOT_FOUND with a message naming formula "f-9" as not readable
+
+  # design.md step 7 (D-10): the gate-off availability coupling, operator sign-off 2026-11-20
+  @AC-4 @regression @feature-327
+  Scenario: with the fundamentals gate off, a GetFormula outage aborts ScoreStrategy without touching the grade
+    Given analysis.backtest.fundamentals.enabled is false and strategy "s-1" has a CUSTOM_FORMULA component on formula "f-9"
+    And "s-1" holds a headline grade
+    When GetFormula for "f-9" fails with UNAVAILABLE and ScoreStrategy runs for "s-1"
+    Then it aborts UNAVAILABLE "formula version unavailable — grade unchanged"
+    And no evidence cell is read and the stored grade is neither deleted nor rewritten
+
+  # design.md step 6 (operator decision 2026-11-20): pop only when the definition hash changes
+  @AC-5 @regression @feature-327
+  Scenario: a rename during a GetFormula outage keeps the grade
+    Given a strategy "s-1" with a CUSTOM_FORMULA component on formula "f-9" and a headline grade
+    When ManageStrategy UPDATE renames "s-1" (update_mask display_name only) while GetFormula for "f-9" fails with UNAVAILABLE
+    Then the update succeeds and the headline grade of "s-1" is still served and is not deleted
+
+### Notes / ambiguities / conflicts
+- **Target file.** /home/user/xstockstrat/services/xstockstrat-analysis/acceptance/ already exists with many suites. A Glob for `*evidence*` found no file, so this is a CREATE. The name follows the source slug.
+- **No @FR tags.** The source scenarios carry no @FR-* tags, so none were added (inventing them would break verbatim promotion). Only @feature-327 was appended, after @regression. The `# guards:` and `# design.md` comment lines are kept above each tag line.
+- **@AC-3 versus @AC-23 @feature-289 (no CONFLICT).** @AC-23 is in /home/user/xstockstrat/services/xstockstrat-analysis/acceptance/block-fundamentals-strategy-on-etf.feature:97-102. It says that with the gate on, a refused formula (NOT_FOUND) no longer blocks ScoreStrategy, and a GetFormula outage still aborts "fundamentals availability unknown — grade unchanged".
+  - @AC-3 does not state the gate state in its Given. It reads as the gate-off or irrelevant path. design.md (§Existing Business Rules, around lines 218-248) explicitly records PRESERVE for @AC-23 @feature-289 and EXTEND for 327's @AC-3 and @AC-4, with operator sign-off on 2026-11-20 (context.md).
+  - I therefore treated these as complementary, not contradictory. A human may want a gate qualifier in @AC-3's Given. I did not change it, because promotion must be verbatim.
+- **@AC-4 versus @AC-25 @feature-289.** The existing @AC-25 (services/xstockstrat-analysis/acceptance/opportunity-compute-robustness.feature:162-166) and the UNAVAILABLE clause of @AC-23 both cover gate-on outages, with a different message and different surfaces. @AC-4 is gate-off with the message "formula version unavailable — grade unchanged". The outcomes are distinct, so this is not an OVERLAP.
+- **@AC-5 versus @AC-2 @feature-194.** That scenario (services/xstockstrat-analysis/acceptance/fix-strategy-signal-params-dead-keys.feature:18-23) says a rename leaves the fingerprint unchanged for a dirty strategy. @AC-5 asserts that the grade survives a rename while GetFormula is UNAVAILABLE. Related but not the same outcome, so I recorded no OVERLAP and made no consolidation recommendation.
+- **@AC-2 versus the backfill suites.** Feature 262 (services/xstockstrat-analysis/acceptance/fix-analysis-owner-scope.feature) and feature 193 (fix-blend-queue-fundamentals-universe.feature) cover the same module but assert other outcomes (owner scoping, blend universe). The grep for LIVE_ENABLED_PREDICATE_SQL and list_live_enabled in all .feature files matched only feature 327's own file.
+- **Platform suite.** I grepped docs/sdd/business-rules/platform.feature for feature-327 and evidence. There are no related hits, so no cross-cutting promotion is needed.
+
+### Coverage check
+- Source scenarios: 5 (@AC-1, @AC-2, @AC-3, @AC-4, @AC-5).
+- Planned: 5 NEW, 0 DUP, 0 OVERLAP, 0 CONFLICT.
+- Every @AC-* is accounted for and none were skipped. The counts match.
+```
