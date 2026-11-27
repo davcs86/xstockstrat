@@ -1606,7 +1606,7 @@ grep -n "HEADER_TRACE_ID" src/app/api/auth/sso/callback/route.ts
 
 ### Step 41 — test: Start and callback routes and the middleware exemptions
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/api/auth/sso/start/route.test.ts` — create
