@@ -988,3 +988,9 @@
 - TDD: recorded under Step 35. Verification: typecheck and lint exit 0.
 - Files modified: `services/xstockstrat-ui/src/lib/ssoTxn.ts` (new)
 - Deviations: none. Gaps filled: `sealSsoTxn` takes the txn without `exp`/`created_at` and stamps them; the link-cookie options are exported as `ssoLinkCookieOpts(exp)` (the spec names the options, not the export); a missing `JWT_SECRET` throws on seal and opens as `null`.
+
+### Step 35 — test: Transaction and link cookies [done]
+- `ssoTxn.test.ts` (15 cases, fake `Date`): both purposes round-trip with their stamped `exp`/`created_at`; tampered, rotated-secret and **@AC-76** +601 s txns → `null`; an HS256 JWS from `signTestJwt` opens as neither cookie (R-7); a txn JWE never opens as a link cookie; the sha256(state) name; options (callback path, 600 s, `secure` under `NODE_ENV=production` via a fresh module); `clearAllTxnCookies` expires only `sso_txn_*`; **@AC-68** `sso_link` with the txn's absolute `exp` is `null` at +601 s from the link start and its `maxAge` shrinks 600 → 150 → 0; `clearSsoLink`.
+- TDD: red (before Step 34): `Cannot find module './ssoTxn'` → green: 15 passed; full `pnpm run test:coverage` 95 files, 932 passed / 2 skipped, `src/lib/**` 84.74 % lines (`ssoTxn.ts` 100 % lines); typecheck and lint exit 0; `grep helpers/auth` hits the import.
+- Files modified: `services/xstockstrat-ui/src/lib/ssoTxn.test.ts` (new)
+- Deviations: none

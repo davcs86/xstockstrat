@@ -1391,7 +1391,7 @@ cd services/xstockstrat-ui && pnpm run typecheck && pnpm run lint
 
 ### Step 35 — test: Transaction and link cookies
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/ssoTxn.test.ts` — create
