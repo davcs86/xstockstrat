@@ -866,7 +866,7 @@ cd services/xstockstrat-trading && GOWORK=off go build ./...
 
 ### Step 12 — docs: trading CLAUDE.md, config-governance log, findings
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `services/xstockstrat-trading/`, `docs/patterns/`, `docs/`
 **Files**:
 - `services/xstockstrat-trading/CLAUDE.md` — modify
@@ -1018,3 +1018,8 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Spec said**: Step 10 runs `buf lint` / `buf breaking` and Step 11 runs `./scripts/buf-gen.sh` on the host; `buf` is not on this host's `PATH`.
 - **Actual**: both Verification blocks ran verbatim inside the already-built `xstockstrat-codegen` image (buf 1.72.0, protoc-gen-go v1.36.11, grpcio-tools 1.80.0, go1.27.4), with the worktree mounted read-write, the main checkout and its `packages/proto/gen/ts/node_modules` read-only (the worktree links the root `node_modules` only), and the host Go module cache read-only with `GOPROXY=off`. Instruction 1's toolchain check ran first on the unedited tree: `buf-gen.sh` left `packages/proto/gen` unchanged. The first Step 11 run failed only at `go build` (`module lookup disabled by GOPROXY=off`: the image's `GOMODCACHE` is `/go/pkg/mod`); re-run with `GOMODCACHE=/root/go/pkg/mod`, exit 0. Only the five listed trading stubs changed.
 - **Disposition**: CI-equivalent fallback; no scope or behavior change.
+
+### Step 12 — a third stale stored description recorded; open rows placed by table (2026-11-27)
+- **Spec said**: Instruction 2 records "the two stale stored descriptions" (`broker.timeout_ms`, `order_intent.stale_multiplier`) and adds open rows without naming the table; Codebase Evidence cites `scripts/config-wiring-stored.json:4546`/`:4558`.
+- **Actual**: the regenerated stored set (Steps 6+7+8+9) moved those rows to `:4570`/`:4582`, and the `ibkr.handshake_timeout_ms` rows (`:4642`/`:4654`, from `041`) also name the deleted `IBKRRequestTimeout`; the one stale-description row in the trading findings' doc-lie table names all three keys by symbol (no line cite), still recorded, not rewritten (D-19). The poller, IBKR-chain and `APPLICATION_ENV`-pairing rows went to the Latent-bugs table. No stored JSON or migration edited.
+- **Disposition**: record-only widening within Instruction 2's intent; no scope or behavior change.

@@ -149,6 +149,24 @@ Append-only log — one entry per feature that registered new keys. Newest first
 
 Stored keys are namespace-relative from migration `044` (feature 296): the key names in the entries below are the stored (relative) key under the entry's namespace unless an entry says otherwise; older entries that print the prefixed spelling describe the reader's string at the time.
 
+### feature 321 — fix-trading-config-plumbing (`xstockstrat-trading` / `xstockstrat-config`)
+
+No new key name; two existing `trading` keys change meaning. `broker.timeout_ms` now also bounds every
+signed IBKR request, read live (the IBKR handshake keeps its own `ibkr.handshake_timeout_ms` bound). The
+order-intent stale-threshold floor is the 10 s `IBKRDefaultHandshakeTimeout`; this supersedes the
+`IBKRRequestTimeout` wording of the feature-249 and feature-101 entries, which stay unedited.
+`broker.paper` is **seeded** per environment (staging `true`, production `false`, global, stored as
+`bool`, insert-if-absent) by config migration `trading_broker_paper_per_environment`, with the
+number-free actor sentinel `system:config-migration-feature-321`; its sole reader is
+`environmentIsPaper`, which falls back to `APPLICATION_ENV` (paper unless `production`) when no row
+exists, so `TRADING_MODE` no longer decides trading's paper/live. The `scripts/config-wiring.json`
+baseline is empty. Approval: DBA + config owner + trading owner.
+
+| Namespace | Key | Type | Default | Reader | Notes |
+|---|---|---|---|---|---|
+| `trading` | `broker.timeout_ms` | int | `5000` | `internal/service/trading.go:brokerCallTimeout` | Seeded by `041` (unchanged). Deadline of each Alpaca request and each signed IBKR request; re-read before every request. |
+| `trading` | `broker.paper` | bool | staging `true`, production `false` (no row: paper unless `APPLICATION_ENV=production`) | `internal/service/trading.go:environmentIsPaper` | Seeded per environment. Changing it does not re-route already-registered broker accounts. |
+
 ### feature 366 — opportunity-live-only-rotation (`xstockstrat-config` / `xstockstrat-analysis`)
 
 The cycle bound of the live-only opportunity rotation: each compute evaluates the next
