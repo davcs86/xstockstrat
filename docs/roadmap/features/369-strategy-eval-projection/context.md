@@ -102,3 +102,12 @@
 - Standing choice from 368 applies by analogy (author reading, to be confirmed at the first gate):
   run rounds while they make progress, each with a different lens, and return at the approval gate
   or when a round needs a product decision.
+
+## Session 2026-11-28T15:40Z — sdd-design round 1
+
+- Round 1 run (lenses: code-claim verification, operator on a bad day). Register: +9 decisions
+  (D-4 to D-12), +4 rejected (R-5 to R-8), 18 objections raised (3 blocking: O-1 silent degradation
+  made permanent, O-2 no recovery of a session after an outage, O-3 snapshot fundamentals read for
+  the whole universe). No Floor breach, no register violation, no C-16 regression under `legacy`.
+- Needs the operator: recovery after an outage (O-2), the result key (O-8, FR-3), point-in-time vs
+  current fundamentals and sector (O-3, FR-5), the job grain (FR-1).
