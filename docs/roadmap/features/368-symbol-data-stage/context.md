@@ -134,3 +134,18 @@
   (seam: run-done query), O-20 to O-30.
 - Needs the operator: P-1, P-2, the meaning of the fundamentals state (O-22), and whether the
   730-day window is a fixed invariant (O-24).
+
+## Session 2026-11-28T07:50Z — sdd-design gate after round 2
+
+- **OPERATOR REOPEN P-1 (D-1): "shards of 500"** — D-29. Universe job → shards of at most 500 →
+  data jobs. Rejected: one level with a 10,000-symbol hard limit (R-15).
+- **OPERATOR REOPEN P-2 (D-9, child clause): "fetch inline"** — D-30. The data job calls marketdata
+  `BackfillBars` itself; no fetch child. Rejected: a child under every data job (R-14).
+- **OPERATOR DECISION (fundamentals state): "Stored filings"** — D-31. The stage never calls the
+  snapshot RPC; `@AC-12` is to be amended. Rejected: the served snapshot (R-16).
+- **OPERATOR SIGN-OFF (window): "Fixed 730 days"** — D-32, a fixed invariant. Rejected: following
+  `analysis.backtest.max_range_days` (R-17).
+- Author call, not an operator statement (D-22): only the current last closed session gets a run;
+  a missed session is not run later and its bars are filled by the next run. To be confirmed at
+  the approval gate.
+- Standing gate choice still applies: run further rounds while they make progress.
