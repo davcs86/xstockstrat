@@ -700,3 +700,9 @@ Carried from design.md § Open Risks; each needs an owner at `/sdd-spec` or late
 - Defect reports (ALL-DONE 2.6): none in scope — design.md records no C-16 CHANGE.
 - Merge-order gate: 367 has no Blocking Dependencies row; the 367 ↔ 345 note is non-blocking and
   345 has merged with `060`, so `061` stands.
+
+## Session 2026-11-28 — sdd-execute
+**Steps this session**: 1–19 (15 commits: units 1+2+3, 15+16, 17+18)
+**Progress**: 19 done / 19 total
+**Stopped at**: all complete; integration PR https://github.com/davcs86/xstockstrat/pull/1639 (CI watch on)
+**Next**: merge PR #1639 when CI passes and reviewers approve
