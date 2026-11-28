@@ -596,3 +596,16 @@ Carried from design.md § Open Risks; each needs an owner at `/sdd-spec` or late
 - Files modified: `services/xstockstrat-analysis/app/jobs/retention_prune.py`,
   `services/xstockstrat-analysis/app/jobs/__init__.py`.
 - Deviations: none.
+
+### Step 14 — retention prune end to end [done]
+- `tests/test_retention_prune_job.py` (9): `@AC-12` through a worker (prune job itself `succeeded`),
+  `@AC-18` (31 vs 29 days; a 40-day `dead` row kept at `retention_days` 45), `@AC-15` (two instances →
+  one row, claimed once), the FR-7 unfinished-parent guard across two days, the self-stop with an
+  injected clock, more than two batches in one run, a pruned key enqueued again, and the block budget
+  on a recording `job.db` (one block per batch; terminal loops first; cutoff reused).
+- TDD: red — collection failed (`No module named 'app.jobs.retention_prune'`); with the handler
+  written but the kind not yet registered, `@AC-15` failed (`('ready', 0) == ('succeeded', 1)`).
+  Green — 9 passed (with the contract and worker files: 51); full suite 2148 passed, coverage
+  92.39%; ruff clean; no real-PG test skipped; no literal 30 or 600 in the file.
+- Files modified: `services/xstockstrat-analysis/tests/test_retention_prune_job.py`.
+- Deviations: none.

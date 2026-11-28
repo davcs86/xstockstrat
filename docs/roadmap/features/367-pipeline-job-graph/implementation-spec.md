@@ -1219,7 +1219,7 @@ uv run --extra dev pytest tests/test_job_handler_contract.py tests/test_job_grap
 
 ### Step 14 — test: retention prune end to end
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_retention_prune_job.py` — create
