@@ -194,3 +194,19 @@
   comparison alone is rejected (R-24). O-28 stays open until the check is designed; it adds a job
   kind, a comparison store and an alert path to this feature.
 - Open for round 5: O-28 (design of the automated check), O-40, O-41, O-42 (text).
+
+## Session 2026-11-28T11:20Z — sdd-design round 5 and its gate
+
+- Round 5 run on the final consolidated design (lenses: register-diff audit, the automated finality
+  check, the pass budget, a last spec-author pass). Adversary verdict: sound, approvable with text
+  fixes; no further design round. Register: D-59 to D-62 settled in the round, R-25 locked, O-40 and
+  O-41 closed. No Floor breach, no C-16 regression, no rejected alternative reintroduced.
+- **OPERATOR DECISION (drift alert): "Metric + documented Grafana rule"** — D-63. Rejected: an
+  untargeted notify alert (R-26); an alert targeted at each admin (R-27).
+- **OPERATOR SIGN-OFF (finality constants): "Sign as fixed invariants"** — D-64.
+- **OPERATOR DECISION (requeue rule): "Accept"** — D-65.
+- Correction of record: the round-5 proposal said the operator had asked for an "admins only"
+  alert. The operator's words on D-58 were "Require an automated check"; the audience was decided
+  only now (D-63).
+- All 42 objections are closed. Next: write design.md from the register with the round-5 text
+  fixes, show the operator the exact spec amendments, then the approval gate.
