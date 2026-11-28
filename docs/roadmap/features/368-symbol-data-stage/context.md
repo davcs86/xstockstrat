@@ -70,3 +70,22 @@
 - Recommended design depth: full (DB migration, 5 affected services, changed default on a shared key).
 - Pending operator confirmation (shared file, not yet written): a `merge-order.md` row
   `symbol-data-stage` (368) after `pipeline-job-graph` (367).
+
+## Session 2026-11-28T05:40Z — sdd-design (in progress)
+
+- Phase 0 Recon: wrote recon.md (services: analysis, marketdata, ingest, portfolio, config). Tree:
+  ccr-d10c1761-fxpr1d@f3183664 = origin/main-dev@bc497728 + docs-only commits (same deviation from
+  `docs/sdd/tree-freshness.md` as the review: the feature directory exists only on the harness branch).
+- Mode: full; round cap lifted (operator override above).
+- Recon findings that reach the product spec, to be settled in the debate and put to the operator:
+  - No cross-user positions or signals read and no system-callable user list; the only background
+    owner list is `analysis.strategies` (FR-1 says "every user").
+  - A parent blocked by a child verdict never runs again, so it cannot write the `no_vendor_data`
+    coverage record (FR-5, FR-8 vs 367 `@AC-9`).
+  - Ingest outcomes `INCOMPLETE`, `FAILED`, `CANCELED` have no mapping in FR-5.
+  - No identity lets a job with no end user call ingest `TriggerBackfill`; a grant would change
+    343 `@AC-15` (C-16 CHANGE, operator sign-off).
+  - On the EDGAR axis a fundamentals read never fetches new filings; FR-6 needs a mechanism.
+  - Twelve durable marketdata scenarios (255, 340, 254) rely on the `vendor` default without naming
+    the key (FR-7, C-16).
+  - No RPC exposes the trading calendar; closures after 2025-01-09 and early closes are not modelled.
