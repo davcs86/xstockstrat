@@ -1639,3 +1639,9 @@ _Populated by /sdd-execute as implementation proceeds._
   other pins hold with no fallback: terminate wakes an in-flight await (a frozen backend is cut at about
   budget + 2 s), and `create_pool(reset=…)` and `min_size=0` work. **Disposition**: operator-approved
   design correction; Step 17 builds the control pool with `min_size=0` and `reset=control_pool_reset` as specced.
+- **Step 8 (execute, 2026-11-27) — `park` sorts its children.** Writing the gate test "two overlapping
+  parks that name the same children in opposite order do not deadlock" showed that Step 7's `park`
+  relied on its caller's order (design.md § Dependencies sorts in `validate_wait_on`, Step 9). Two lines
+  in `app/repositories/pipeline_jobs.py` (outside Step 8's **Files**) make the repository sort children by
+  key, so its lock order is deterministic for any caller. **Disposition**: in-scope fix of Step 7's own
+  code, staged with Step 8 and reported at the feature-end checkpoint (F-08 exception, P-03).
