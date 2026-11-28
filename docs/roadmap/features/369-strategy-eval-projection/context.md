@@ -69,3 +69,24 @@
 - Recommended design depth: full (DB migration, new effect path and read path, depends on 368).
 - Pending operator confirmation (shared file, not yet written): a `merge-order.md` row
   `strategy-eval-projection` (369) after `symbol-data-stage` (368).
+
+## Session 2026-11-28T14:30Z — sdd-design (in progress)
+
+- Phase 0 Recon: wrote recon.md (services: analysis, config). Tree:
+  ccr-d10c1761-fxpr1d@cfa6a43f = origin/main-dev@bc497728 + docs-only commits (same recorded
+  deviation from `docs/sdd/tree-freshness.md`: the feature directory exists only on the harness branch).
+- Mode: full; round cap lifted (operator override above).
+- Input contract: feature 368's approved design (`design.md` § 17). It differs from what this
+  feature's story assumed: bar records arrive over up to 4 passes; "run done" is `done_at`; a
+  symbol can end `fetch_failed` or `no_vendor_data` with no bar record; users are strategy owners;
+  a session can have no run.
+- Recon findings that reach the product spec, to be settled in the debate and put to the operator:
+  - The live loop records nothing per evaluated pair and evaluates the forming bar, so parity on
+    transitions is observable only through cooldown rows or ledger events after the close (FR-9).
+  - Legacy opportunities are universe membership for live-enabled strategies, with fields derived
+    from signals, positions and grades; an evaluation row supplies only part of them (FR-8).
+  - "Bars and built-in indicators computed once per job" has no existing mechanism; the evaluator
+    makes one indicators call per component per strategy (FR-2).
+  - Reading a year of bars for the whole universe marks it warm in marketdata (368 D-23, D-57).
+  - The fundamentals guard and the blend-strategy universe restriction vs "every active strategy on
+    every universe symbol" (FR-2).
