@@ -98,11 +98,13 @@ empty key hides its line).
 |---|---|---|---|
 | Claude.ai, full | `xstockstrat-mcp-claude` | `xstockstrat-staging-mcp-claude` | `https://claude.ai/api/mcp/auth_callback`, `https://claude.com/api/mcp/auth_callback` |
 | Claude.ai, read-only | `xstockstrat-mcp-claude-ro` | `xstockstrat-staging-mcp-claude-ro` | same as above |
-| Claude Code, full | `xstockstrat-mcp-claude-code` | `xstockstrat-staging-mcp-claude-code` | the Claude Code loopback redirect, `http://localhost:<port>/callback` (port chosen per login) |
+| Claude Code, full | `xstockstrat-mcp-claude-code` | `xstockstrat-staging-mcp-claude-code` | the Claude Code loopback redirect: `http` to `localhost` on a port chosen per login (observed 2026-11-28; the path was not logged) |
 | Claude Code, read-only | `xstockstrat-mcp-claude-code-ro` | `xstockstrat-staging-mcp-claude-code-ro` | same as above |
 
 The homelab registers no Claude Code client and leaves the two `oidc.mcp_client_id_claude_code*` keys empty; the
-Claude Code rows are for other self-hosted deployments that register them.
+Claude Code rows are for other self-hosted deployments that register them. Claude Code cannot connect to the homelab agent in
+any mode: in `local` and `both` the agent's own DCR refuses its `http` redirect (`400 invalid_redirect_uri`, "redirect_uris
+must be https"), and in `oidc` the issuer has no Claude Code client. Use the Claude.ai connectors.
 
 **Scopes.** The protected-resource document lists `scopes_supported`: `xstockstrat.read` (READ `0x01`),
 `xstockstrat.write` (WRITE `0x02`), `xstockstrat.admin` (ADMIN `0x04`), `xstockstrat.trade` (TRADING `0x08`). The

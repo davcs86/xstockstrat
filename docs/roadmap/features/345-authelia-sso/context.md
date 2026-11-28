@@ -1186,3 +1186,7 @@
 - Spec-level choice 8 reworded: the seed's idempotence is `ON CONFLICT DO NOTHING`; since 318 `migration-rerun` applies it once and replays only the 224/225 up-files (closes the 2026-11-27 open thread). Docs-only edit after execution — not a step body.
 - Root `CLAUDE.md` Context Guide gains the `docs/runbooks/authelia-sso-cutover.md` row; `docs/runbooks/CLAUDE.md` is unchanged because it lists only runbooks the root Context Guide does not route.
 - Still open (owner): the Claude Code loopback redirect form in `docs/runbooks/mcp-tools.md`.
+
+## Session 2026-11-28 — Claude Code loopback redirect (owner probe)
+- Owner ran Claude Code against the homelab staging agent (`auth.mode` `local`): DCR answered `400 invalid_redirect_uri` ("redirect_uris must be https"); the debug log shows a per-login loopback port (61228) but not the path.
+- `docs/runbooks/mcp-tools.md` now states the redirect as `http` to `localhost` on a per-login port (path not asserted) and that Claude Code cannot connect to the homelab agent in any mode. Closes the open "loopback redirect unverified" thread.
