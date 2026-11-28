@@ -329,6 +329,15 @@ describe('login purpose', () => {
     expect(sessionSet(res)).toBe(false);
   });
 
+  test('370 IssueSession "sso disabled" (mode-change window) → failed, not inactive', async () => {
+    issueSessionForUser.mockRejectedValue(
+      new ConnectError('sso disabled', Code.FailedPrecondition),
+    );
+    const res = await callback({ txn: await loginTxn() });
+    expect(location(res)).toBe(`${APP}/auth/login?error=failed`);
+    expect(sessionSet(res)).toBe(false);
+  });
+
   test('any other identity error → failed, no cookies', async () => {
     resolveExternalIdentity.mockRejectedValue(new ConnectError('down', Code.Unavailable));
     let res = await callback({ txn: await loginTxn() });

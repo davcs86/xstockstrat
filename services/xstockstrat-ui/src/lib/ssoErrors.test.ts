@@ -11,6 +11,7 @@ const {
   LINK_ERROR_MESSAGES,
   linkRefusalCode,
   resolveRefusalCode,
+  sessionRefusalCode,
   SSO_ERROR_MESSAGES,
   ssoErrorRedirect,
 } = await import('./ssoErrors');
@@ -61,9 +62,18 @@ test('no clearTxnCookie → no Set-Cookie', () => {
 test.each([
   ['not linked', 'not_linked'],
   ['account inactive', 'inactive'],
+  ['sso disabled', 'failed'],
   ['something else', 'failed'],
 ] as const)('resolveRefusalCode(%s) → %s', (detail, code) => {
   expect(resolveRefusalCode(detail)).toBe(code);
+});
+
+test.each([
+  ['account inactive', 'inactive'],
+  ['sso disabled', 'failed'],
+  ['something else', 'failed'],
+] as const)('370 sessionRefusalCode(%s) → %s', (detail, code) => {
+  expect(sessionRefusalCode(detail)).toBe(code);
 });
 
 test.each([

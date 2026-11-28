@@ -124,7 +124,7 @@ describe('peer SAN gates (FR-4): denied before any pool access, headers ignored'
 
   it('the allowed peers pass the gate', async () => {
     for (const call of [UI, AGENT]) {
-      const { err } = await run(impl(scriptedPool([{ rows: [] }])), 'resolveExternalIdentity', call, {
+      const { err } = await run(impl(scriptedPool([{ rows: [] }]), 'both'), 'resolveExternalIdentity', call, {
         issuer: ISSUER,
         subject: SUBJECT,
       });
@@ -138,14 +138,14 @@ describe('ResolveExternalIdentity', () => {
 
   it('@AC-1 a linked active user resolves to its id and roles', async () => {
     const pool = scriptedPool([{ rows: [{ user_id: 'u1', roles: ['admin', 'trader'], is_active: true }] }]);
-    const { err, res } = await run(impl(pool), 'resolveExternalIdentity', AGENT, req);
+    const { err, res } = await run(impl(pool, 'both'), 'resolveExternalIdentity', AGENT, req);
     assert.equal(err, null);
     assert.deepEqual(res, { userId: 'u1', roles: [ROLE_ADMIN, ROLE_TRADER], isActive: true });
   });
 
   it('@AC-2 the only statement is the JOIN select and the request carries no email', async () => {
     const pool = scriptedPool([{ rows: [{ user_id: 'u1', roles: [], is_active: true }] }]);
-    await run(impl(pool), 'resolveExternalIdentity', UI, req);
+    await run(impl(pool, 'both'), 'resolveExternalIdentity', UI, req);
     assert.equal(pool.queries.length, 1);
     assert.match(pool.queries[0], /^SELECT .* FROM identity\.external_identities e JOIN identity\.users u/);
     assert.deepEqual(pool.params[0], [ISSUER, SUBJECT]);
@@ -153,41 +153,41 @@ describe('ResolveExternalIdentity', () => {
   });
 
   it('@AC-3 no link → 9 not linked', async () => {
-    const { err } = await run(impl(scriptedPool([{ rows: [] }])), 'resolveExternalIdentity', UI, req);
+    const { err } = await run(impl(scriptedPool([{ rows: [] }]), 'both'), 'resolveExternalIdentity', UI, req);
     assert.deepEqual({ code: err.code, message: err.message }, { code: 9, message: 'not linked' });
   });
 
   it('@AC-6 in production an unknown subject is still not linked and nothing is written', async () => {
     process.env.APPLICATION_ENV = 'production';
     const pool = scriptedPool([{ rows: [] }]);
-    const { err } = await run(impl(pool), 'resolveExternalIdentity', UI, req);
+    const { err } = await run(impl(pool, 'both'), 'resolveExternalIdentity', UI, req);
     assert.equal(err.message, 'not linked');
     assert.ok(pool.queries.every((q) => q.startsWith('SELECT')), 'resolve writes nothing');
   });
 
   it('@AC-7 an inactive linked user → 9 account inactive', async () => {
     const pool = scriptedPool([{ rows: [{ user_id: 'u1', roles: ['trader'], is_active: false }] }]);
-    const { err } = await run(impl(pool), 'resolveExternalIdentity', UI, req);
+    const { err } = await run(impl(pool, 'both'), 'resolveExternalIdentity', UI, req);
     assert.deepEqual({ code: err.code, message: err.message }, { code: 9, message: 'account inactive' });
   });
 });
 
 describe('IssueSessionForUser', () => {
   it('an unknown user → 5', async () => {
-    const { err } = await run(impl(scriptedPool([{ rows: [] }])), 'issueSessionForUser', UI, { userId: 'nope' });
+    const { err } = await run(impl(scriptedPool([{ rows: [] }]), 'both'), 'issueSessionForUser', UI, { userId: 'nope' });
     assert.equal(err.code, 5);
   });
 
   it('an inactive user → 9 and no refresh token', async () => {
     const pool = scriptedPool([{ rows: [{ ...USER_ROW, is_active: false }] }]);
-    const { err } = await run(impl(pool), 'issueSessionForUser', UI, { userId: 'u1' });
+    const { err } = await run(impl(pool, 'both'), 'issueSessionForUser', UI, { userId: 'u1' });
     assert.deepEqual({ code: err.code, message: err.message }, { code: 9, message: 'account inactive' });
     assert.ok(!pool.queries.some((q) => /refresh_tokens/.test(q)));
   });
 
   it('@AC-4 @feature-265 mints the stored email, no aud, refresh client_id NULL', async () => {
     const pool = scriptedPool([{ rows: [USER_ROW] }, { rows: [] }]);
-    const { err, res } = await run(impl(pool), 'issueSessionForUser', UI, { userId: 'u1' });
+    const { err, res } = await run(impl(pool, 'both'), 'issueSessionForUser', UI, { userId: 'u1' });
     assert.equal(err, null);
     assert.equal(res.claims.email, 'u@example.com');
     const decoded: any = (jwt as any).verify(res.accessToken, process.env.JWT_SECRET);
@@ -197,6 +197,32 @@ describe('IssueSessionForUser', () => {
     assert.ok(insert >= 0);
     assert.equal(pool.params[insert][3], null);
   });
+});
+
+describe('370 @AC-4 SSO session RPCs refuse in auth.mode local', () => {
+  const rpcs: Array<[string, Record<string, unknown>, any[], (res: any) => unknown]> = [
+    ['resolveExternalIdentity', { issuer: ISSUER, subject: SUBJECT },
+      [{ rows: [{ user_id: 'u1', roles: ['trader'], is_active: true }] }], (res) => res.userId],
+    ['issueSessionForUser', { userId: 'u1' }, [{ rows: [USER_ROW] }, { rows: [] }],
+      (res) => (jwt as any).verify(res.accessToken, process.env.JWT_SECRET).user_id],
+  ];
+  for (const [method, req, script, servedUser] of rpcs) {
+    for (const mode of [undefined, 'local']) {
+      it(`${method} with auth.mode ${mode ?? 'absent'} → 9 sso disabled, no pool access`, async () => {
+        const pool = scriptedPool(script);
+        const { err } = await run(impl(pool, mode), method, UI, req);
+        assert.deepEqual({ code: err?.code, message: err?.message }, { code: 9, message: 'sso disabled' });
+        assert.equal(pool.queries.length, 0);
+      });
+    }
+    for (const mode of ['both', 'oidc']) {
+      it(`${method} with auth.mode ${mode} serves`, async () => {
+        const { err, res } = await run(impl(scriptedPool(script), mode), method, UI, req);
+        assert.equal(err, null);
+        assert.equal(servedUser(res), 'u1');
+      });
+    }
+  }
 });
 
 describe('LinkExternalIdentity', () => {
@@ -315,7 +341,7 @@ describe('GetExternalIdentityLinks', () => {
   });
 
   it('@AC-50 identity leg: once the link rows are gone, Resolve is not linked and a new Link succeeds', async () => {
-    const resolve = await run(impl(scriptedPool([{ rows: [] }])), 'resolveExternalIdentity', UI, {
+    const resolve = await run(impl(scriptedPool([{ rows: [] }]), 'both'), 'resolveExternalIdentity', UI, {
       issuer: ISSUER,
       subject: SUBJECT,
     });

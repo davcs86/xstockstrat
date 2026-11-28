@@ -13,6 +13,7 @@ import { appOrigin } from '@/lib/sameOrigin';
 import { serverLog } from '@/lib/serverLog';
 import {
   resolveRefusalCode,
+  sessionRefusalCode,
   ssoErrorRedirect,
   type LinkErrorCode,
   type SsoErrorCode,
@@ -105,8 +106,9 @@ async function getHandler(req: NextRequest) {
   try {
     session = await identityClient.issueSessionForUser({ userId }, opts);
   } catch (err) {
+    const ce = ConnectError.from(err);
     return loginFail(
-      ConnectError.from(err).code === Code.FailedPrecondition ? 'inactive' : 'failed',
+      ce.code === Code.FailedPrecondition ? sessionRefusalCode(ce.rawMessage) : 'failed',
     );
   }
   const res = new NextResponse(null, {
