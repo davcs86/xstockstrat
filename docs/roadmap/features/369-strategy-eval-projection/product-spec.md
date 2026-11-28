@@ -53,8 +53,9 @@ user, strategy, symbol, bar date and transition kind. A retried or re-run job cr
 outbox row.
 
 FR-7. **Dry-run dispatcher.** A dispatcher drains the outbox and marks each row `suppressed`
-without calling notify or the ledger (operator decision, 2026-11-28). In this feature no alert and
-no ledger event is produced by the new path. Delivery is switched on by program feature 4.
+without calling notify or the ledger (operator decision, 2026-11-28). It has no delivery switch in
+this feature: no alert and no ledger event can be produced by the new path. Program feature 4 adds
+the switch together with the delivering code.
 
 FR-8. **Projection read path behind a switch.** Opportunity and readiness reads can be served from
 the projection as pure reads that start no computation. `analysis.projection.read_source` selects
@@ -69,7 +70,8 @@ and telemetry (operator decision, 2026-11-28). It covers transitions (entry and 
 strategy and symbol), the opportunity set and readiness state. It compares only the pairs both
 paths cover and reports separately the count of pairs only the new path covers and only the live
 path covers. Each mismatch is logged with user, strategy, symbol, bar date and both values, up to
-a bounded number per run, with the total count always reported.
+a per-run detail bound, with the total count always reported. The bound's value is a design
+output.
 
 FR-10. **Shadow measurements.** The feature exports the measurements feature 367 deferred to this
 shadow run: time from the first bar record of a run to its last evaluation job finishing, ready
@@ -82,8 +84,8 @@ existing loop, sends no alert, appends no ledger event and, with the read switch
 changes no RPC response.
 
 FR-12. **Retention.** For each user, strategy and symbol the projection keeps the latest result row
-and every transition row; older non-transition rows and drained outbox rows are pruned on a
-bounded schedule. Formula results are not stored for reuse across users (operator decision D-5).
+and every transition row; non-transition rows and drained outbox rows older than a retention
+window are pruned by a job on the graph. The window's length is a design output. Formula results are not stored for reuse across users (operator decision D-5).
 
 ## Out of Scope
 
@@ -119,8 +121,8 @@ _Constitution **C-14**._
 - [ ] **UI**
 - [ ] **Agent**
 - [x] **None** — shadow feature. The parity report is read by the operator in the service logs and
-  telemetry (FR-9; operator decision 2026-11-28: logs first, a user-scoped agent MCP tool only if
-  the design shows logs cannot carry the report). The user-facing consumers, `ListOpportunities`
+  telemetry (FR-9; operator decision 2026-11-28, confirmed: logs first, a user-scoped agent MCP
+  tool only if the design shows logs cannot carry the report, in which case the operator is asked). The user-facing consumers, `ListOpportunities`
   and the readiness RPCs, keep their legacy source here (FR-8) and switch to the projection in the
   named follow-up `pipeline-cutover` (program feature 4).
 
@@ -132,20 +134,28 @@ _Constitution **C-14**._
 
 ## Config Key Changes
 
-All keys are in namespace `analysis`, stored namespace-relative, read fresh at each use through the
-service's `WatchConfig` watcher (PLAT-6). Reader for the two `pipeline.*` keys:
-`services/xstockstrat-analysis/app/engine/job_graph.py:JobGraphSettings` (exists). Reader for
-`projection.read_source`: `services/xstockstrat-analysis/app/handlers/servicer.py`, in the read
-handlers named in FR-8 (exact symbol cited by `/sdd-design` recon). Seed migration:
+Both keys are in namespace `analysis`, written below in their display FQN, stored
+namespace-relative (`pipeline.evaluation_enabled`, `projection.read_source`) and read fresh at
+each use through the service's `WatchConfig` watcher (PLAT-6).
+
+- Reader of `pipeline.evaluation_enabled`: a new accessor on
+  `services/xstockstrat-analysis/app/engine/job_graph.py:JobGraphSettings`, read as
+  `get_bool("pipeline.evaluation_enabled", default=True)` like the existing `worker_enabled`, so a
+  missing row reads `true` (feature-100 trap).
+- Readers of `projection.read_source`: the servicer methods `ListOpportunities`,
+  `EvaluateReadiness` and `GetWatchlistReadiness` in
+  `services/xstockstrat-analysis/app/handlers/servicer.py`, through one shared accessor; a missing
+  or unrecognised value reads `legacy`.
+
+Seed migration:
 `services/xstockstrat-config/migrations/063_analysis_evaluation_keys` (`061` is the latest on
 `main-dev` today and `062` is planned by feature 368; re-check at `/sdd-spec` and `/sdd-execute`).
 
 - `analysis.pipeline.evaluation_enabled` — bool, code default `true`. Kill switch for evaluation jobs, the outbox and the parity step (FR-11).
-- `analysis.pipeline.outbox_delivery` — string, code default `suppress`. The only value this feature accepts; the dispatcher marks rows suppressed (FR-7). Program feature 4 adds the delivering value.
 - `analysis.projection.read_source` — string, `legacy` | `projection`, code default `legacy`. Source for opportunity and readiness reads (FR-8).
 
-Whether the parity step and retention need tunable keys is a design output; any further key is
-added to this section before `/sdd-spec`.
+The parity detail bound (FR-9) and the retention window (FR-12) are design outputs: each is
+either a constant or a key added to this section before `/sdd-spec`.
 
 ## Database Changes
 
@@ -218,7 +228,7 @@ See `acceptance.feature` (scenarios `@AC-*`) — the single source of acceptance
   Otherwise, Agent MCP tool, user-scoped" (FR-9).
 - [x] **Outbox scope.** Resolved 2026-11-28: the operator chose "Outbox + dry-run dispatcher" (FR-7).
 - [x] **Strategy set.** Resolved 2026-11-28: the operator chose "All active, parity on overlap" (FR-2, FR-9).
-- [ ] **Evaluation default.** `analysis.pipeline.evaluation_enabled` defaults to `true` by analogy
-  with features 367 and 368, so the shadow run starts in production with no operator step. This is
-  an author inference; it costs up to about 10,000 jobs and their indicator calls per session at
-  the D-13 ceiling. Needs the operator's confirmation.
+- [x] **Evaluation default.** Resolved 2026-11-28: the operator chose "On by default".
+  `analysis.pipeline.evaluation_enabled` defaults to `true`; the shadow run costs up to about
+  10,000 jobs and their indicator calls per session at the D-13 ceiling.
+- [x] **Outbox delivery key.** Resolved 2026-11-28: the operator chose "Drop it, cutover adds it" (FR-7).

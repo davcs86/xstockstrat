@@ -50,7 +50,7 @@ Feature: strategy-eval-projection
     Given the evaluation job for user "u1", "AAPL" and 2026-11-27 already succeeded with 2 result rows
     When the same job runs again
     Then exactly 2 result rows exist for user "u1", "AAPL" and 2026-11-27
-    And neither row's content changed
+    And each row holds the same decision, position state and fingerprint as before the re-run
 
   @AC-7 @FR-3
   Scenario: An edited formula changes the fingerprint of the next bar's result
@@ -74,16 +74,17 @@ Feature: strategy-eval-projection
 
   @AC-10 @FR-5
   Scenario: A late job does not see later bars
-    Given bars for "AAPL" exist through 2026-11-27
+    Given "S1" enters when the close is above 100
+    And "AAPL" closed at 95 on 2026-11-25 and at 120 on 2026-11-27
     When the evaluation job for bar date 2026-11-25 runs on 2026-11-28
-    Then the decision is computed from bars dated 2026-11-25 or earlier only
+    Then the result row for "S1", "AAPL" and 2026-11-25 holds decision "neither"
 
   @AC-11 @FR-6
   Scenario: An entry transition writes one outbox row with the result
     Given "S1" on "AAPL" is out of position after 2026-11-25
     When the evaluation for 2026-11-27 decides entry
     Then 1 outbox row exists for user "u1", "S1", "AAPL", 2026-11-27 and kind "entry"
-    And the result row and the outbox row were committed together
+    And a job that fails after computing the entry leaves neither the result row nor the outbox row
 
   @AC-12 @FR-6
   Scenario: A retried job does not duplicate the outbox row
@@ -99,7 +100,7 @@ Feature: strategy-eval-projection
 
   @AC-14 @FR-7
   Scenario: The dispatcher suppresses delivery
-    Given 1 pending outbox row of kind "entry"
+    Given 1 pending outbox row for user "u1", "S1", "AAPL", 2026-11-27 and kind "entry"
     When the dispatcher drains the outbox
     Then the row is in state "suppressed"
     And notify.EmitAlert was called 0 times and ledger.AppendEvent was called 0 times
@@ -163,7 +164,56 @@ Feature: strategy-eval-projection
 
   @AC-23 @FR-12
   Scenario: Retention keeps the latest row and every transition
-    Given "S1" on "AAPL" has result rows for 30 consecutive sessions of which 2 are transitions
+    Given a retention window of 20 sessions
+    And "S1" on "AAPL" has result rows for 30 consecutive sessions of which 2 are transitions in the oldest 10
     When the retention prune runs
     Then the latest result row and the 2 transition rows remain
-    And the other non-transition rows older than the retention window are deleted
+    And the 8 non-transition rows older than 20 sessions are deleted
+
+  @AC-24 @FR-8
+  Scenario: With the projection source, readiness for one strategy is a pure read
+    Given analysis.projection.read_source is "projection"
+    And the result row for user "u1", "S1", "AAPL" and 2026-11-27 holds a readiness trace with 2 of 3 conditions met
+    When user "u1" calls EvaluateReadiness for "S1" and "AAPL"
+    Then the response reports 2 of 3 conditions met
+    And no job is enqueued, no refresh is kicked and no bars are fetched by the read
+
+  @AC-25 @FR-8
+  Scenario: With the projection source, watchlist readiness is a pure read
+    Given analysis.projection.read_source is "projection"
+    And the projection holds results for "AAPL" and none for "MSFT" for user "u1" and strategy "S1"
+    When user "u1" calls GetWatchlistReadiness for a watchlist containing "AAPL" and "MSFT"
+    Then the row for "AAPL" carries the stored readiness
+    And the row for "MSFT" has state "PENDING"
+    And no job is enqueued, no refresh is kicked and no bars are fetched by the read
+
+  @AC-26 @FR-10
+  Scenario: Burst measurements are exported per lane
+    Given 40 ready jobs in lane "held" and 900 in lane "watchlist", the oldest ready for 120 seconds
+    And 15 attempts finished in the last second and the job table has 200 dead and 1000 live tuples
+    When telemetry is collected
+    Then it reports ready depth 40 for "held" and 900 for "watchlist"
+    And it reports an oldest-ready age of 120 seconds for the lane holding that job
+    And it reports 15 attempts per second and a dead-tuple ratio of 0.2
+
+  @AC-27 @FR-2
+  Scenario: Bars are fetched once per job
+    Given user "u1" has 3 active strategies
+    When the evaluation job for user "u1", "AAPL" and 2026-11-27 succeeds
+    Then the daily bars of "AAPL" were requested from marketdata 1 time by that job
+
+  @AC-28 @FR-4
+  Scenario: A cooldown anchor read from the projection blocks re-entry
+    Given "S1" has a re-entry cooldown of 31 days
+    And the projection records an exit for "S1" on "AAPL" on 2026-11-20
+    When the evaluation for 2026-11-27 finds the entry condition true
+    Then the result row holds decision "neither"
+    And no outbox row exists for "S1", "AAPL" and 2026-11-27
+
+  @AC-29 @FR-9
+  Scenario: The parity report compares opportunities and readiness
+    Given for user "u1" the legacy path lists opportunities for "AAPL" and "MSFT" and the projection for "AAPL" and "NVDA"
+    And both paths report readiness for 10 pairs and agree on 9
+    When the parity step for the run of 2026-11-27 runs
+    Then the logged report states 1 opportunity in both, 1 legacy-only and 1 projection-only for user "u1"
+    And it states 10 readiness pairs compared and 1 mismatching

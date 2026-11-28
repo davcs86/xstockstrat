@@ -39,3 +39,24 @@
   - 367 deferred to this feature: shadow-run measurements, hazards H1/H2, executor-thread handlers.
 - Known traps from the ledger: C-10(b) parity across read paths; 2026-08-01 "a hand-maintained
   projection must be pinned by an executable parity test"; the feature-100 bool zero-value trap.
+
+## Session 2026-11-28T04:50Z — sdd-review product-spec (FAIL, round 1)
+
+- Tree: ccr-d10c1761-fxpr1d@ad8df6ef = origin/main-dev@bc497728 plus one docs-only commit.
+  Deviation from `docs/sdd/tree-freshness.md`: the tree was not switched to `main-dev`, because
+  the feature directory exists only on the harness branch until its docs PR merges.
+- Overlap: CLEAN. Analysis `033` and config `063` are free and follow 368's `032` and `062`.
+  Recommended merge-order row: 369 after 368.
+- Criteria: FAIL on criterion 6 (`projection.read_source` had no reader symbol) and criterion 9
+  (one unchecked Open Question). No Floor breach.
+- **OPERATOR DECISION (evaluation default): "On by default"** — `analysis.pipeline.evaluation_enabled`
+  defaults to `true`.
+- **OPERATOR DECISION (parity surface reading): "Yes, logs unless design says no"** — confirms the
+  author reading recorded at story time.
+- **OPERATOR DECISION (outbox key): "Drop it, cutover adds it"** — `analysis.pipeline.outbox_delivery`
+  removed from this feature; the dispatcher always suppresses (FR-7).
+- **OPERATOR OVERRIDE: "I override the design rounds cap. Getting a sound high quality design is
+  more important."** — the 5-round hard cap of `/sdd-design` does not apply to this feature. The
+  no-progress detector and the approval gate still apply.
+- Fixed after the review: config readers cited; FR-7, FR-9 and FR-12 tightened; `@AC-6`, `@AC-10`,
+  `@AC-11`, `@AC-14`, `@AC-23` reworded (IDs unchanged); `@AC-24` to `@AC-29` added.

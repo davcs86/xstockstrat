@@ -37,3 +37,27 @@
   - Owner-level universe drains are duplicated in `live_loop.py` and `servicer.py`.
 - Known traps from the ledger: feature 129 literal-key audit on a provider change; the feature-100
   bool zero-value trap; fix-python-loop-supervision (a transient allow-list misused as a classifier).
+
+## Session 2026-11-28T04:50Z — sdd-review product-spec (FAIL, round 1)
+
+- Tree: ccr-d10c1761-fxpr1d@ad8df6ef = origin/main-dev@bc497728 plus one docs-only commit.
+  Deviation from `docs/sdd/tree-freshness.md`: the tree was not switched to `main-dev`, because
+  the feature directory exists only on the harness branch until its docs PR merges.
+- Overlap: CLEAN. Analysis `032` and config `062` are free. Feature 320 only records
+  `snapshot_source` in a verification step. Recommended merge-order row: 368 after 367.
+- Criteria: FAIL on criterion 6 (marketdata key had no reader `path:symbol`; stored forms not
+  stated) and criterion 8 (`@AC-19` Then was an implementation step). No Floor breach.
+- Fact found by the review and confirmed live through the agent `get_config` tool: both staging
+  deployments (DigitalOcean, homelab) hold `fundamentals.snapshot_source` = `edgar`; migration 030
+  seeded `vendor` and the repo inventory shows production still on it.
+- **OPERATOR DECISION (EDGAR rows): "Default only, I flip production"** — FR-7 changes the code
+  default and the seeded `default_value` only. No stored `value_data` is changed. Rejected:
+  migrating `vendor` rows to `edgar`.
+- **OPERATOR OVERRIDE: "I override the design rounds cap. Getting a sound high quality design is
+  more important."** — the 5-round hard cap of `/sdd-design` does not apply to this feature. The
+  no-progress detector and the approval gate still apply.
+- Fixed after the review: FR-1 cap removed (sizing moved to Design Constraints); FR-3 window made a
+  design output; FR-5 covers `SKIPPED` (author inference: same `no_vendor_data` verdict) and drops
+  the waiting-job clause (owned by 369); FR-7 rewritten; config section states stored keys and both
+  readers; proto box ticked "undecided, additive only"; migration run order stated; `@AC-8`,
+  `@AC-10`, `@AC-13`, `@AC-19` reworded (IDs unchanged); `@AC-21` to `@AC-23` added.

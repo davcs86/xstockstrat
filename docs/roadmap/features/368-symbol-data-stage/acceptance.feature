@@ -61,7 +61,7 @@ Feature: symbol-data-stage
 
   @AC-8 @FR-3 @FR-4
   Scenario: An interior hole is backfilled
-    Given "MSFT" has daily bars for 2026-11-27 and 2026-11-20 but none for 2026-11-23
+    Given "MSFT" has daily bars for 2026-11-27, 2026-11-25, 2026-11-24 and 2026-11-20 but none for 2026-11-23
     When the data job for "MSFT" and session 2026-11-27 runs
     Then a gaps-only backfill is started for "MSFT" covering 2026-11-23
 
@@ -80,6 +80,8 @@ Feature: symbol-data-stage
     And every backfill attempt for "NVDA" fails with a transient error
     When 5 attempts have failed
     Then the backfill job for "NVDA" is in state "dead"
+    And the data job for "NVDA" and session 2026-11-27 has not succeeded
+    And no coverage record with bar verdict "covered" exists for "NVDA" and 2026-11-27
     And no bar record exists for "NVDA" and 2026-11-27
 
   @AC-11 @FR-6
@@ -100,8 +102,8 @@ Feature: symbol-data-stage
     And exactly 1 bar record exists for "AAPL" and 2026-11-27
 
   @AC-13 @FR-7
-  Scenario: A deployment that never set the source serves EDGAR
-    Given no value was ever set for marketdata.fundamentals.snapshot_source
+  Scenario: A deployment with no stored source serves EDGAR
+    Given no stored row exists for marketdata.fundamentals.snapshot_source
     When the fundamentals of the SEC filer "AAPL" are requested
     Then the returned snapshot has source "edgar"
 
@@ -142,12 +144,38 @@ Feature: symbol-data-stage
 
   @AC-19 @FR-11
   Scenario: Existing responses do not change
-    Given the data stage has run for session 2026-11-27
-    When ListOpportunities and GetWatchlistReadiness are called
-    Then each response is computed by the same code path as before this feature
+    Given ListOpportunities for user "u1" returned opportunities for "AAPL" and "MSFT" before the stage ran
+    And GetWatchlistReadiness for user "u1" returned state "READY" for "AAPL" before the stage ran
+    And no bar, signal, strategy or position changed
+    When the data stage runs for session 2026-11-27 and both RPCs are called again
+    Then ListOpportunities for user "u1" returns the same opportunities with the same conviction values
+    And GetWatchlistReadiness for user "u1" returns state "READY" for "AAPL"
 
   @AC-20 @FR-12
   Scenario: A run reports its verdict counts
     Given a run with 3 symbols ending "covered" and 1 ending "no_vendor_data" after 2 backfills
     When the run completes
     Then telemetry reports 3 covered, 1 no_vendor_data and 2 backfills started for that run
+
+  @AC-21 @FR-7
+  Scenario: A stored source value is not changed by the feature
+    Given the stored global value of marketdata.fundamentals.snapshot_source is "vendor" in production
+    When the feature's config migration is applied
+    Then the stored value is still "vendor"
+    And the fundamentals of "AAPL" are served with the configured vendor as their source
+
+  @AC-22 @FR-6
+  Scenario: An exhausted quota leaves the fundamentals state stale
+    Given the fundamentals snapshot of "TSM" is 30 hours old and the freshness window is 24 hours
+    And the fundamentals source reports its daily quota of 250 calls is exhausted
+    When the data job for "TSM" and session 2026-11-27 runs
+    Then the job succeeds
+    And the coverage record for "TSM" has fundamentals state "stale"
+
+  @AC-23 @FR-5
+  Scenario: A symbol skipped as delisted ends with the terminal verdict
+    Given the latest daily bar of "DLST" is 2026-11-10
+    And the backfill for "DLST" completes with outcome "SKIPPED"
+    When the data job for "DLST" and session 2026-11-27 finishes
+    Then the coverage record for "DLST" and 2026-11-27 has bar verdict "no_vendor_data"
+    And no bar record exists for "DLST" and 2026-11-27

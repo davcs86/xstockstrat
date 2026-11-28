@@ -27,7 +27,7 @@
 
 A daily stage on the analysis job graph that snapshots the symbol universe and runs one data job
 per symbol: daily bars brought up to the last closed session with an automatic backfill, fundamentals
-refreshed by staleness with EDGAR as the primary source, and a durable coverage verdict and bar
+refreshed by staleness with EDGAR as the default source, and a durable coverage verdict and bar
 record per symbol that program feature 3 evaluates from.
 
 ## Reviewers

@@ -23,7 +23,8 @@ that evaluation (program feature 3) runs only on complete data and no backfill i
 
 FR-1. **Daily universe snapshot.** Once per closed trading session, a universe run records, for
 every user, the set of symbols made of that user's positions, signalled symbols and watchlist
-symbols (operator decision D-6), up to about 1,000 symbols per user. The snapshot is durable and
+symbols (operator decision D-6). This feature applies no cap; the D-13 sizing is a Design
+Constraint. The snapshot is durable and
 lists which users have which symbol and whether the symbol is held. Every instance with the stage
 enabled ensures the session's run through the idempotent enqueue of feature 367, so it runs once
 however many instances are up. One user's failed source read does not lose the other users'
@@ -36,7 +37,8 @@ symbol and session again creates no second job.
 
 FR-3. **Bars to the last closed session.** A data job checks the symbol's daily bar coverage. The
 symbol is `covered` when its latest daily bar is the last closed session and its stored daily
-series has no interior hole over the required history window. The hole detection is feature 364's
+series has no interior hole over the history window (its length is a design output, see Design
+Constraints). The hole detection is feature 364's
 (`GetDataCoverage` gaps); this feature does not reimplement it.
 
 FR-4. **Automatic backfill.** When bars are not covered, the data job starts a gaps-only backfill
@@ -44,10 +46,12 @@ for the missing ranges as a child job and parks until it finishes. No operator a
 When the child succeeds the data job re-checks coverage.
 
 FR-5. **Terminal "no vendor data" verdict.** When a completed backfill returns nothing for a
-missing range (feature 343's `BACKFILL_SYMBOL_OUTCOME_EMPTY`), the symbol's coverage verdict for
-that session is `no_vendor_data`. That verdict is terminal for the session: the job does not retry
-it, and a job that waits on it is not run. A transient backfill failure is retried under feature
-367's attempt bound and ends in the dead-letter state, never in a silent success.
+missing range (`BACKFILL_SYMBOL_OUTCOME_EMPTY`, feature 343) or skips the symbol because it is
+flagged delisted (`BACKFILL_SYMBOL_OUTCOME_SKIPPED`, feature 352), the symbol's coverage verdict
+for that session is `no_vendor_data`. That verdict is terminal for the session: the job does not
+retry it and starts no second backfill. A transient backfill failure is retried under feature
+367's attempt bound and ends in the dead-letter state, never in a silent success; the symbol then
+has no `covered` verdict and no bar record for that session.
 
 FR-6. **Fundamentals refreshed by staleness.** A data job refreshes the symbol's fundamentals
 snapshot when the stored one is older than the source's freshness window, and leaves a fresh one
@@ -55,10 +59,13 @@ alone. A fundamentals failure, an exhausted quota or a non-filer never fails the
 changes the bar verdict; it is recorded as the fundamentals state of the coverage record (`fresh`,
 `stale` or `unavailable`).
 
-FR-7. **EDGAR is the primary fundamentals source.** The latest-snapshot fundamentals source
-defaults to EDGAR, with the configured vendor as the fallback for a symbol that is not an SEC
-filer (operator decision, 2026-11-28). A deployment that has never set the source serves EDGAR
-after this feature. The FMP daily cap of 250 calls therefore applies only to the fallback.
+FR-7. **EDGAR is the default fundamentals source.** The code default and the seeded default of
+the latest-snapshot fundamentals source become `edgar`, with the configured vendor as the fallback
+for a symbol that is not an SEC filer. A deployment with no stored value serves EDGAR. A stored
+value is never changed by this feature: both staging deployments already hold `edgar`, and
+production holds the seeded `vendor` row, which the operator flips by hand (operator decisions,
+2026-11-28). Until then the data stage's fundamentals refresh in production runs against the
+vendor quota and FR-6's degraded states apply.
 
 FR-8. **Coverage record.** Each data job writes one durable coverage record per symbol and
 session: the bar verdict (`covered` or `no_vendor_data`), the earliest and latest stored daily
@@ -119,30 +126,38 @@ _Constitution **C-14**._
   records are consumed by the evaluation jobs of program feature 3 inside the same service, and
   operators observe the stage through telemetry (FR-12) and the job tables. The user-facing view of
   a symbol's data state arrives with the projection reads, switched on in the named follow-up
-  `pipeline-cutover` (program feature 4).
+  `pipeline-cutover` (program feature 4). FR-7 changes which source serves `GetFundamentals` to
+  UI and agent readers only on a deployment with no stored value; no existing deployment is one.
 
 ## Proto Contract Changes
 
 - [ ] No proto changes required
-- Undecided until `/sdd-design`: FR-10 has no Python calendar today, so the design chooses between
+- [x] Undecided, additive only. Decided at `/sdd-design`: FR-10 has no Python calendar today, so the design chooses between
   a new non-breaking marketdata RPC that returns the last closed session and another single-source
   mechanism. FR-1 may need a non-breaking cross-user read on portfolio. No breaking change is
   permitted by this spec.
 
 ## Config Key Changes
 
-New key, namespace `analysis`, stored namespace-relative, read fresh at each use through the
-service's `WatchConfig` watcher (PLAT-6). Reader:
-`services/xstockstrat-analysis/app/engine/job_graph.py:JobGraphSettings` (exists; `/sdd-design` may
-move the read into the stage's own settings object). Seed migration:
+The keys below are written in their display FQN; the stored key is namespace-relative.
+
+New key. Namespace `analysis`, stored key `pipeline.data_stage_enabled`, `value_type` bool, read
+fresh at each use through the service's `WatchConfig` watcher (PLAT-6). Reader: a new accessor on
+`services/xstockstrat-analysis/app/engine/job_graph.py:JobGraphSettings`, read as
+`get_bool("pipeline.data_stage_enabled", default=True)` like the existing `worker_enabled`, so a
+missing row reads `true` (feature-100 trap). Seed migration:
 `services/xstockstrat-config/migrations/062_analysis_data_stage_keys` (`061` is the latest on
 `main-dev` today; re-check the number at `/sdd-spec` and `/sdd-execute`).
 
 - `analysis.pipeline.data_stage_enabled` — bool, code default `true`. Kill switch for the universe run and the data jobs (FR-11).
 
-Changed default on an existing key, namespace `marketdata` (FR-7). Reader: the existing live read
-in `services/xstockstrat-marketdata` (path and symbol to be cited by `/sdd-design` recon). The same
-seed migration updates the stored global row only where it still holds the old default.
+Changed default on an existing key (FR-7). Namespace `marketdata`, stored key
+`fundamentals.snapshot_source`, `value_type` string, live read. Reader:
+`services/xstockstrat-marketdata/internal/service/marketdata_service.go:snapshotSource`, whose
+default constant `snapshotSourceVendor` and unknown-value fallback both change to the edgar value.
+The same seed migration changes the row's `default_value` to `edgar` and leaves every stored
+`value_data` as it is. Docs that state the default and must change with it:
+`services/xstockstrat-marketdata/CLAUDE.md` (key table) and `docs/patterns/config-governance.md`.
 
 - `marketdata.fundamentals.snapshot_source` — string, code default changes from `vendor` to `edgar`.
 
@@ -155,7 +170,8 @@ New tables in the `analysis` schema for the universe snapshot (run, user, symbol
 per-symbol coverage record and the per-symbol bar record. One migration pair, `032` in
 `services/xstockstrat-analysis/migrations/` (`031` is the latest today; re-check at `/sdd-spec`).
 Table and column names, and retention, are design outputs. No change to the `marketdata` schema is
-expected.
+expected. `scripts/db-migrate.sh` applies config migrations before analysis migrations, so config
+`062` lands before analysis `032`; neither depends on the other's content.
 
 ## Feature Workflow Notes
 
@@ -183,6 +199,16 @@ Inputs the design must satisfy. Each states what `/sdd-design` has to show.
   design must state which service the child job calls, how it learns completion without holding a
   worker slot for the whole backfill, and how a backfill the operator started by hand for the same
   symbol is not duplicated.
+- **History window.** FR-3's interior-hole check needs a window. The design must fix its length
+  from what evaluation needs (the live loop reads a 365-day lookback today) and say whether it is
+  a constant or a key.
+- **Sizing (D-13).** About 10 users and about 1,000 symbols per user. FR-1 applies no cap, so the
+  design must state what bounds a run if a user exceeds that.
+- **Early closes.** `packages/proto/marketsession` does not model early closes; the design must
+  state when a half-day session counts as closed.
+- **Promoted scenarios (C-16).** FR-7 changes a default, not a stored value. The design must
+  confirm that every durable marketdata scenario naming `snapshot_source` sets it explicitly and
+  therefore does not change, or raise a CHANGE row for the operator.
 - **Vendor load at the close.** About 1,000 symbols become due at once. The design must bound
   concurrent vendor calls for bars and for EDGAR (`marketdata.edgar.rate_limit_rps` is 10) and show
   the drain time at the D-13 ceiling.
@@ -208,6 +234,7 @@ See `acceptance.feature` (scenarios `@AC-*`) — the single source of acceptance
 
 ## Open Questions
 
-- [x] **Fundamentals scope.** Resolved 2026-11-28: the operator chose "Also make EDGAR primary" (FR-7).
+- [x] **Fundamentals scope.** Resolved 2026-11-28: the operator chose "Also make EDGAR primary",
+  then "Default only, I flip production" for the stored rows (FR-7).
 - [x] **Activation default.** Resolved 2026-11-28: the operator chose "On by default" (FR-11).
 - [x] **Consumer surface.** Resolved 2026-11-28: the operator chose "None, internal only".
