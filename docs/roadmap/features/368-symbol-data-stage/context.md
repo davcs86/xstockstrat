@@ -161,3 +161,15 @@
   checks bunch), O-35, O-37, O-38.
 - Needs the operator before round 4: outage recovery (O-32), the failing-symbol policy (O-33,
   touches `@AC-10`), ledger volume (O-36), fundamentals cadence values (O-20, O-21, O-34).
+
+## Session 2026-11-28T09:00Z — sdd-design gate after round 3
+
+- **OPERATOR DECISION (outage): "Automatic retry passes"** — D-41. Rejected: manual requeue only (R-18).
+- **OPERATOR DECISION (failing symbol): "Record 'fetch_failed', job succeeds"** — D-42. Third bar
+  verdict; amends FR-5 and `@AC-10` (exact text still to be shown). Rejected: dead-letter (R-19).
+- **OPERATOR DECISION (ledger volume): "Suppress for stage calls"** — D-43. Marketdata gains a
+  behaviour change in this feature; the mechanism is a design output. Rejected: accept the events (R-20).
+- **OPERATOR SIGN-OFF (filings cadence): "Sign as proposed"** — D-44. Fixed invariants 190 / 105 /
+  7 / 28 days and a per-symbol weekday spread. Rejected: config keys (R-21).
+- Open for round 4: O-28 (finality unmeasured at runtime), O-31, O-32 (mechanism for D-41), O-33
+  (mechanism for D-42), O-35, O-37, O-38.
