@@ -59,6 +59,11 @@ FR3_KEYS = frozenset(
         "opportunity.snooze_default_hours",
         "opportunity.read_db_budget_ms",
         "opportunity.live_enrich_timeout_ms",
+        "pipeline.worker_concurrency",
+        "pipeline.poll_interval_ms",
+        "pipeline.lease_seconds",
+        "pipeline.max_attempts",
+        "pipeline.retention_days",
     }
 )
 

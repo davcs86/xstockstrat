@@ -411,3 +411,310 @@ Carried from design.md § Open Risks; each needs an owner at `/sdd-spec` or late
   - [x] N1 Step 12's sleep regex let `sleep(0.5)` through; the pattern now catches it.
 - Still open by choice, for `/sdd-execute`: the stored-set regeneration database route, and the
   config-service lint and tests (not runnable in the spec sandbox).
+
+## Session 2026-11-27 — sdd-execute (sequential)
+
+- **OPERATOR DECISION (mode entry): "Agree, minimal"** — sequential mode with no 5-step-cap checkpoint;
+  the run pauses only for blockers and once at the end of the feature, before the integration PR.
+- **OPERATOR DECISION (stored set): "Throwaway local PG16"** — the route for regenerating
+  `scripts/config-wiring-stored.json` (implementation-spec Step 1 item 7; closes review note N6).
+- **OPERATOR (feature plan): "Proceed"** — re-spec gate passed with no mismatch (the only changes between
+  the spec tree `19d095b` and `origin/main-dev@334d3b7` are docs); no re-spec.
+- Branch `feature/pipeline-job-graph` created from `origin/main-dev@334d3b7` and pushed.
+- Tooling setup (all steps): uv ✓ · analysis deps ⬇ `uv sync --extra dev` · ruff ✓ · PostgreSQL 16
+  binaries ✓ · pnpm ✓ 9.15.9 · Node 22.23.5 (no Node 24; CI-equivalent) · config `node_modules` ⬇
+  `pnpm install --frozen-lockfile` · golang-migrate ⬇ 4.17.1 (scratchpad, stored-set only). Baselines:
+  analysis 1977 passed; config 438 passed, lint 0 errors.
+- Config migration number re-checked: trunk's highest is `059`, so `061` stands (Step 1 item 1).
+
+### Steps 1+2+3 — config unit [done]
+- Seeded six `analysis.pipeline.*` keys (config `061`), five `SCALAR_BOUNDS_REGISTRY` rows,
+  `JobGraphSettings` in `app/engine/job_graph.py`, two wiring receivers, the regenerated stored set,
+  the read-classification rows and the docs rows.
+- TDD: red — `setConfigScalarBounds.test.ts` 5 failures on the new rows before the registry entries;
+  `tests/test_job_graph_settings.py` failed to collect (no `app.engine.job_graph`). Green — config 453
+  passed (c8 lines ≥ 40); analysis 2007 passed under `--cov-fail-under=40`; ruff clean.
+- Gates: `check-config-wiring.mjs --final` and `--doc-check` exit 0 (two `REPORTED` baseline findings,
+  neither this feature's); watcher copies, context map and migration order pass; 12 stored rows from
+  `061`; 5 bounds entries.
+- Files modified: `services/xstockstrat-config/migrations/061_analysis_pipeline_keys.{up,down}.sql`,
+  `services/xstockstrat-config/src/grpc/configServiceImpl.ts`,
+  `services/xstockstrat-config/src/__tests__/{analysisPipelineKeysSeedMigration,setConfigScalarBounds}.test.ts`,
+  `scripts/config-wiring-stored.json`, `scripts/config-wiring.json`,
+  `services/xstockstrat-analysis/app/engine/job_graph.py`,
+  `services/xstockstrat-analysis/tests/{test_job_graph_settings,test_config_read_classification,test_config_zero_clamps}.py`,
+  `services/xstockstrat-analysis/CLAUDE.md`, `docs/patterns/config-governance.md`.
+- Deviations: stored-set route and tooling versions (Deviation Log); none to the plan.
+
+### Step 4 — migration `031_pipeline_job_graph` [done]
+- Two plain tables `analysis.pipeline_jobs` (fillfactor 70, four table checks) and
+  `analysis.pipeline_job_deps`, with the four job indexes and the child index; `migration-rerun.py`
+  analysis clean end version 30 → 31.
+- TDD: N/A (migration). Verified offline: up/down pair at `031` (highest + 1); 2 `CREATE TABLE` ↔ 2
+  `DROP TABLE` (edges first); migration-order gate ok; `pipeline_job` mentioned only by `031`. Live
+  apply is CI's (`migration-rerun`); Step 8's fixture also executes the up file.
+- Files modified: `services/xstockstrat-analysis/migrations/031_pipeline_job_graph.{up,down}.sql`,
+  `scripts/migration-rerun.py`.
+- Deviations: none.
+
+### Step 5 — `bounded_txn` and the control-pool reset callback [done]
+- `bounded_txn(pool, budget_s, *, on_acquired=None, on_terminate=None, monotonic=time.monotonic)` with
+  `BoundedTxn` (`fetch`/`fetchrow`/`fetchval`/`execute`/`abort()`, `terminated`, `expired`,
+  `begin_sent_at`), `DbBudgetExceeded`, `TxnNotCommitted` (the COMMIT-tag error, also transient) and
+  `control_pool_reset`, appended beside the untouched `budgeted_read`.
+- The client timer is `loop.call_later`; no `asyncio.timeout` wraps the transaction. `monotonic=` is
+  an added keyword so Step 6's unit tests inject the clock (item 5).
+- TDD: behaviour gated by Step 6 (red/green recorded there). Gate: ruff clean; `test_read_budget*.py`
+  pass; 148 additions, 0 deletions against `origin/main-dev`.
+- Files modified: `services/xstockstrat-analysis/app/repositories/read_budget.py`.
+- Deviations: `control_pool_reset` is a no-op (Step 6 ruling, Deviation Log).
+
+### Step 6 — `bounded_txn` against real PostgreSQL, and the asyncpg pins [done]
+- 10 real-PG pins (`tests/test_bounded_txn_real_pg.py`) and 9 fake-connection unit tests
+  (`tests/test_bounded_txn.py`, injected clock, no sleeps).
+- asyncpg 0.31.0 pins: terminate wakes an in-flight await ✓ (no child-task fallback); `reset=` ✓;
+  `min_size=0` ✓; the reset-callback in-transaction refusal ✗ → operator ruling "Adopt asyncpg's
+  behaviour" (Deviation Log), re-pinned as two tests.
+- TDD: red — with the COMMIT-tag check and the client timer disabled in a scratch copy,
+  `test_commit_that_returns_rollback_raises` failed (`DID NOT RAISE TxnNotCommitted`) and
+  `test_frozen_backend_…` hit its 10 s hang guard (`TimeoutError`). Green — the four `bounded_txn` /
+  `read_budget` files 59 passed; full suite 2026 passed, coverage 92.17% (≥ 40); ruff clean; no real-PG
+  test skipped.
+- Test-harness note: a first draft wrapped `PoolConnectionProxy.execute` by attribute assignment and
+  hung; replaced by the `sent` spy on `asyncpg.Connection` (no product-code change).
+- Files modified: `services/xstockstrat-analysis/tests/test_bounded_txn_real_pg.py`,
+  `services/xstockstrat-analysis/tests/test_bounded_txn.py`.
+- Deviations: the reset pin (Deviation Log).
+
+### Step 7 — `PipelineJobsRepository` [done]
+- `app/repositories/pipeline_jobs.py`: the FIFO control lane (`lane()`, `lane_held=`), `enqueue`,
+  `claim`, `reap`, `heartbeat` (no lane, 3 s), `report`, `park` (`ParkRace`), `settle_batch`,
+  `list_by_run`, `ready_stats`, the module-level `prune_batch` and `BATCH_SIZE = 500`.
+- Build choices inside the step's seams: `report` returns the state written, or `None` when fenced out
+  (truthiness keeps the spec's True/False); `ready_stats` returns both lanes, an absent lane as
+  `(0, 0.0)`; the prune candidate select takes its state as a whitelisted SQL literal
+  (`prune_candidates_sql`), so a cached generic plan can still prove the finished-rows partial index;
+  `CLAIM_SQL` and `prune_candidates_sql` are module-level so Step 8's `EXPLAIN` runs the exact text.
+- TDD: behaviour gated by Step 8 (red/green recorded there). Gate: ruff clean; import ok; no
+  `asyncio.timeout`/`wait_for`/`shield`/`is_transient_db_error`/`datetime.now`/`app.engine`; 4
+  `SKIP LOCKED` (claim, reap, settle, prune).
+- Files modified: `services/xstockstrat-analysis/app/repositories/pipeline_jobs.py`.
+- Deviations: none.
+
+### Step 8 — repository SQL against real PostgreSQL, and the job-row fixtures [done]
+- `tests/conftest.py`: `pipeline_pool`, the `pipeline_pg` fixture (runs the `031` file alone, asserts
+  no other migration names `pipeline_job`), `insert_pipeline_job`, `shift_pipeline_job`.
+- `tests/test_pipeline_jobs_real_pg.py`: 39 tests — 15 `test_ac*` scenario tests (`@AC-1`..`@AC-13`,
+  `@AC-18`) and the design's gate tests (opposite-order parks, a park naming a parking job, the prune
+  guard race in both orders, the recovery SQL run twice, 10 000 children under 5 s, 1 200 parents in
+  500/500/200 batches, `EXPLAIN` on both partial indexes, `FOR KEY SHARE` holders, reap+settle on two
+  instances, the enqueue retry, no statement for an empty claim or heartbeat).
+- TDD: red — on a scratch copy without the claim lock and the report fence, `@AC-2` failed
+  (`1 + 1 == 1`: both claimers took the job) and `@AC-4` failed (the stale holder's report wrote
+  `succeeded`). Green — the file 39 passed; full suite 2065 passed, coverage 92.23%; ruff clean; no
+  real-PG test skipped; 15 `test_ac*` functions.
+- One full-suite run showed 1 failure that five later full runs (three under the coverage gate) did
+  not reproduce; its name was lost to an output filter. Not attributed to this feature.
+- Files modified: `services/xstockstrat-analysis/tests/conftest.py`,
+  `services/xstockstrat-analysis/tests/test_pipeline_jobs_real_pg.py`, and (deviation)
+  `services/xstockstrat-analysis/app/repositories/pipeline_jobs.py` (park sorts its children).
+- Deviations: the park-order fix (Deviation Log).
+
+### Step 9 — engine primitives [done]
+- `app/engine/job_graph.py`: `Lane`, `Child`, `Succeeded`/`WaitOn`/`Verdict`, `PermanentJobError`,
+  `AttemptStopped`, `classify`, `check_outcome` (a non-outcome return → `PermanentJobError`),
+  `backoff_seconds`, `truncate_error`, `HandlerRegistry` (`register`/`kinds`/`get`/`child_kinds`/
+  `validate`), `validate_wait_on`, `validate_verdict`, the named constants and the prune identity
+  (`PRUNE_KIND`, `PRUNE_SUBJECT`, `PRUNE_LANE`, `prune_epoch`, `prune_run_id`).
+- TDD: red/green recorded under Step 10. Gate: ruff clean; import ok (CI-equivalent `PYTHONPATH`,
+  Deviation Log); settings + classification tests pass; no `is_transient_db_error`.
+- Files modified: `services/xstockstrat-analysis/app/engine/job_graph.py`.
+- Deviations: none (import-check path only).
+
+### Step 10 — engine primitive tests [done]
+- `tests/test_job_graph_core.py`: 25 tests — `@AC-5` backoff bounds and sequence, `@AC-6` permanent
+  classification, `@AC-7` transient default (six exception types incl. `DbBudgetExceeded`), non-outcome
+  returns, the registry (DAG passes; two-kind cycle, self-edge, unregistered child, three-cycle raise),
+  `validate_wait_on` (dedup, sort, higher lane, five named failures), empty verdict, `truncate_error`
+  on a multi-byte string, prune identity.
+- TDD: red — collection failed (`cannot import name 'MAX_CHILDREN_PER_PARK'`) before Step 9's code;
+  green — 25 passed; full suite 2090 passed, coverage 92.34%; ruff clean; no local fixture (C-13).
+- Files modified: `services/xstockstrat-analysis/tests/test_job_graph_core.py`.
+- Deviations: none.
+
+### Step 11 — attempt, stop path, the three loops and the worker [done]
+- `app/engine/job_graph.py`: `ClaimedJob` (`db(budget)` behind a per-worker `asyncio.Lock` gate,
+  inside `bounded_txn` on the service pool, stage `gate`/`acquire`/`txn` with `txn` set by
+  `on_acquired`), `_Attempt`, and `JobGraphWorker` with `claim_tick` / `maintenance_tick` /
+  `heartbeat_tick`, `run_*_forever` through `run_supervised`, `start_listening`, `stats_step`, the
+  runner (handler through `supervision.spawn`, lane → `reporting` → wait ≤ 6 s for an in-flight batch
+  → report or park, retry 1…30 s to the 300 s give-up from the handler's end), the stop path
+  (lost / self-fence / 900 s deadline; abort in `txn`, cancel otherwise; 10 s grace → abandoned) and
+  the fixed constants. `app/jobs/__init__.py:build_registry` returns an empty validated registry.
+- Build choice: an attempt whose handler has ended but which is still waiting for the lane stays in
+  the heartbeat batch (phase `awaiting_lane`), as design.md § Heartbeat loop requires.
+- TDD: behaviour gated by Step 12. Gate: ruff clean; import ok; no `create_task(`,
+  `asyncio.Semaphore(` or `asyncio.shield`; `spawn(` present; core/settings/limits tests 57 passed;
+  watcher copies identical.
+- Files modified: `services/xstockstrat-analysis/app/engine/job_graph.py`,
+  `services/xstockstrat-analysis/app/jobs/__init__.py`, and (deviation)
+  `services/xstockstrat-analysis/app/repositories/pipeline_jobs.py` (`claim(lane_held=)`).
+- Deviations: `claim(lane_held=)` (Deviation Log).
+
+### Step 12 — worker runtime, takeover invariants and the handler contract [done]
+- `tests/conftest.py`: `VirtualTime` + the `virtual_time` fixture (`await advance(s)` runs due timers
+  in order; the loop's clock never follows real time), `FakeJobRepo` (in-memory repository on the
+  virtual clock: `calls`, `fail`, `delay`, `omit_renewals`, `lane_queue_max`), `seed_blocked_parents`.
+- `tests/test_job_graph_worker.py` (24): `start_listening`, `@AC-14`, `@AC-16`, `@AC-17`, `@AC-3`
+  takeover ≤ lease + 10 + 4 s, stop-in-block abort + refused block, unresponsive handler keeps its slot,
+  report retry keeps its slot, disabled blocked claim loop, renewal after a lowered lease, the claim
+  delay ladder, `ParkRace` re-runs only the park, the 300 s give-up, no false loss for a reporting
+  attempt, the four lane invariants, the daily ensure (and its marker on failure), maintenance steps
+  guarded independently.
+- `tests/test_job_graph_worker_real_pg.py` (7): `@AC-2`, `@AC-8`, `@AC-9`, the in-flight-heartbeat
+  runner (S-7), `@AC-6` + `@AC-5`, `@AC-7`, 1 200 parents in one maintenance tick.
+- `tests/test_job_handler_contract.py` (17): the AST checker, one synthetic offender per rule (15),
+  a compliant source, and every file under `app/jobs/`.
+- TDD: red — with the claim tick's two `worker_enabled` re-reads removed, `@AC-17` (second job still
+  ready, attempts 0), `@AC-14` and the disabled-blocked-loop test failed; with `start_listening`
+  emptied, its listening case failed; with the bare-`except` rule removed, its contract case failed.
+  Green — the three files 48 passed; full suite 2138 passed, coverage 92.30%; ruff clean; no non-zero
+  `asyncio.sleep` in the unit file; no real-PG test skipped.
+- Files modified: `services/xstockstrat-analysis/tests/{conftest,test_job_graph_worker,test_job_graph_worker_real_pg,test_job_handler_contract}.py`,
+  and (deviation) `services/xstockstrat-analysis/tests/test_pipeline_jobs_real_pg.py`.
+- Deviations: shared seed helper (Deviation Log).
+
+### Step 13 — the retention-prune job kind [done]
+- `app/jobs/retention_prune.py:make_handler(settings, *, monotonic)`: reads `retention_days` once;
+  four DELETE loops (`failed`, `dead`, `blocked` at `max(TERMINAL_KEEP_MIN_DAYS, retention_days)`,
+  then `succeeded`), one `job.db(PRUNE_BLOCK_BUDGET_S)` block per `prune_batch(conn=…)`, the first
+  batch's cutoff reused for its loop, a loop ends on `full` false, self-stop before a batch after
+  `PRUNE_SELF_STOP_S`; no `try`/`except`. `build_registry` registers the kind (no `child_kinds`).
+- Build choice: the 30-day floor is a named module constant (`TERMINAL_KEEP_MIN_DAYS`), so Step 14's
+  test can name it rather than hold a literal 30.
+- TDD: red/green recorded under Step 14. Gate: ruff clean; the contract scan passes on the new file.
+- Files modified: `services/xstockstrat-analysis/app/jobs/retention_prune.py`,
+  `services/xstockstrat-analysis/app/jobs/__init__.py`.
+- Deviations: none.
+
+### Step 14 — retention prune end to end [done]
+- `tests/test_retention_prune_job.py` (9): `@AC-12` through a worker (prune job itself `succeeded`),
+  `@AC-18` (31 vs 29 days; a 40-day `dead` row kept at `retention_days` 45), `@AC-15` (two instances →
+  one row, claimed once), the FR-7 unfinished-parent guard across two days, the self-stop with an
+  injected clock, more than two batches in one run, a pruned key enqueued again, and the block budget
+  on a recording `job.db` (one block per batch; terminal loops first; cutoff reused).
+- TDD: red — collection failed (`No module named 'app.jobs.retention_prune'`); with the handler
+  written but the kind not yet registered, `@AC-15` failed (`('ready', 0) == ('succeeded', 1)`).
+  Green — 9 passed (with the contract and worker files: 51); full suite 2148 passed, coverage
+  92.39%; ruff clean; no real-PG test skipped; no literal 30 or 600 in the file.
+- Files modified: `services/xstockstrat-analysis/tests/test_retention_prune_job.py`.
+- Deviations: none.
+
+### Steps 15+16 — pipeline telemetry [done]
+- `app/telemetry.py`: `Loop.PIPELINE_WORKER` (6 of 8), `KEY_LANE`/`KEY_STEP`/`KEY_PHASE`, counters
+  `analysis.pipeline.attempts` and `.lease_events`, histogram `analysis.pipeline.db.duration` (the
+  13 buckets), `Gauge` accepting a list of `(value, attributes)`, the ready gauges over one snapshot
+  (`set_pipeline_ready_stats(stats, *, at)`, `PIPELINE_STATS_STALE_S = 45`, the only declaration),
+  `register_pipeline_gauges()`.
+- Record calls: the claim loop's `loop tick ok` (no state / `idle` / `disabled`, ≤ 1 per 60 s,
+  nothing while blocked on the limiter); `attempts` by the report/park writer and the reaper
+  (`expired`, `dead`); the five lease events; `stats_step` stores the snapshot on the real clock;
+  `db.duration` for every control step and for `step=handler` around `job.db()`. A method called with
+  `conn=` records nothing. `db_outcome` (`ok`/`error`/`timeout`) is a module function in
+  `app/repositories/pipeline_jobs.py`, shared by both record sites. No label carries an identifier.
+- Tests: `tests/test_pipeline_telemetry.py` (6: `@AC-13` gauges and the 45 s staleness, `@AC-4`
+  exactly one succeeded / one expired / one rejected, one count per transition, the tick-record
+  states and 60 s throttle on virtual time, `db.duration` labels, `@AC-3 @feature-337` host.provider
+  on all five instruments over OTLP); `test_telemetry_allowlist.py` (+3 instruments, driver);
+  `test_telemetry_instruments.py` (labelled gauge); `test_analysis_tick_telemetry.py` (drives one
+  pipeline claim tick).
+- TDD: red — adding `Loop.PIPELINE_WORKER` turned `test_ac7_every_analysis_tick_uses_a_fixed_loop_name`
+  red (`Extra items in the right set: 'pipeline_worker'`); with the snapshot call removed from
+  `stats_step`, `@AC-13` failed (`KeyError: 'watchlist'`). Green — the six files 98 passed; full suite
+  2155 passed, coverage 92.40%; ruff clean; `check-otel-produced-signals.py` exit 0; no real-PG test
+  skipped.
+- Files modified: `services/xstockstrat-analysis/app/telemetry.py`,
+  `services/xstockstrat-analysis/app/engine/job_graph.py`,
+  `services/xstockstrat-analysis/app/repositories/pipeline_jobs.py`,
+  `services/xstockstrat-analysis/tests/{test_pipeline_telemetry,test_telemetry_allowlist,test_telemetry_instruments,test_analysis_tick_telemetry}.py`.
+- Deviations: none.
+
+### Steps 17+18 — startup wiring and boot tests [done]
+- `app/main.py`: `_create_pool(dsn, **kwargs)` holds the one copy of the PgBouncer
+  `statement_cache_size` rule; `_create_pools(dsn)` builds the service pool (`min_size=1`,
+  `DB_POOL_MAX` default 2) and the control pool (`min_size=0`, `max_size=2`,
+  `reset=control_pool_reset`, fixed). `serve()` starts with `db_pool = control_pool = None`, calls
+  `register_pipeline_gauges()` right after `init_telemetry()`, and inside the `db_pool` block builds
+  `JobGraphSettings`, `PipelineJobsRepository(control_pool)`, `build_registry` and `JobGraphWorker`,
+  calls `start_listening()` and spawns `pipeline-claim`, `pipeline-maintenance`, `pipeline-heartbeat`.
+- `tests/test_supervision.py`: three names appended to `_BOOT_TASK_NAMES`.
+  `tests/test_pipeline_boot.py` (7): the cache rule for four `DB_PGBOUNCER` values, the control pool
+  fixed at 2 with `DB_POOL_MAX=7`, gauge registration after init, disjointness from `job_schedule` /
+  `DurableSchedule`.
+- TDD: red — the three new `spawn(` calls turned `test_boot_sites_are_spawned_and_retained` red
+  (`assert 11 == 8`); against trunk's `main.py` the boot tests failed (`module 'app.main' has no
+  attribute '_create_pool'`). Green — the five files 107 passed; full suite 2162 passed, coverage
+  92.28%; ruff clean; 11 `spawn(`; no change to `docker-compose.yml`, `.do/` or
+  `deploy/homelab/compose.yml`.
+- Files modified: `services/xstockstrat-analysis/app/main.py`,
+  `services/xstockstrat-analysis/tests/test_supervision.py`,
+  `services/xstockstrat-analysis/tests/test_pipeline_boot.py`.
+- Deviations: none.
+
+### Step 19 — docs [done]
+- Root `CLAUDE.md` analysis pool row (service 2 + pipeline control 2; client connections, not backend
+  slots; totals unchanged, F-06); `docs/patterns/database.md` § Connection pooling paragraph; analysis
+  `CLAUDE.md` (the run-history pool sentence, a `### Pipeline job graph (feature 367)` section, the
+  Observability bullet); new `services/xstockstrat-analysis/docs/pipeline-jobs.md` (states, lanes,
+  at-least-once, timing and the takeover figure, the manual recovery SQL byte-identical to design.md,
+  what to watch, the not-running checklist, accepted risks); the program plan's line-81 note corrected
+  (row locks with a lease token, not advisory locks; R-1).
+- TDD: N/A (docs). Gate: context map ok; `--doc-check` exit 0; "pipeline control 2" present; the old
+  advisory-lock wording gone; `pipeline-jobs.md` linked; 1 `FOR NO KEY UPDATE`; "no new pool" gone.
+- Files modified: `CLAUDE.md`, `docs/patterns/database.md`, `services/xstockstrat-analysis/CLAUDE.md`,
+  `services/xstockstrat-analysis/docs/pipeline-jobs.md`, `docs/roadmap/program-job-graph-analysis-pipeline.md`.
+- Deviations: none.
+- All 19 steps done. `node scripts/check-config-wiring.mjs --final` exit 0 (two `REPORTED` baseline
+  findings, neither this feature's). Status → `code-completed`.
+
+### Merge of origin/main-dev (feature 345 landed)
+- `origin/main-dev` brought feature 345 (`authelia-sso`, config `060_authelia_sso_keys`). This
+  feature's `061` stays above it: no renumber (merge-order.md § Config seed number: 367 ↔ 345).
+- The only conflict was the generated `scripts/config-wiring-stored.json`, resolved by regenerating it
+  on a throwaway PostgreSQL 16 (the operator-approved route; cluster removed afterwards): 12 rows from
+  `061`, 18 from `060`; `config-heal-dryrun.py --fresh` unchanged.
+- Post-merge gates: wiring `--final` and `--doc-check` exit 0; migration order ok; watcher copies,
+  context map and ledger guard clean; config 464 passed (c8 ≥ 40, lint 0 errors); analysis 2162 passed,
+  coverage 92.28%, ruff clean.
+
+## Session 2026-11-28 — sdd-execute integration
+
+- **OPERATOR (feature-end checkpoint): "Proceed"** — open the integration PR.
+- **OPERATOR (C-16 promotion): "Yes, as planned"** — new suites
+  `services/xstockstrat-analysis/acceptance/pipeline-job-graph.feature` (`@AC-1`..`@AC-18` tagged
+  `@feature-367`, plus the EXTEND cases of `@AC-4 @feature-259` and `@AC-3 @feature-337`) and
+  `services/xstockstrat-config/acceptance/pipeline-job-graph.feature` (EXTEND of `@AC-14 @feature-295`),
+  and one scenario appended to `docs/sdd/business-rules/platform.feature` (EXTEND of `@AC-6
+  @feature-244`). No existing scenario edited. EXTEND cases carry a comment naming the rule extended
+  (no tag convention existed).
+- Defect reports (ALL-DONE 2.6): none in scope — design.md records no C-16 CHANGE.
+- Merge-order gate: 367 has no Blocking Dependencies row; the 367 ↔ 345 note is non-blocking and
+  345 has merged with `060`, so `061` stands.
+
+## Session 2026-11-28 — sdd-execute
+**Steps this session**: 1–19 (15 commits: units 1+2+3, 15+16, 17+18)
+**Progress**: 19 done / 19 total
+**Stopped at**: all complete; integration PR https://github.com/davcs86/xstockstrat/pull/1639 (CI watch on)
+**Next**: merge PR #1639 when CI passes and reviewers approve
+
+### CI fix on PR #1639 — float-exact virtual-time bound
+- `Python test and coverage (xstockstrat-analysis)` failed on `43bb05e`:
+  `test_a_control_lane_operation_lasts_at_most_eight_seconds` asserted `virtual_time.now - start <= 8`
+  right after `advance(8)`, which measures the clock, not the operation; with CI's loop-time origin
+  `(t + 8) - t` is `8.000000000000007`. Reproduced locally by pinning the clock to `60.19212977`.
+- Fix (test only): the test records the operation's own completion time with a done-callback and keeps
+  the CI origin pinned; the runner test's tautological `now - started <= 14` clause is dropped (its
+  "succeeded within the 14 s advanced" check is the bound). Worker file 24 passed ×3; full suite 2162
+  passed, coverage 92.28%; ruff clean.
+- The earlier red `Secret scan` was a superseded run on `2983c38`: gitleaks listed PR commits up to
+  `43bb05e`, absent from that checkout; TruffleHog found 0 secrets.

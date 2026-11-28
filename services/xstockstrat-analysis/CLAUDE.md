@@ -71,8 +71,8 @@ per-symbol rows are in-memory only (on `latest_backtest`, not in history). The
 default of 20) as typed `BacktestRunSummary`s, so past run results survive a restart and are visible in
 the UI's "Past Runs" table. Full trades/diagnostics are **not** copied into history — those remain on the
 in-memory `latest_backtest`; the history table stays a compact summary. All persistence is best-effort
-(`try/except → log.warning`) so a DB failure never fails a run. Reuses the existing asyncpg pool
-(no new pool — budget stays 2).
+(`try/except → log.warning`) so a DB failure never fails a run. Run-history persistence reuses the
+service asyncpg pool; the pipeline job graph (feature 367) has its own fixed control pool of 2.
 
 ### Fundamentals Signal Producer (feature 062)
 
@@ -102,6 +102,16 @@ durable per-cycle row). No lease/CAS fencing is added (`instance_count:1` trap, 
 advances the schedule. Every boot task in `app/main.py` is started with `supervision.spawn` (retained
 in `_BACKGROUND_TASKS`; an exception exit logs ERROR naming the task). Peers adding a boot task reuse
 `spawn` — never a bare `create_task`.
+
+### Pipeline job graph (feature 367)
+
+A durable job graph with a worker runtime: idempotent keyed jobs, fenced leases with a heartbeat,
+classified retries, park-and-wake dependencies, terminal verdicts and a dead-letter state, in the
+plain tables `analysis.pipeline_jobs` and `analysis.pipeline_job_deps` (migration `031`). It is
+disjoint from `DurableSchedule` and `analysis.job_schedule`. Its only production kind is
+`pipeline.retention_prune`; `app/main.py` starts its three boot tasks. `job.db()` is a handler's only
+database access, enforced by `tests/test_job_handler_contract.py`. Detail → this service's `docs/`
+folder (**`pipeline-jobs.md`**).
 
 ### P&L pattern consumer (feature 042)
 
@@ -290,6 +300,12 @@ second watcher.
 | `snapshot.signal_timeout_ms` | int | `500` | Feature 042 — max ms the consumer waits for active signals when composing a snapshot; on timeout the snapshot carries an empty signals list (FR-6). |
 | `patterns.min_sample_count` | int | `5` | Feature 042 — minimum samples in a bucket before a factor appears in `QueryPnLPatterns` results (query-time drop). |
 | `patterns.indicator_bucket_count` | int | `5` | Feature 042 — number of quantile buckets used to group indicator-value factors at `QueryPnLPatterns` time (data-dependent boundaries). |
+| `pipeline.worker_enabled` | bool | `true` | Feature 367 — pipeline job graph kill switch: when `false` no job is claimed, the daily prune job is not enqueued and expired leases are not reaped; running jobs finish. Reader `app/engine/job_graph.py:JobGraphSettings`, read fresh at each use via `get_bool`. Seeded by config migration `061`. |
+| `pipeline.worker_concurrency` | int | `4` | Feature 367 — jobs one instance runs at once; bounds `[1,16]`. Reader `app/engine/job_graph.py:JobGraphSettings`, read fresh at each use, read via `int_positive`, then clamped to the bounds with one WARN per distinct clamped value. Seeded by config migration `061`. |
+| `pipeline.poll_interval_ms` | int | `1000` | Feature 367 — delay between claim polls while work flows; idle polling backs off to `max(poll_interval_ms, 5000)` ms; bounds `[200,5000]`. Reader `app/engine/job_graph.py:JobGraphSettings`, read fresh at each use, read via `int_positive`, then clamped to the bounds with one WARN per distinct clamped value. Seeded by config migration `061`. |
+| `pipeline.lease_seconds` | int | `60` | Feature 367 — lease length without a heartbeat (heartbeat period fixed at 7.5 s); bounds `[45,600]`. Reader `app/engine/job_graph.py:JobGraphSettings`, read fresh at each use, read via `int_positive`, then clamped to the bounds with one WARN per distinct clamped value. Seeded by config migration `061`. |
+| `pipeline.max_attempts` | int | `5` | Feature 367 — attempts before a job ends `dead`; bounds `[2,20]`. Reader `app/engine/job_graph.py:JobGraphSettings`, read fresh at each use, read via `int_positive`, then clamped to the bounds with one WARN per distinct clamped value. Seeded by config migration `061`. |
+| `pipeline.retention_days` | int | `7` | Feature 367 — age at which `succeeded` jobs are pruned; `failed`, `dead` and `blocked` jobs are kept `max(30, retention_days)` days; bounds `[1,90]`. Reader `app/engine/job_graph.py:JobGraphSettings`, read fresh at each use, read via `int_positive`, then clamped to the bounds with one WARN per distinct clamped value. Seeded by config migration `061`. |
 
 > **Feature-131 fan-out worst case:** the two caps govern disjoint pools (live-only non-held symbols
 > and live-attributed held symbols), so the compound ceiling on **newly-attributed** live rows is
@@ -331,6 +347,7 @@ skip locally and fail under `CI=true`.
 - INFO `loop tick ok` carries `loop`, `duration_ms` and optional `state` (no `state` = work was done); a tick writes no record when every item that reached its fallible call failed. Written by `fundsignal` (24 h), `opportunity_refresh` (24 h), `readiness_materializer` (24 h), `template_intent_sweep` (300 s) and `pnl_consumer` (event-driven, throttled to one per 60 s); states `idle`, `disabled`. A not-due or lock-held tick writes nothing. `live_loop` keeps `live_loop: cycle complete` and writes no `loop tick ok`.
 - Instruments: `analysis.live_loop.pairs{outcome ok|no_bars|error}`, `analysis.live_loop.drain_failures{source signals|held|watchlist}`, `analysis.live_loop.triggers{trigger entry|exit, outcome throttled|alerted|alert_failed}`, `analysis.live_loop.cycle.duration`, `analysis.fundsignal.signals{outcome emitted|failed}`, `analysis.opportunity.recompute{kind full|retry, outcome ok|failed}`, `analysis.opportunity.read_reissue` (label-free; counts `ListOpportunities` read branch (iv) re-reads, the routine steady state, feature 366), `template.instantiate{service, outcome}`. `recompute{kind=full,outcome=failed}` counts both kick-path recompute failures and daily-refresh per-user failures (any exception the per-user catch handles, not only held-drain failures); `ok` is kick-path only, so no failed/(ok+failed) ratio over `kind=full` is meaningful.
 - Load-bearing log: INFO `fundsignal run summary`.
+- Pipeline job graph (feature 367): `loop tick ok` loop `pipeline_worker`, written by the claim loop at most once per 60 s (no `state` after a claim that returned jobs; `idle`, `disabled`; nothing while every slot is held). Instruments `analysis.pipeline.attempts{outcome succeeded|parked|blocked|retried|failed|dead|expired}`, `analysis.pipeline.lease_events{outcome lost_heartbeat|lost_self_fence|report_rejected|report_abandoned|handler_abandoned}`, `analysis.pipeline.db.duration{step, phase wait|total, outcome on total}`, gauges `analysis.pipeline.ready_depth{lane}` and `analysis.pipeline.oldest_ready_age{lane}` (absent when the snapshot is older than 45 s). What to watch → **`pipeline-jobs.md`**.
 - Load-bearing log (feature 366, FR-2a): INFO `opportunity live-only rotation shortfall: user=%s pool=%d per_compute=%d projected_computes=%d cycle_max_days=%d`, written only when `projected_computes > cycle_max_days` and only when a user's (projected computes, N, cycle days) changes. The projection is counted in computes, not days, because every compute advances the cursor.
 - Tracing: `init_telemetry` installs `GrpcAioInstrumentorServer` (extracts inbound W3C `traceparent`) and `GrpcAioInstrumentorClient` (injects it on outbound calls), so UI → analysis → marketdata/indicators/… is one trace; the client patch covers only `grpc.aio` channels created after `init_telemetry()` runs.
 

@@ -2,7 +2,7 @@
 
 **Development Branch**: `feature/pipeline-job-graph`
 **Created**: 2026-11-27
-**Last Updated**: 2026-11-27
+**Last Updated**: 2026-11-28
 
 ---
 
@@ -14,6 +14,8 @@
 | 2026-11-27 | `draft` → `spec-ready` | /sdd-review | Product spec approved (2 warnings, both fixed in the spec). Round 1 failed on criteria 6 and 9; round 2 passed. Overlap clean |
 | 2026-11-27 | `spec-ready` → `design-approved` | /sdd-design | Design debated (12 rounds, full; round cap lifted by the operator) and approved; recon.md + debate.md + design.md written. Product spec and scenarios amended during the debate with operator sign-off (`@AC-17`, `@AC-18` added) |
 | 2026-11-27 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 19 steps |
+| 2026-11-27 | `implementation-ready` → `in-progress` | /sdd-execute | Sequential mode; Steps 1+2+3 (config unit) committed |
+| 2026-11-28 | `in-progress` → `code-completed` | /sdd-execute | All 19 steps committed on `feature/pipeline-job-graph` (15 step commits) |
 
 ---
 

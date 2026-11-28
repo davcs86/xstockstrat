@@ -1,6 +1,6 @@
 # Implementation Spec: pipeline-job-graph
 
-**Status**: `pending`
+**Status**: `complete`
 **Created**: 2026-11-27
 **Feature**: `docs/roadmap/features/367-pipeline-job-graph/feature.md`
 **Total Steps**: 19
@@ -171,7 +171,7 @@ Names and seams the design leaves open. Each is this spec's choice and is open t
 
 ### Step 1 — config: seed the six `analysis.pipeline.*` keys (config `061`), their SetConfig bounds, the stored set and the docs rows
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/migrations/061_analysis_pipeline_keys.up.sql` — create
@@ -280,7 +280,7 @@ config, stored-set and wiring commands.
 
 ### Step 2 — service: `JobGraphSettings` reader and the wiring registry entries
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/engine/job_graph.py` — create
@@ -347,7 +347,7 @@ config, stored-set and wiring commands.
 
 ### Step 3 — test: settings reader, read classification and the unit gate
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_job_graph_settings.py` — create
@@ -418,7 +418,7 @@ grep -n "analysis.pipeline\." services/xstockstrat-config/src/grpc/configService
 
 ### Step 4 — migration: analysis `031_pipeline_job_graph` (jobs and dependency edges)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/migrations/031_pipeline_job_graph.up.sql` — create
@@ -496,7 +496,7 @@ grep -rn "pipeline_job" services/xstockstrat-analysis/migrations/ | grep -v "031
 
 ### Step 5 — service: `bounded_txn` and the control-pool reset callback
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/repositories/read_budget.py` — modify (additions only)
@@ -557,7 +557,7 @@ git diff origin/main-dev --numstat -- app/repositories/read_budget.py | awk '$2 
 
 ### Step 6 — test: `bounded_txn` against real PostgreSQL, and the asyncpg pins
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_bounded_txn_real_pg.py` — create
@@ -623,7 +623,7 @@ uv run --extra dev pytest tests/test_bounded_txn_real_pg.py -q -rs | grep -c SKI
 
 ### Step 7 — service: `PipelineJobsRepository`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/repositories/pipeline_jobs.py` — create
@@ -733,7 +733,7 @@ grep -c "SKIP LOCKED" app/repositories/pipeline_jobs.py   # claim, reap, settle,
 
 ### Step 8 — test: repository SQL against real PostgreSQL, and the job-row fixtures
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/conftest.py` — modify (add the pipeline fixtures)
@@ -852,7 +852,7 @@ uv run --extra dev pytest tests/test_pipeline_jobs_real_pg.py -q -rs | grep -c S
 
 ### Step 9 — service: engine primitives (lanes, outcomes, classifier, backoff, handler registry)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/engine/job_graph.py` — modify
@@ -912,7 +912,7 @@ grep -n "is_transient_db_error" app/engine/job_graph.py ; test $? -eq 1
 
 ### Step 10 — test: engine primitives
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_job_graph_core.py` — create
@@ -958,7 +958,7 @@ grep -n "pytest.fixture" tests/test_job_graph_core.py ; test $? -eq 1   # C-13: 
 
 ### Step 11 — service: attempt, stop path, the three loops and the worker
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/engine/job_graph.py` — modify
@@ -1070,7 +1070,7 @@ python3 ../../scripts/check-watcher-copies.py ../..
 
 ### Step 12 — test: worker runtime, takeover invariants and the handler contract
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_job_graph_worker.py` — create
@@ -1169,7 +1169,7 @@ uv run --extra dev pytest tests/test_job_graph_worker_real_pg.py -q -rs | grep -
 
 ### Step 13 — service: the retention-prune job kind
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/jobs/retention_prune.py` — create
@@ -1219,7 +1219,7 @@ uv run --extra dev pytest tests/test_job_handler_contract.py tests/test_job_grap
 
 ### Step 14 — test: retention prune end to end
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_retention_prune_job.py` — create
@@ -1273,7 +1273,7 @@ uv run --extra dev pytest tests/test_retention_prune_job.py -q -rs | grep -c SKI
 
 ### Step 15 — service: pipeline telemetry
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/telemetry.py` — modify
@@ -1349,7 +1349,7 @@ cd ../.. && python3 scripts/check-otel-produced-signals.py
 
 ### Step 16 — test: pipeline telemetry
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_pipeline_telemetry.py` — create
@@ -1422,7 +1422,7 @@ uv run --extra dev pytest tests/test_pipeline_telemetry.py -q -rs | grep -c SKIP
 
 ### Step 17 — service: startup wiring (control pool, worker, three boot tasks)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/main.py` — modify
@@ -1472,7 +1472,7 @@ uv run --extra dev pytest tests/test_pipeline_telemetry.py -q -rs | grep -c SKIP
 
 ### Step 18 — test: boot wiring
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_supervision.py` — modify
@@ -1523,7 +1523,7 @@ test -z "$(git diff --name-only origin/main-dev -- ../../docker-compose.yml ../.
 
 ### Step 19 — docs: pool budget, pooling pattern, analysis service docs, recovery page, program plan
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/` and `services/xstockstrat-analysis/` (documentation only)
 **Files**:
 - `CLAUDE.md` — modify (the analysis row of § Connection Pool Budget only)
@@ -1619,3 +1619,44 @@ _Populated by /sdd-execute as implementation proceeds._
 
 - **Spec time (2026-11-27).** The config migration is `061`, not highest + 1 (`060`), by operator
   ruling (C-07 override; `060` is feature 345's). See `merge-order.md` § Config seed number: 367 ↔ 345.
+- **Steps 1+2+3 (execute, 2026-11-27).** Stored-set route: a throwaway local PostgreSQL 16 (operator
+  choice at mode entry), with golang-migrate 4.17.1 (the `scripts/Dockerfile.migrate` pin) in the session
+  scratchpad. The cluster lived under a `mkdtemp` in `/tmp`, as `tests/conftest.py:local_pg` does (the Unix
+  socket path limit), and was removed afterwards. `config-heal-dryrun.py --fresh` was also run (CI's same
+  job): no diff in `scripts/config-heal/dryrun-fresh.tsv`. **Disposition**: operator-approved route, no
+  spec change.
+- **Steps 1+2+3, tooling.** Config lint and tests ran on Node 22.23.5 with pnpm 9.15.9 (the sandbox has no
+  Node 24); the analysis venv uses the service's `.python-version` (3.12). **Disposition**: CI-equivalent
+  fallback; CI runs the pinned versions.
+- **Step 6 (execute, 2026-11-27) — control-pool reset pin.** design.md § Bounded database access,
+  "Control pool reset … raises if a connection is released inside a transaction", cannot hold on asyncpg
+  0.31.0: `PoolConnectionHolder.release` runs `Connection._reset()` first, which sends `ROLLBACK` for an open
+  transaction and reports "Resetting connection with an active transaction" through the loop's exception
+  handler, and only then calls the `reset=` callback, which sees a clean connection. **OPERATOR DECISION:
+  "Adopt asyncpg's behaviour"** — `control_pool_reset` is a no-op whose job is to skip `RESET ALL` (a
+  release sends no query). Re-pinned: a stray in-transaction release is rolled back and reported, never
+  handed on in a transaction; and `bounded_txn` never releases a connection inside a transaction. The
+  other pins hold with no fallback: terminate wakes an in-flight await (a frozen backend is cut at about
+  budget + 2 s), and `create_pool(reset=…)` and `min_size=0` work. **Disposition**: operator-approved
+  design correction; Step 17 builds the control pool with `min_size=0` and `reset=control_pool_reset` as specced.
+- **Step 8 (execute, 2026-11-27) — `park` sorts its children.** Writing the gate test "two overlapping
+  parks that name the same children in opposite order do not deadlock" showed that Step 7's `park`
+  relied on its caller's order (design.md § Dependencies sorts in `validate_wait_on`, Step 9). Two lines
+  in `app/repositories/pipeline_jobs.py` (outside Step 8's **Files**) make the repository sort children by
+  key, so its lock order is deterministic for any caller. **Disposition**: in-scope fix of Step 7's own
+  code, staged with Step 8 and reported at the feature-end checkpoint (F-08 exception, P-03).
+- **Steps 7+ (execute, 2026-11-27) — CLI import checks.** Outside pytest, `gen` is not importable
+  (`tests/conftest.py:_setup_gen_path` registers it). The `python -c "from app… import …"` checks run with
+  `PYTHONPATH` = a scratchpad `gen` symlink to `packages/proto/gen/python` plus that directory itself,
+  mirroring the image (`Dockerfile`: editable install of the stubs and `/app/gen` symlink).
+  **Disposition**: CI-equivalent fallback.
+- **Step 11 (execute, 2026-11-27) — `claim(lane_held=)`.** The claim tick reads `worker_enabled` after
+  the control lane is taken and then claims on that lane (design.md § Worker runtime, Claim loop), so
+  `PipelineJobsRepository.claim` gained the `lane_held=False` keyword `report` and `park` already have
+  (one line in `app/repositories/pipeline_jobs.py`, outside Step 11's **Files**). **Disposition**:
+  required by the step's own instructions; staged with Step 11 and reported at the feature-end checkpoint.
+- **Step 12 (execute, 2026-11-27) — shared seed helper.** The 1 200-parent seed SQL gained a second
+  consumer (Step 12's one-tick settle test), so it moved from Step 8's test into
+  `tests/conftest.py:seed_blocked_parents` and Step 8's test now calls it (`tests/test_pipeline_jobs_real_pg.py`
+  is outside Step 12's **Files**). **Disposition**: C-13 consolidation of this feature's own test code; no
+  behaviour change; reported at the feature-end checkpoint.

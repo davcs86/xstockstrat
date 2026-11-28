@@ -2912,3 +2912,19 @@ Feature: Platform-wide guarantees
     When a user opens the login page and the agent receives an MCP call
     Then both behave as in "local"
     And the UI, identity and the agent each log "auth_mode_invalid" once
+
+
+  # Feature 367 EXTEND of @AC-6 @FR-3 @feature-244 (above): the pipeline int keys clamp a stored zero.
+  @FR-9 @regression @feature-367
+  Scenario Outline: A stored zero or negative pipeline key reads as its coded default
+    Given "<key>" is stored as the int value <stored>
+    When xstockstrat-analysis reads it through int_positive in JobGraphSettings
+    Then the effective value is <effective>
+
+    Examples:
+      | key                                  | stored | effective |
+      | analysis.pipeline.worker_concurrency | 0      | 4         |
+      | analysis.pipeline.poll_interval_ms   | -3     | 1000      |
+      | analysis.pipeline.lease_seconds      | 0      | 60        |
+      | analysis.pipeline.max_attempts       | 0      | 5         |
+      | analysis.pipeline.retention_days     | -3     | 7         |

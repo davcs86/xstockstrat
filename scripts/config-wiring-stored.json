@@ -1393,6 +1393,150 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
+            "key": "pipeline.lease_seconds",
+            "file": "061_analysis_pipeline_keys.up.sql",
+            "global": true,
+            "is_secret": false,
+            "namespace": "analysis",
+            "value_type": "int",
+            "description": "Pipeline job graph (feature 367): the lease length in seconds a claimed job holds without a heartbeat; the heartbeat period is fixed at 7.5 s. Bounds [45,600]. A value of 0 or less reads as 60.",
+            "environment": "production",
+            "default_value": "60",
+            "consuming_service": "xstockstrat-analysis"
+        },
+        {
+            "key": "pipeline.lease_seconds",
+            "file": "061_analysis_pipeline_keys.up.sql",
+            "global": true,
+            "is_secret": false,
+            "namespace": "analysis",
+            "value_type": "int",
+            "description": "Pipeline job graph (feature 367): the lease length in seconds a claimed job holds without a heartbeat; the heartbeat period is fixed at 7.5 s. Bounds [45,600]. A value of 0 or less reads as 60.",
+            "environment": "staging",
+            "default_value": "60",
+            "consuming_service": "xstockstrat-analysis"
+        },
+        {
+            "key": "pipeline.max_attempts",
+            "file": "061_analysis_pipeline_keys.up.sql",
+            "global": true,
+            "is_secret": false,
+            "namespace": "analysis",
+            "value_type": "int",
+            "description": "Pipeline job graph (feature 367): the attempts a job may use before it ends dead. Bounds [2,20]. A value of 0 or less reads as 5.",
+            "environment": "production",
+            "default_value": "5",
+            "consuming_service": "xstockstrat-analysis"
+        },
+        {
+            "key": "pipeline.max_attempts",
+            "file": "061_analysis_pipeline_keys.up.sql",
+            "global": true,
+            "is_secret": false,
+            "namespace": "analysis",
+            "value_type": "int",
+            "description": "Pipeline job graph (feature 367): the attempts a job may use before it ends dead. Bounds [2,20]. A value of 0 or less reads as 5.",
+            "environment": "staging",
+            "default_value": "5",
+            "consuming_service": "xstockstrat-analysis"
+        },
+        {
+            "key": "pipeline.poll_interval_ms",
+            "file": "061_analysis_pipeline_keys.up.sql",
+            "global": true,
+            "is_secret": false,
+            "namespace": "analysis",
+            "value_type": "int",
+            "description": "Pipeline job graph (feature 367): the delay in milliseconds between claim polls while work flows; idle polling backs off to max(poll_interval_ms, 5000) ms. Bounds [200,5000]. A value of 0 or less reads as 1000.",
+            "environment": "production",
+            "default_value": "1000",
+            "consuming_service": "xstockstrat-analysis"
+        },
+        {
+            "key": "pipeline.poll_interval_ms",
+            "file": "061_analysis_pipeline_keys.up.sql",
+            "global": true,
+            "is_secret": false,
+            "namespace": "analysis",
+            "value_type": "int",
+            "description": "Pipeline job graph (feature 367): the delay in milliseconds between claim polls while work flows; idle polling backs off to max(poll_interval_ms, 5000) ms. Bounds [200,5000]. A value of 0 or less reads as 1000.",
+            "environment": "staging",
+            "default_value": "1000",
+            "consuming_service": "xstockstrat-analysis"
+        },
+        {
+            "key": "pipeline.retention_days",
+            "file": "061_analysis_pipeline_keys.up.sql",
+            "global": true,
+            "is_secret": false,
+            "namespace": "analysis",
+            "value_type": "int",
+            "description": "Pipeline job graph (feature 367): the age in days at which succeeded jobs are pruned; failed, dead and blocked jobs are kept max(30, retention_days) days. Bounds [1,90]. A value of 0 or less reads as 7.",
+            "environment": "production",
+            "default_value": "7",
+            "consuming_service": "xstockstrat-analysis"
+        },
+        {
+            "key": "pipeline.retention_days",
+            "file": "061_analysis_pipeline_keys.up.sql",
+            "global": true,
+            "is_secret": false,
+            "namespace": "analysis",
+            "value_type": "int",
+            "description": "Pipeline job graph (feature 367): the age in days at which succeeded jobs are pruned; failed, dead and blocked jobs are kept max(30, retention_days) days. Bounds [1,90]. A value of 0 or less reads as 7.",
+            "environment": "staging",
+            "default_value": "7",
+            "consuming_service": "xstockstrat-analysis"
+        },
+        {
+            "key": "pipeline.worker_concurrency",
+            "file": "061_analysis_pipeline_keys.up.sql",
+            "global": true,
+            "is_secret": false,
+            "namespace": "analysis",
+            "value_type": "int",
+            "description": "Pipeline job graph (feature 367): the number of jobs one analysis instance runs at once. Bounds [1,16]. A value of 0 or less reads as 4.",
+            "environment": "production",
+            "default_value": "4",
+            "consuming_service": "xstockstrat-analysis"
+        },
+        {
+            "key": "pipeline.worker_concurrency",
+            "file": "061_analysis_pipeline_keys.up.sql",
+            "global": true,
+            "is_secret": false,
+            "namespace": "analysis",
+            "value_type": "int",
+            "description": "Pipeline job graph (feature 367): the number of jobs one analysis instance runs at once. Bounds [1,16]. A value of 0 or less reads as 4.",
+            "environment": "staging",
+            "default_value": "4",
+            "consuming_service": "xstockstrat-analysis"
+        },
+        {
+            "key": "pipeline.worker_enabled",
+            "file": "061_analysis_pipeline_keys.up.sql",
+            "global": true,
+            "is_secret": false,
+            "namespace": "analysis",
+            "value_type": "bool",
+            "description": "Pipeline job graph (feature 367) kill switch. When false no job is claimed, the daily prune job is not enqueued and expired leases are not reaped; jobs already running finish and write their result. Read fresh at each use.",
+            "environment": "production",
+            "default_value": "true",
+            "consuming_service": "xstockstrat-analysis"
+        },
+        {
+            "key": "pipeline.worker_enabled",
+            "file": "061_analysis_pipeline_keys.up.sql",
+            "global": true,
+            "is_secret": false,
+            "namespace": "analysis",
+            "value_type": "bool",
+            "description": "Pipeline job graph (feature 367) kill switch. When false no job is claimed, the daily prune job is not enqueued and expired leases are not reaped; jobs already running finish and write their result. Read fresh at each use.",
+            "environment": "staging",
+            "default_value": "true",
+            "consuming_service": "xstockstrat-analysis"
+        },
+        {
             "key": "readiness.stale_after_seconds",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
@@ -5449,5 +5593,5 @@
             "consuming_service": "xstockstrat-ui"
         }
     ],
-    "inputs_sha256": "cd2cef35ec7457b138f854cde1fe0209056a4256fa83a4e3796aa949d3ca56f6"
+    "inputs_sha256": "40b4b8eef95fa237c0282142c8fdd6884ca4c8d2782f3346a1e9b0a313400f72"
 }

@@ -218,7 +218,7 @@ locks — theirs is the real backend-slot budget. Full rationale, the direct-vs-
 | xstockstrat-marketdata | Go | pool `:25061` | default 2 | `DB_POOL_MAX` unset |
 | xstockstrat-indicators | Python | pool `:25061` | default 2 | `DB_POOL_MAX` unset |
 | xstockstrat-ingest | Python | pool `:25061` | default 2 | `DB_POOL_MAX` unset |
-| xstockstrat-analysis | Python | pool `:25061` | default 2 | `DB_POOL_MAX` unset |
+| xstockstrat-analysis | Python | pool `:25061` | service 2 (`DB_POOL_MAX` unset) + pipeline control 2 (fixed, not env-overridable) | client connections to PgBouncer, not backend slots |
 | xstockstrat-ledger | Node | direct `:25060` | 2 | 1 query-pool conn (`DB_POOL_MAX=1`) + 1 dedicated LISTEN/NOTIFY conn (`EventNotifier`). Live `StreamEvents` subscribers share the single listener and never borrow from the query pool, so concurrent streams can't starve `AppendEvent`. |
 | xstockstrat-identity | Node | direct `:25060` | 2 | |
 | xstockstrat-config | Node | direct `:25060` | 2 | |
