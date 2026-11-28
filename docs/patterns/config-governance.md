@@ -143,6 +143,7 @@ automated process wrote this" (fails.md 2026-07-01). A write with neither is rej
 | `system:config-migration-feature-<slug>` | `xstockstrat-config` (SQL migration) | A number-free actor sentinel for a config migration whose content must not carry its number, so a merge-time renumber renames files only; first used by feature 305 |
 | `system:config-migration-feature-330` | `xstockstrat-config` (SQL migration) | Feature 330's guarded reseed of `analysis` / `opportunity.live_enrich_ttl_seconds` (`*_analysis_live_enrich_ttl_reseed`): set only on the global rows whose value it moved `10 → 20`, with `caller_identity` NULL. Its down reverts only rows still carrying it, so an operator `SetConfig` (which rewrites `updated_by`) is never reverted |
 | `system:config-heal-mcp-credential-sweep` | operator SQL (`scripts/config-heal/mcp-credential-orphan-sweep.sql`) | Not a SetConfig write: the operator orphan sweep's `config_audit.changed_by` for each deleted per-user `ingest` / `mcp_credential.*` secret (`new_value` NULL, `old_value` the `[redacted]` sentinel, `caller_identity` NULL); feature 328 |
+| `operator:manage-users` | operator CLI (`scripts/manage-users.py set-auth-mode`) | Not a SetConfig write: the raw-SQL update of the global `identity` / `auth.mode` row for one environment sets `updated_by` to this sentinel, `update_reason` to `--reason` and `caller_identity` to NULL, then always sends `pg_notify('config_changed', …)`; feature 345 |
 | `system:config-migration-feature-fix-mcp-deadline-budget` | `xstockstrat-config` (SQL migration) | Feature 314's `*_mcp_deadline_budget`: the seed rows of `agent` / `extract.call_budget_seconds`, and the global `agent` / `opportunities.read_timeout_seconds` rows it clamped to `44`, with `caller_identity` NULL. Its down deletes only seed rows still carrying it and still holding `35`; the clamp is forward-only |
 
 ## Per-Feature Registered Keys
@@ -173,6 +174,25 @@ Approval: owner + config team.
 | `analysis` | `pipeline.lease_seconds` | int | `60` | `app/engine/job_graph.py:JobGraphSettings.lease_seconds` | `[45,600]` | Lease length without a heartbeat (heartbeat period fixed at 7.5 s). |
 | `analysis` | `pipeline.max_attempts` | int | `5` | `app/engine/job_graph.py:JobGraphSettings.max_attempts` | `[2,20]` | Attempts before a job ends `dead`. |
 | `analysis` | `pipeline.retention_days` | int | `7` | `app/engine/job_graph.py:JobGraphSettings.retention_days` | `[1,90]` | Age at which `succeeded` jobs are pruned; `failed`, `dead` and `blocked` jobs are kept `max(30, retention_days)` days. |
+
+### feature 345 — authelia-sso (`xstockstrat-config` / `xstockstrat-identity` / `xstockstrat-ui` / `xstockstrat-agent`)
+
+OIDC single sign-on for the web UI and the MCP agent, switched per deployment by `identity` / `auth.mode`. Config
+migration `*_authelia_sso_keys` seeds 18 global rows (staging + production; insert-if-absent, no notify because each
+seed equals the code default), actor sentinel `system:config-migration-feature-authelia-sso`; the down deletes only
+rows still carrying it and the seed value (the secret row only while its ciphertext is NULL). `auth.mode` is written by
+`manage-users.py set-auth-mode` (sentinel `operator:manage-users`, above). New `SECRET_CALLER_ALLOWLIST` grant: `ui` →
+`ui` / `oidc.client_secret`, peer SAN `xstockstrat-ui`. Every read is global (no `user_id`). Lifecycle →
+`docs/runbooks/authelia-sso-cutover.md`. Approval: owner + config team; DBA + config owner for the migration.
+
+| Namespace | Key | Type | Default | Reader | Live mechanism |
+|---|---|---|---|---|---|
+| `identity` | `auth.mode` | string | `local` | identity `src/authMode.ts` `readAuthMode`; UI `src/lib/oidcConfig.ts` `loadAuthMode`; agent `app/sso_mode.py` `current_auth_mode` | identity and agent: `WatchConfig` (identity re-parses on every update); UI: `GetConfig` per request. Not `local`/`both`/`oidc` → `local` + WARN `auth_mode_invalid` once per value |
+| `ui` | `oidc.issuer` | string | `""` | UI `loadOidcConfig` | `GetConfig` per request |
+| `ui` | `oidc.client_id` | string | `""` | UI `loadOidcConfig` | `GetConfig` per request |
+| `ui` | `oidc.client_secret` | secret (`is_secret`, NULL ciphertext) | unset (`found=false`) | UI `loadOidcClientSecret` (`GetSecret`, `x-internal-caller: ui`) | `GetSecret` per request |
+| `ui` | `oidc.mcp_client_id`, `oidc.mcp_client_id_readonly`, `oidc.mcp_client_id_claude_code`, `oidc.mcp_client_id_claude_code_readonly` | string | `""` | UI `loadOidcConfig` (`/accounts/authorized-apps` in `oidc`; empty hides the line) | `GetConfig` per request |
+| `agent` | `oidc.issuer` | string | `""` | agent `app/sso_mode.py` `agent_issuer`; UI `loadAgentIssuer` | agent: `WatchConfig`; UI: `GetConfig` per request |
 
 ### feature 314 — fix-mcp-deadline-budget (`xstockstrat-config` / `xstockstrat-agent`)
 

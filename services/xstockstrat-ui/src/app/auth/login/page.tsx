@@ -1,53 +1,54 @@
-'use client';
 import { Suspense } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
-import { AuthCardShell, CredentialsForm } from '@/components/auth/AuthForm';
-import { Skeleton } from '@/components/ui/skeleton';
+import { AuthCardShell } from '@/components/auth/AuthForm';
+import { SsoSignInForm } from '@/components/auth/SsoSignInForm';
+import { CardNotice } from '@/components/shared/CardNotice';
+import { Separator } from '@/components/ui/separator';
+import { loadAuthMode, type AuthMode } from '@/lib/oidcConfig';
+import { SSO_ERROR_CODES, SSO_ERROR_MESSAGES, type SsoErrorCode } from '@/lib/ssoErrors';
+import { LoginForm, LoginSkeleton } from './LoginForm';
 
-// Only allow redirects back into one of the known basePaths (open-redirect guard).
-function safeRedirect(target: string | null): string {
-  if (
-    target &&
-    (target.startsWith('/trader') ||
-      target.startsWith('/insights') ||
-      target.startsWith('/config-ui'))
-  ) {
-    return target;
+type SearchParams = Promise<Record<string, string | string[] | undefined>>;
+
+function errorMessage(code: string | undefined, mode: AuthMode | 'error'): string | null {
+  if (!code || !(SSO_ERROR_CODES as readonly string[]).includes(code)) return null;
+  const message = SSO_ERROR_MESSAGES[code as SsoErrorCode];
+  return typeof message === 'string' ? message : message[mode === 'oidc' ? 'oidc' : 'both'];
+}
+
+// Server component: reads only auth.mode, never the signed-in user (ledger fails.md).
+export default async function LoginPage({ searchParams }: { searchParams: SearchParams }) {
+  const [mode, params] = await Promise.all([loadAuthMode(), searchParams]);
+  const error = typeof params.error === 'string' ? params.error : undefined;
+  const redirect = typeof params.redirect === 'string' ? params.redirect : '';
+  const message = errorMessage(error, mode);
+  const sso = mode === 'both' || mode === 'oidc';
+  const notice = message && <CardNotice variant="error">{message}</CardNotice>;
+
+  if (mode === 'oidc') {
+    return (
+      <AuthCardShell title="xstockstrat Platform">
+        <div className="space-y-4">
+          {notice}
+          <SsoSignInForm redirect={redirect} />
+        </div>
+      </AuthCardShell>
+    );
   }
-  return '/trader';
-}
-
-function LoginForm() {
-  const router = useRouter();
-  const searchParams = useSearchParams();
-  return (
-    <AuthCardShell title="xstockstrat Platform">
-      <CredentialsForm
-        submitLabel="Sign in"
-        loadingLabel="Signing in…"
-        showRememberMe
-        onSuccess={() => router.push(safeRedirect(searchParams.get('redirect')))}
-      />
-    </AuthCardShell>
-  );
-}
-
-function LoginSkeleton() {
-  return (
-    <AuthCardShell title="xstockstrat Platform">
-      <div className="space-y-4">
-        <Skeleton className="h-10 bg-secondary" />
-        <Skeleton className="h-10 bg-secondary" />
-        <Skeleton className="h-10 bg-secondary/80" />
-      </div>
-    </AuthCardShell>
-  );
-}
-
-export default function LoginPage() {
   return (
     <Suspense fallback={<LoginSkeleton />}>
-      <LoginForm />
+      <LoginForm>
+        {(notice || sso) && (
+          <div className="mb-4 space-y-4">
+            {notice}
+            {sso && (
+              <>
+                <SsoSignInForm redirect={redirect} />
+                <Separator />
+              </>
+            )}
+          </div>
+        )}
+      </LoginForm>
     </Suspense>
   );
 }

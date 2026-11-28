@@ -5,7 +5,8 @@
 //   protoc               unknown
 // source: identity/v1/identity.proto
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.IdentityServiceClient = exports.IdentityServiceService = exports.ListAdminUserIdsResponse = exports.ListAdminUserIdsRequest = exports.SetUserActiveResponse = exports.SetUserActiveRequest = exports.SetUserRolesResponse = exports.SetUserRolesRequest = exports.UpdatePasswordResponse = exports.UpdatePasswordRequest = exports.GetUserResponse = exports.GetUserRequest = exports.ListUsersResponse = exports.ListUsersRequest = exports.CreateUserResponse = exports.CreateUserRequest = exports.User = exports.AdminUpdateUserMetadataRequest = exports.AdminGetUserMetadataRequest = exports.UpdateUserMetadataResponse = exports.UpdateUserMetadataRequest = exports.GetUserMetadataResponse = exports.GetUserMetadataRequest = exports.UserMetadata = exports.RevokeAuthorizedAppResponse = exports.RevokeAuthorizedAppRequest = exports.ListAuthorizedAppsResponse = exports.ListAuthorizedAppsRequest = exports.AuthorizedApp = exports.RefreshOAuthTokenRequest = exports.OAuthTokenResponse = exports.ExchangeAuthCodeRequest = exports.IssueAuthCodeResponse = exports.IssueAuthCodeRequest = exports.GetOAuthClientRequest = exports.RegisterOAuthClientRequest = exports.OAuthClient = exports.RevokeTokenResponse = exports.RevokeTokenRequest = exports.RefreshTokenRequest = exports.ValidateTokenRequest = exports.TokenClaims = exports.AuthTokenResponse = exports.AuthenticateUserRequest = exports.Role = exports.protobufPackage = void 0;
+exports.GetExternalIdentityLinksRequest = exports.LinkExternalIdentityResponse = exports.LinkExternalIdentityRequest = exports.IssueSessionForUserRequest = exports.ResolveExternalIdentityResponse = exports.ResolveExternalIdentityRequest = exports.ListAdminUserIdsResponse = exports.ListAdminUserIdsRequest = exports.SetUserActiveResponse = exports.SetUserActiveRequest = exports.SetUserRolesResponse = exports.SetUserRolesRequest = exports.UpdatePasswordResponse = exports.UpdatePasswordRequest = exports.GetUserResponse = exports.GetUserRequest = exports.ListUsersResponse = exports.ListUsersRequest = exports.CreateUserResponse = exports.CreateUserRequest = exports.User = exports.AdminUpdateUserMetadataRequest = exports.AdminGetUserMetadataRequest = exports.UpdateUserMetadataResponse = exports.UpdateUserMetadataRequest = exports.GetUserMetadataResponse = exports.GetUserMetadataRequest = exports.UserMetadata = exports.RevokeAuthorizedAppResponse = exports.RevokeAuthorizedAppRequest = exports.ListAuthorizedAppsResponse = exports.ListAuthorizedAppsRequest = exports.AuthorizedApp = exports.RefreshOAuthTokenRequest = exports.OAuthTokenResponse = exports.ExchangeAuthCodeRequest = exports.IssueAuthCodeResponse = exports.IssueAuthCodeRequest = exports.GetOAuthClientRequest = exports.RegisterOAuthClientRequest = exports.OAuthClient = exports.RevokeTokenResponse = exports.RevokeTokenRequest = exports.RefreshTokenRequest = exports.ValidateTokenRequest = exports.TokenClaims = exports.AuthTokenResponse = exports.AuthenticateUserRequest = exports.Role = exports.protobufPackage = void 0;
+exports.IdentityServiceClient = exports.IdentityServiceService = exports.GetExternalIdentityLinksResponse = void 0;
 exports.roleFromJSON = roleFromJSON;
 exports.roleToJSON = roleToJSON;
 exports.roleToNumber = roleToNumber;
@@ -3203,6 +3204,480 @@ exports.ListAdminUserIdsResponse = {
         return message;
     },
 };
+function createBaseResolveExternalIdentityRequest() {
+    return { issuer: "", subject: "" };
+}
+exports.ResolveExternalIdentityRequest = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.issuer !== "") {
+            writer.uint32(10).string(message.issuer);
+        }
+        if (message.subject !== "") {
+            writer.uint32(18).string(message.subject);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseResolveExternalIdentityRequest();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.issuer = reader.string();
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 18) {
+                        break;
+                    }
+                    message.subject = reader.string();
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            issuer: isSet(object.issuer) ? globalThis.String(object.issuer) : "",
+            subject: isSet(object.subject) ? globalThis.String(object.subject) : "",
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.issuer !== "") {
+            obj.issuer = message.issuer;
+        }
+        if (message.subject !== "") {
+            obj.subject = message.subject;
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.ResolveExternalIdentityRequest.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseResolveExternalIdentityRequest();
+        message.issuer = object.issuer ?? "";
+        message.subject = object.subject ?? "";
+        return message;
+    },
+};
+function createBaseResolveExternalIdentityResponse() {
+    return { userId: "", roles: [], isActive: false };
+}
+exports.ResolveExternalIdentityResponse = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.userId !== "") {
+            writer.uint32(10).string(message.userId);
+        }
+        writer.uint32(18).fork();
+        for (const v of message.roles) {
+            writer.int32(roleToNumber(v));
+        }
+        writer.join();
+        if (message.isActive !== false) {
+            writer.uint32(24).bool(message.isActive);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseResolveExternalIdentityResponse();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.userId = reader.string();
+                    continue;
+                }
+                case 2: {
+                    if (tag === 16) {
+                        message.roles.push(roleFromJSON(reader.int32()));
+                        continue;
+                    }
+                    if (tag === 18) {
+                        const end2 = reader.uint32() + reader.pos;
+                        while (reader.pos < end2) {
+                            message.roles.push(roleFromJSON(reader.int32()));
+                        }
+                        continue;
+                    }
+                    break;
+                }
+                case 3: {
+                    if (tag !== 24) {
+                        break;
+                    }
+                    message.isActive = reader.bool();
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            userId: isSet(object.userId)
+                ? globalThis.String(object.userId)
+                : isSet(object.user_id)
+                    ? globalThis.String(object.user_id)
+                    : "",
+            roles: globalThis.Array.isArray(object?.roles) ? object.roles.map((e) => roleFromJSON(e)) : [],
+            isActive: isSet(object.isActive)
+                ? globalThis.Boolean(object.isActive)
+                : isSet(object.is_active)
+                    ? globalThis.Boolean(object.is_active)
+                    : false,
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.userId !== "") {
+            obj.userId = message.userId;
+        }
+        if (message.roles?.length) {
+            obj.roles = message.roles.map((e) => roleToJSON(e));
+        }
+        if (message.isActive !== false) {
+            obj.isActive = message.isActive;
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.ResolveExternalIdentityResponse.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseResolveExternalIdentityResponse();
+        message.userId = object.userId ?? "";
+        message.roles = object.roles?.map((e) => e) || [];
+        message.isActive = object.isActive ?? false;
+        return message;
+    },
+};
+function createBaseIssueSessionForUserRequest() {
+    return { userId: "" };
+}
+exports.IssueSessionForUserRequest = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.userId !== "") {
+            writer.uint32(10).string(message.userId);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseIssueSessionForUserRequest();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.userId = reader.string();
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            userId: isSet(object.userId)
+                ? globalThis.String(object.userId)
+                : isSet(object.user_id)
+                    ? globalThis.String(object.user_id)
+                    : "",
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.userId !== "") {
+            obj.userId = message.userId;
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.IssueSessionForUserRequest.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseIssueSessionForUserRequest();
+        message.userId = object.userId ?? "";
+        return message;
+    },
+};
+function createBaseLinkExternalIdentityRequest() {
+    return { userId: "", issuer: "", subject: "", password: "" };
+}
+exports.LinkExternalIdentityRequest = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.userId !== "") {
+            writer.uint32(10).string(message.userId);
+        }
+        if (message.issuer !== "") {
+            writer.uint32(18).string(message.issuer);
+        }
+        if (message.subject !== "") {
+            writer.uint32(26).string(message.subject);
+        }
+        if (message.password !== "") {
+            writer.uint32(34).string(message.password);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseLinkExternalIdentityRequest();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.userId = reader.string();
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 18) {
+                        break;
+                    }
+                    message.issuer = reader.string();
+                    continue;
+                }
+                case 3: {
+                    if (tag !== 26) {
+                        break;
+                    }
+                    message.subject = reader.string();
+                    continue;
+                }
+                case 4: {
+                    if (tag !== 34) {
+                        break;
+                    }
+                    message.password = reader.string();
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            userId: isSet(object.userId)
+                ? globalThis.String(object.userId)
+                : isSet(object.user_id)
+                    ? globalThis.String(object.user_id)
+                    : "",
+            issuer: isSet(object.issuer) ? globalThis.String(object.issuer) : "",
+            subject: isSet(object.subject) ? globalThis.String(object.subject) : "",
+            password: isSet(object.password) ? globalThis.String(object.password) : "",
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.userId !== "") {
+            obj.userId = message.userId;
+        }
+        if (message.issuer !== "") {
+            obj.issuer = message.issuer;
+        }
+        if (message.subject !== "") {
+            obj.subject = message.subject;
+        }
+        if (message.password !== "") {
+            obj.password = message.password;
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.LinkExternalIdentityRequest.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseLinkExternalIdentityRequest();
+        message.userId = object.userId ?? "";
+        message.issuer = object.issuer ?? "";
+        message.subject = object.subject ?? "";
+        message.password = object.password ?? "";
+        return message;
+    },
+};
+function createBaseLinkExternalIdentityResponse() {
+    return {};
+}
+exports.LinkExternalIdentityResponse = {
+    encode(_, writer = new wire_1.BinaryWriter()) {
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseLinkExternalIdentityResponse();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(_) {
+        return {};
+    },
+    toJSON(_) {
+        const obj = {};
+        return obj;
+    },
+    create(base) {
+        return exports.LinkExternalIdentityResponse.fromPartial(base ?? {});
+    },
+    fromPartial(_) {
+        const message = createBaseLinkExternalIdentityResponse();
+        return message;
+    },
+};
+function createBaseGetExternalIdentityLinksRequest() {
+    return { userId: "" };
+}
+exports.GetExternalIdentityLinksRequest = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.userId !== "") {
+            writer.uint32(10).string(message.userId);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseGetExternalIdentityLinksRequest();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.userId = reader.string();
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            userId: isSet(object.userId)
+                ? globalThis.String(object.userId)
+                : isSet(object.user_id)
+                    ? globalThis.String(object.user_id)
+                    : "",
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.userId !== "") {
+            obj.userId = message.userId;
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.GetExternalIdentityLinksRequest.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseGetExternalIdentityLinksRequest();
+        message.userId = object.userId ?? "";
+        return message;
+    },
+};
+function createBaseGetExternalIdentityLinksResponse() {
+    return { issuers: [] };
+}
+exports.GetExternalIdentityLinksResponse = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        for (const v of message.issuers) {
+            writer.uint32(10).string(v);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseGetExternalIdentityLinksResponse();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.issuers.push(reader.string());
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            issuers: globalThis.Array.isArray(object?.issuers) ? object.issuers.map((e) => globalThis.String(e)) : [],
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.issuers?.length) {
+            obj.issuers = message.issuers;
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.GetExternalIdentityLinksResponse.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseGetExternalIdentityLinksResponse();
+        message.issuers = object.issuers?.map((e) => e) || [];
+        return message;
+    },
+};
 exports.IdentityServiceService = {
     authenticateUser: {
         path: "/xstockstrat.identity.v1.IdentityService/AuthenticateUser",
@@ -3422,6 +3897,58 @@ exports.IdentityServiceService = {
         requestDeserialize: (value) => exports.ListAdminUserIdsRequest.decode(value),
         responseSerialize: (value) => Buffer.from(exports.ListAdminUserIdsResponse.encode(value).finish()),
         responseDeserialize: (value) => exports.ListAdminUserIdsResponse.decode(value),
+    },
+    /**
+     * Maps an OIDC (issuer, subject) to its linked user (feature 345). Authorized by mTLS peer SAN
+     * xstockstrat-ui or xstockstrat-agent only; every request header is ignored.
+     */
+    resolveExternalIdentity: {
+        path: "/xstockstrat.identity.v1.IdentityService/ResolveExternalIdentity",
+        requestStream: false,
+        responseStream: false,
+        requestSerialize: (value) => Buffer.from(exports.ResolveExternalIdentityRequest.encode(value).finish()),
+        requestDeserialize: (value) => exports.ResolveExternalIdentityRequest.decode(value),
+        responseSerialize: (value) => Buffer.from(exports.ResolveExternalIdentityResponse.encode(value).finish()),
+        responseDeserialize: (value) => exports.ResolveExternalIdentityResponse.decode(value),
+    },
+    /**
+     * Mints a session for an SSO-resolved user (feature 345). Authorized by mTLS peer SAN
+     * xstockstrat-ui only; every request header is ignored.
+     */
+    issueSessionForUser: {
+        path: "/xstockstrat.identity.v1.IdentityService/IssueSessionForUser",
+        requestStream: false,
+        responseStream: false,
+        requestSerialize: (value) => Buffer.from(exports.IssueSessionForUserRequest.encode(value).finish()),
+        requestDeserialize: (value) => exports.IssueSessionForUserRequest.decode(value),
+        responseSerialize: (value) => Buffer.from(exports.AuthTokenResponse.encode(value).finish()),
+        responseDeserialize: (value) => exports.AuthTokenResponse.decode(value),
+    },
+    /**
+     * Links an OIDC identity after a password re-check (feature 345). Authorized by mTLS peer SAN
+     * xstockstrat-ui only; every request header is ignored.
+     */
+    linkExternalIdentity: {
+        path: "/xstockstrat.identity.v1.IdentityService/LinkExternalIdentity",
+        requestStream: false,
+        responseStream: false,
+        requestSerialize: (value) => Buffer.from(exports.LinkExternalIdentityRequest.encode(value).finish()),
+        requestDeserialize: (value) => exports.LinkExternalIdentityRequest.decode(value),
+        responseSerialize: (value) => Buffer.from(exports.LinkExternalIdentityResponse.encode(value).finish()),
+        responseDeserialize: (value) => exports.LinkExternalIdentityResponse.decode(value),
+    },
+    /**
+     * Lists the issuers a user is linked to (feature 345). Authorized by mTLS peer SAN
+     * xstockstrat-ui only; every request header is ignored.
+     */
+    getExternalIdentityLinks: {
+        path: "/xstockstrat.identity.v1.IdentityService/GetExternalIdentityLinks",
+        requestStream: false,
+        responseStream: false,
+        requestSerialize: (value) => Buffer.from(exports.GetExternalIdentityLinksRequest.encode(value).finish()),
+        requestDeserialize: (value) => exports.GetExternalIdentityLinksRequest.decode(value),
+        responseSerialize: (value) => Buffer.from(exports.GetExternalIdentityLinksResponse.encode(value).finish()),
+        responseDeserialize: (value) => exports.GetExternalIdentityLinksResponse.decode(value),
     },
 };
 exports.IdentityServiceClient = (0, grpc_js_1.makeGenericClientConstructor)(exports.IdentityServiceService, "xstockstrat.identity.v1.IdentityService");

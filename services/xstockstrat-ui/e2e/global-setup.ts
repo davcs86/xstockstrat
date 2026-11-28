@@ -1,6 +1,7 @@
 import { chromium } from '@playwright/test';
 import { resolveChromiumExecutable } from './helpers/browser-resolution';
 import { startMockBackend } from './mock-backend';
+import { startStubIdp } from './helpers/stubIdp';
 
 /**
  * Starts the mock gRPC backend before the Playwright test suite.
@@ -27,4 +28,6 @@ export default async function globalSetup() {
   }
 
   await startMockBackend();
+  // Same process as the mock backend, which reads the stub's state (feature 345).
+  await startStubIdp();
 }

@@ -2295,6 +2295,354 @@ func (x *ListAdminUserIdsResponse) GetUserIds() []string {
 	return nil
 }
 
+type ResolveExternalIdentityRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Issuer        string                 `protobuf:"bytes,1,opt,name=issuer,proto3" json:"issuer,omitempty"`
+	Subject       string                 `protobuf:"bytes,2,opt,name=subject,proto3" json:"subject,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ResolveExternalIdentityRequest) Reset() {
+	*x = ResolveExternalIdentityRequest{}
+	mi := &file_identity_v1_identity_proto_msgTypes[42]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ResolveExternalIdentityRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ResolveExternalIdentityRequest) ProtoMessage() {}
+
+func (x *ResolveExternalIdentityRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_identity_v1_identity_proto_msgTypes[42]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ResolveExternalIdentityRequest.ProtoReflect.Descriptor instead.
+func (*ResolveExternalIdentityRequest) Descriptor() ([]byte, []int) {
+	return file_identity_v1_identity_proto_rawDescGZIP(), []int{42}
+}
+
+func (x *ResolveExternalIdentityRequest) GetIssuer() string {
+	if x != nil {
+		return x.Issuer
+	}
+	return ""
+}
+
+func (x *ResolveExternalIdentityRequest) GetSubject() string {
+	if x != nil {
+		return x.Subject
+	}
+	return ""
+}
+
+type ResolveExternalIdentityResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	UserId        string                 `protobuf:"bytes,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	Roles         []Role                 `protobuf:"varint,2,rep,packed,name=roles,proto3,enum=xstockstrat.identity.v1.Role" json:"roles,omitempty"`
+	IsActive      bool                   `protobuf:"varint,3,opt,name=is_active,json=isActive,proto3" json:"is_active,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ResolveExternalIdentityResponse) Reset() {
+	*x = ResolveExternalIdentityResponse{}
+	mi := &file_identity_v1_identity_proto_msgTypes[43]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ResolveExternalIdentityResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ResolveExternalIdentityResponse) ProtoMessage() {}
+
+func (x *ResolveExternalIdentityResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_identity_v1_identity_proto_msgTypes[43]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ResolveExternalIdentityResponse.ProtoReflect.Descriptor instead.
+func (*ResolveExternalIdentityResponse) Descriptor() ([]byte, []int) {
+	return file_identity_v1_identity_proto_rawDescGZIP(), []int{43}
+}
+
+func (x *ResolveExternalIdentityResponse) GetUserId() string {
+	if x != nil {
+		return x.UserId
+	}
+	return ""
+}
+
+func (x *ResolveExternalIdentityResponse) GetRoles() []Role {
+	if x != nil {
+		return x.Roles
+	}
+	return nil
+}
+
+func (x *ResolveExternalIdentityResponse) GetIsActive() bool {
+	if x != nil {
+		return x.IsActive
+	}
+	return false
+}
+
+type IssueSessionForUserRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	UserId        string                 `protobuf:"bytes,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *IssueSessionForUserRequest) Reset() {
+	*x = IssueSessionForUserRequest{}
+	mi := &file_identity_v1_identity_proto_msgTypes[44]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *IssueSessionForUserRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*IssueSessionForUserRequest) ProtoMessage() {}
+
+func (x *IssueSessionForUserRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_identity_v1_identity_proto_msgTypes[44]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use IssueSessionForUserRequest.ProtoReflect.Descriptor instead.
+func (*IssueSessionForUserRequest) Descriptor() ([]byte, []int) {
+	return file_identity_v1_identity_proto_rawDescGZIP(), []int{44}
+}
+
+func (x *IssueSessionForUserRequest) GetUserId() string {
+	if x != nil {
+		return x.UserId
+	}
+	return ""
+}
+
+type LinkExternalIdentityRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	UserId        string                 `protobuf:"bytes,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	Issuer        string                 `protobuf:"bytes,2,opt,name=issuer,proto3" json:"issuer,omitempty"`
+	Subject       string                 `protobuf:"bytes,3,opt,name=subject,proto3" json:"subject,omitempty"`
+	Password      string                 `protobuf:"bytes,4,opt,name=password,proto3" json:"password,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *LinkExternalIdentityRequest) Reset() {
+	*x = LinkExternalIdentityRequest{}
+	mi := &file_identity_v1_identity_proto_msgTypes[45]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *LinkExternalIdentityRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*LinkExternalIdentityRequest) ProtoMessage() {}
+
+func (x *LinkExternalIdentityRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_identity_v1_identity_proto_msgTypes[45]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use LinkExternalIdentityRequest.ProtoReflect.Descriptor instead.
+func (*LinkExternalIdentityRequest) Descriptor() ([]byte, []int) {
+	return file_identity_v1_identity_proto_rawDescGZIP(), []int{45}
+}
+
+func (x *LinkExternalIdentityRequest) GetUserId() string {
+	if x != nil {
+		return x.UserId
+	}
+	return ""
+}
+
+func (x *LinkExternalIdentityRequest) GetIssuer() string {
+	if x != nil {
+		return x.Issuer
+	}
+	return ""
+}
+
+func (x *LinkExternalIdentityRequest) GetSubject() string {
+	if x != nil {
+		return x.Subject
+	}
+	return ""
+}
+
+func (x *LinkExternalIdentityRequest) GetPassword() string {
+	if x != nil {
+		return x.Password
+	}
+	return ""
+}
+
+type LinkExternalIdentityResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *LinkExternalIdentityResponse) Reset() {
+	*x = LinkExternalIdentityResponse{}
+	mi := &file_identity_v1_identity_proto_msgTypes[46]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *LinkExternalIdentityResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*LinkExternalIdentityResponse) ProtoMessage() {}
+
+func (x *LinkExternalIdentityResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_identity_v1_identity_proto_msgTypes[46]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use LinkExternalIdentityResponse.ProtoReflect.Descriptor instead.
+func (*LinkExternalIdentityResponse) Descriptor() ([]byte, []int) {
+	return file_identity_v1_identity_proto_rawDescGZIP(), []int{46}
+}
+
+type GetExternalIdentityLinksRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	UserId        string                 `protobuf:"bytes,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetExternalIdentityLinksRequest) Reset() {
+	*x = GetExternalIdentityLinksRequest{}
+	mi := &file_identity_v1_identity_proto_msgTypes[47]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetExternalIdentityLinksRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetExternalIdentityLinksRequest) ProtoMessage() {}
+
+func (x *GetExternalIdentityLinksRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_identity_v1_identity_proto_msgTypes[47]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetExternalIdentityLinksRequest.ProtoReflect.Descriptor instead.
+func (*GetExternalIdentityLinksRequest) Descriptor() ([]byte, []int) {
+	return file_identity_v1_identity_proto_rawDescGZIP(), []int{47}
+}
+
+func (x *GetExternalIdentityLinksRequest) GetUserId() string {
+	if x != nil {
+		return x.UserId
+	}
+	return ""
+}
+
+type GetExternalIdentityLinksResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Issuers       []string               `protobuf:"bytes,1,rep,name=issuers,proto3" json:"issuers,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetExternalIdentityLinksResponse) Reset() {
+	*x = GetExternalIdentityLinksResponse{}
+	mi := &file_identity_v1_identity_proto_msgTypes[48]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetExternalIdentityLinksResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetExternalIdentityLinksResponse) ProtoMessage() {}
+
+func (x *GetExternalIdentityLinksResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_identity_v1_identity_proto_msgTypes[48]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetExternalIdentityLinksResponse.ProtoReflect.Descriptor instead.
+func (*GetExternalIdentityLinksResponse) Descriptor() ([]byte, []int) {
+	return file_identity_v1_identity_proto_rawDescGZIP(), []int{48}
+}
+
+func (x *GetExternalIdentityLinksResponse) GetIssuers() []string {
+	if x != nil {
+		return x.Issuers
+	}
+	return nil
+}
+
 var File_identity_v1_identity_proto protoreflect.FileDescriptor
 
 const file_identity_v1_identity_proto_rawDesc = "" +
@@ -2446,13 +2794,32 @@ const file_identity_v1_identity_proto_rawDesc = "" +
 	"\x04user\x18\x01 \x01(\v2\x1d.xstockstrat.identity.v1.UserR\x04user\"\x19\n" +
 	"\x17ListAdminUserIdsRequest\"5\n" +
 	"\x18ListAdminUserIdsResponse\x12\x19\n" +
-	"\buser_ids\x18\x01 \x03(\tR\auserIds*N\n" +
+	"\buser_ids\x18\x01 \x03(\tR\auserIds\"R\n" +
+	"\x1eResolveExternalIdentityRequest\x12\x16\n" +
+	"\x06issuer\x18\x01 \x01(\tR\x06issuer\x12\x18\n" +
+	"\asubject\x18\x02 \x01(\tR\asubject\"\x8c\x01\n" +
+	"\x1fResolveExternalIdentityResponse\x12\x17\n" +
+	"\auser_id\x18\x01 \x01(\tR\x06userId\x123\n" +
+	"\x05roles\x18\x02 \x03(\x0e2\x1d.xstockstrat.identity.v1.RoleR\x05roles\x12\x1b\n" +
+	"\tis_active\x18\x03 \x01(\bR\bisActive\"5\n" +
+	"\x1aIssueSessionForUserRequest\x12\x17\n" +
+	"\auser_id\x18\x01 \x01(\tR\x06userId\"\x84\x01\n" +
+	"\x1bLinkExternalIdentityRequest\x12\x17\n" +
+	"\auser_id\x18\x01 \x01(\tR\x06userId\x12\x16\n" +
+	"\x06issuer\x18\x02 \x01(\tR\x06issuer\x12\x18\n" +
+	"\asubject\x18\x03 \x01(\tR\asubject\x12\x1a\n" +
+	"\bpassword\x18\x04 \x01(\tR\bpassword\"\x1e\n" +
+	"\x1cLinkExternalIdentityResponse\":\n" +
+	"\x1fGetExternalIdentityLinksRequest\x12\x17\n" +
+	"\auser_id\x18\x01 \x01(\tR\x06userId\"<\n" +
+	" GetExternalIdentityLinksResponse\x12\x18\n" +
+	"\aissuers\x18\x01 \x03(\tR\aissuers*N\n" +
 	"\x04Role\x12\x14\n" +
 	"\x10ROLE_UNSPECIFIED\x10\x00\x12\x0e\n" +
 	"\n" +
 	"ROLE_ADMIN\x10\x01\x12\x0f\n" +
 	"\vROLE_TRADER\x10\x02\x12\x0f\n" +
-	"\vROLE_VIEWER\x10\x032\xe2\x13\n" +
+	"\vROLE_VIEWER\x10\x032\x81\x18\n" +
 	"\x0fIdentityService\x12p\n" +
 	"\x10AuthenticateUser\x120.xstockstrat.identity.v1.AuthenticateUserRequest\x1a*.xstockstrat.identity.v1.AuthTokenResponse\x12d\n" +
 	"\rValidateToken\x12-.xstockstrat.identity.v1.ValidateTokenRequest\x1a$.xstockstrat.identity.v1.TokenClaims\x12h\n" +
@@ -2476,7 +2843,11 @@ const file_identity_v1_identity_proto_rawDesc = "" +
 	"\x0eUpdatePassword\x12..xstockstrat.identity.v1.UpdatePasswordRequest\x1a/.xstockstrat.identity.v1.UpdatePasswordResponse\x12k\n" +
 	"\fSetUserRoles\x12,.xstockstrat.identity.v1.SetUserRolesRequest\x1a-.xstockstrat.identity.v1.SetUserRolesResponse\x12n\n" +
 	"\rSetUserActive\x12-.xstockstrat.identity.v1.SetUserActiveRequest\x1a..xstockstrat.identity.v1.SetUserActiveResponse\x12w\n" +
-	"\x10ListAdminUserIds\x120.xstockstrat.identity.v1.ListAdminUserIdsRequest\x1a1.xstockstrat.identity.v1.ListAdminUserIdsResponseB@Z>github.com/xstockstrat/contracts/gen/go/identity/v1;identityv1b\x06proto3"
+	"\x10ListAdminUserIds\x120.xstockstrat.identity.v1.ListAdminUserIdsRequest\x1a1.xstockstrat.identity.v1.ListAdminUserIdsResponse\x12\x8c\x01\n" +
+	"\x17ResolveExternalIdentity\x127.xstockstrat.identity.v1.ResolveExternalIdentityRequest\x1a8.xstockstrat.identity.v1.ResolveExternalIdentityResponse\x12v\n" +
+	"\x13IssueSessionForUser\x123.xstockstrat.identity.v1.IssueSessionForUserRequest\x1a*.xstockstrat.identity.v1.AuthTokenResponse\x12\x83\x01\n" +
+	"\x14LinkExternalIdentity\x124.xstockstrat.identity.v1.LinkExternalIdentityRequest\x1a5.xstockstrat.identity.v1.LinkExternalIdentityResponse\x12\x8f\x01\n" +
+	"\x18GetExternalIdentityLinks\x128.xstockstrat.identity.v1.GetExternalIdentityLinksRequest\x1a9.xstockstrat.identity.v1.GetExternalIdentityLinksResponseB@Z>github.com/xstockstrat/contracts/gen/go/identity/v1;identityv1b\x06proto3"
 
 var (
 	file_identity_v1_identity_proto_rawDescOnce sync.Once
@@ -2491,71 +2862,78 @@ func file_identity_v1_identity_proto_rawDescGZIP() []byte {
 }
 
 var file_identity_v1_identity_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_identity_v1_identity_proto_msgTypes = make([]protoimpl.MessageInfo, 42)
+var file_identity_v1_identity_proto_msgTypes = make([]protoimpl.MessageInfo, 49)
 var file_identity_v1_identity_proto_goTypes = []any{
-	(Role)(0),                              // 0: xstockstrat.identity.v1.Role
-	(*AuthenticateUserRequest)(nil),        // 1: xstockstrat.identity.v1.AuthenticateUserRequest
-	(*AuthTokenResponse)(nil),              // 2: xstockstrat.identity.v1.AuthTokenResponse
-	(*TokenClaims)(nil),                    // 3: xstockstrat.identity.v1.TokenClaims
-	(*ValidateTokenRequest)(nil),           // 4: xstockstrat.identity.v1.ValidateTokenRequest
-	(*RefreshTokenRequest)(nil),            // 5: xstockstrat.identity.v1.RefreshTokenRequest
-	(*RevokeTokenRequest)(nil),             // 6: xstockstrat.identity.v1.RevokeTokenRequest
-	(*RevokeTokenResponse)(nil),            // 7: xstockstrat.identity.v1.RevokeTokenResponse
-	(*OAuthClient)(nil),                    // 8: xstockstrat.identity.v1.OAuthClient
-	(*RegisterOAuthClientRequest)(nil),     // 9: xstockstrat.identity.v1.RegisterOAuthClientRequest
-	(*GetOAuthClientRequest)(nil),          // 10: xstockstrat.identity.v1.GetOAuthClientRequest
-	(*IssueAuthCodeRequest)(nil),           // 11: xstockstrat.identity.v1.IssueAuthCodeRequest
-	(*IssueAuthCodeResponse)(nil),          // 12: xstockstrat.identity.v1.IssueAuthCodeResponse
-	(*ExchangeAuthCodeRequest)(nil),        // 13: xstockstrat.identity.v1.ExchangeAuthCodeRequest
-	(*OAuthTokenResponse)(nil),             // 14: xstockstrat.identity.v1.OAuthTokenResponse
-	(*RefreshOAuthTokenRequest)(nil),       // 15: xstockstrat.identity.v1.RefreshOAuthTokenRequest
-	(*AuthorizedApp)(nil),                  // 16: xstockstrat.identity.v1.AuthorizedApp
-	(*ListAuthorizedAppsRequest)(nil),      // 17: xstockstrat.identity.v1.ListAuthorizedAppsRequest
-	(*ListAuthorizedAppsResponse)(nil),     // 18: xstockstrat.identity.v1.ListAuthorizedAppsResponse
-	(*RevokeAuthorizedAppRequest)(nil),     // 19: xstockstrat.identity.v1.RevokeAuthorizedAppRequest
-	(*RevokeAuthorizedAppResponse)(nil),    // 20: xstockstrat.identity.v1.RevokeAuthorizedAppResponse
-	(*UserMetadata)(nil),                   // 21: xstockstrat.identity.v1.UserMetadata
-	(*GetUserMetadataRequest)(nil),         // 22: xstockstrat.identity.v1.GetUserMetadataRequest
-	(*GetUserMetadataResponse)(nil),        // 23: xstockstrat.identity.v1.GetUserMetadataResponse
-	(*UpdateUserMetadataRequest)(nil),      // 24: xstockstrat.identity.v1.UpdateUserMetadataRequest
-	(*UpdateUserMetadataResponse)(nil),     // 25: xstockstrat.identity.v1.UpdateUserMetadataResponse
-	(*AdminGetUserMetadataRequest)(nil),    // 26: xstockstrat.identity.v1.AdminGetUserMetadataRequest
-	(*AdminUpdateUserMetadataRequest)(nil), // 27: xstockstrat.identity.v1.AdminUpdateUserMetadataRequest
-	(*User)(nil),                           // 28: xstockstrat.identity.v1.User
-	(*CreateUserRequest)(nil),              // 29: xstockstrat.identity.v1.CreateUserRequest
-	(*CreateUserResponse)(nil),             // 30: xstockstrat.identity.v1.CreateUserResponse
-	(*ListUsersRequest)(nil),               // 31: xstockstrat.identity.v1.ListUsersRequest
-	(*ListUsersResponse)(nil),              // 32: xstockstrat.identity.v1.ListUsersResponse
-	(*GetUserRequest)(nil),                 // 33: xstockstrat.identity.v1.GetUserRequest
-	(*GetUserResponse)(nil),                // 34: xstockstrat.identity.v1.GetUserResponse
-	(*UpdatePasswordRequest)(nil),          // 35: xstockstrat.identity.v1.UpdatePasswordRequest
-	(*UpdatePasswordResponse)(nil),         // 36: xstockstrat.identity.v1.UpdatePasswordResponse
-	(*SetUserRolesRequest)(nil),            // 37: xstockstrat.identity.v1.SetUserRolesRequest
-	(*SetUserRolesResponse)(nil),           // 38: xstockstrat.identity.v1.SetUserRolesResponse
-	(*SetUserActiveRequest)(nil),           // 39: xstockstrat.identity.v1.SetUserActiveRequest
-	(*SetUserActiveResponse)(nil),          // 40: xstockstrat.identity.v1.SetUserActiveResponse
-	(*ListAdminUserIdsRequest)(nil),        // 41: xstockstrat.identity.v1.ListAdminUserIdsRequest
-	(*ListAdminUserIdsResponse)(nil),       // 42: xstockstrat.identity.v1.ListAdminUserIdsResponse
-	(*timestamppb.Timestamp)(nil),          // 43: google.protobuf.Timestamp
-	(*structpb.Struct)(nil),                // 44: google.protobuf.Struct
+	(Role)(0),                                // 0: xstockstrat.identity.v1.Role
+	(*AuthenticateUserRequest)(nil),          // 1: xstockstrat.identity.v1.AuthenticateUserRequest
+	(*AuthTokenResponse)(nil),                // 2: xstockstrat.identity.v1.AuthTokenResponse
+	(*TokenClaims)(nil),                      // 3: xstockstrat.identity.v1.TokenClaims
+	(*ValidateTokenRequest)(nil),             // 4: xstockstrat.identity.v1.ValidateTokenRequest
+	(*RefreshTokenRequest)(nil),              // 5: xstockstrat.identity.v1.RefreshTokenRequest
+	(*RevokeTokenRequest)(nil),               // 6: xstockstrat.identity.v1.RevokeTokenRequest
+	(*RevokeTokenResponse)(nil),              // 7: xstockstrat.identity.v1.RevokeTokenResponse
+	(*OAuthClient)(nil),                      // 8: xstockstrat.identity.v1.OAuthClient
+	(*RegisterOAuthClientRequest)(nil),       // 9: xstockstrat.identity.v1.RegisterOAuthClientRequest
+	(*GetOAuthClientRequest)(nil),            // 10: xstockstrat.identity.v1.GetOAuthClientRequest
+	(*IssueAuthCodeRequest)(nil),             // 11: xstockstrat.identity.v1.IssueAuthCodeRequest
+	(*IssueAuthCodeResponse)(nil),            // 12: xstockstrat.identity.v1.IssueAuthCodeResponse
+	(*ExchangeAuthCodeRequest)(nil),          // 13: xstockstrat.identity.v1.ExchangeAuthCodeRequest
+	(*OAuthTokenResponse)(nil),               // 14: xstockstrat.identity.v1.OAuthTokenResponse
+	(*RefreshOAuthTokenRequest)(nil),         // 15: xstockstrat.identity.v1.RefreshOAuthTokenRequest
+	(*AuthorizedApp)(nil),                    // 16: xstockstrat.identity.v1.AuthorizedApp
+	(*ListAuthorizedAppsRequest)(nil),        // 17: xstockstrat.identity.v1.ListAuthorizedAppsRequest
+	(*ListAuthorizedAppsResponse)(nil),       // 18: xstockstrat.identity.v1.ListAuthorizedAppsResponse
+	(*RevokeAuthorizedAppRequest)(nil),       // 19: xstockstrat.identity.v1.RevokeAuthorizedAppRequest
+	(*RevokeAuthorizedAppResponse)(nil),      // 20: xstockstrat.identity.v1.RevokeAuthorizedAppResponse
+	(*UserMetadata)(nil),                     // 21: xstockstrat.identity.v1.UserMetadata
+	(*GetUserMetadataRequest)(nil),           // 22: xstockstrat.identity.v1.GetUserMetadataRequest
+	(*GetUserMetadataResponse)(nil),          // 23: xstockstrat.identity.v1.GetUserMetadataResponse
+	(*UpdateUserMetadataRequest)(nil),        // 24: xstockstrat.identity.v1.UpdateUserMetadataRequest
+	(*UpdateUserMetadataResponse)(nil),       // 25: xstockstrat.identity.v1.UpdateUserMetadataResponse
+	(*AdminGetUserMetadataRequest)(nil),      // 26: xstockstrat.identity.v1.AdminGetUserMetadataRequest
+	(*AdminUpdateUserMetadataRequest)(nil),   // 27: xstockstrat.identity.v1.AdminUpdateUserMetadataRequest
+	(*User)(nil),                             // 28: xstockstrat.identity.v1.User
+	(*CreateUserRequest)(nil),                // 29: xstockstrat.identity.v1.CreateUserRequest
+	(*CreateUserResponse)(nil),               // 30: xstockstrat.identity.v1.CreateUserResponse
+	(*ListUsersRequest)(nil),                 // 31: xstockstrat.identity.v1.ListUsersRequest
+	(*ListUsersResponse)(nil),                // 32: xstockstrat.identity.v1.ListUsersResponse
+	(*GetUserRequest)(nil),                   // 33: xstockstrat.identity.v1.GetUserRequest
+	(*GetUserResponse)(nil),                  // 34: xstockstrat.identity.v1.GetUserResponse
+	(*UpdatePasswordRequest)(nil),            // 35: xstockstrat.identity.v1.UpdatePasswordRequest
+	(*UpdatePasswordResponse)(nil),           // 36: xstockstrat.identity.v1.UpdatePasswordResponse
+	(*SetUserRolesRequest)(nil),              // 37: xstockstrat.identity.v1.SetUserRolesRequest
+	(*SetUserRolesResponse)(nil),             // 38: xstockstrat.identity.v1.SetUserRolesResponse
+	(*SetUserActiveRequest)(nil),             // 39: xstockstrat.identity.v1.SetUserActiveRequest
+	(*SetUserActiveResponse)(nil),            // 40: xstockstrat.identity.v1.SetUserActiveResponse
+	(*ListAdminUserIdsRequest)(nil),          // 41: xstockstrat.identity.v1.ListAdminUserIdsRequest
+	(*ListAdminUserIdsResponse)(nil),         // 42: xstockstrat.identity.v1.ListAdminUserIdsResponse
+	(*ResolveExternalIdentityRequest)(nil),   // 43: xstockstrat.identity.v1.ResolveExternalIdentityRequest
+	(*ResolveExternalIdentityResponse)(nil),  // 44: xstockstrat.identity.v1.ResolveExternalIdentityResponse
+	(*IssueSessionForUserRequest)(nil),       // 45: xstockstrat.identity.v1.IssueSessionForUserRequest
+	(*LinkExternalIdentityRequest)(nil),      // 46: xstockstrat.identity.v1.LinkExternalIdentityRequest
+	(*LinkExternalIdentityResponse)(nil),     // 47: xstockstrat.identity.v1.LinkExternalIdentityResponse
+	(*GetExternalIdentityLinksRequest)(nil),  // 48: xstockstrat.identity.v1.GetExternalIdentityLinksRequest
+	(*GetExternalIdentityLinksResponse)(nil), // 49: xstockstrat.identity.v1.GetExternalIdentityLinksResponse
+	(*timestamppb.Timestamp)(nil),            // 50: google.protobuf.Timestamp
+	(*structpb.Struct)(nil),                  // 51: google.protobuf.Struct
 }
 var file_identity_v1_identity_proto_depIdxs = []int32{
-	43, // 0: xstockstrat.identity.v1.AuthTokenResponse.expires_at:type_name -> google.protobuf.Timestamp
+	50, // 0: xstockstrat.identity.v1.AuthTokenResponse.expires_at:type_name -> google.protobuf.Timestamp
 	3,  // 1: xstockstrat.identity.v1.AuthTokenResponse.claims:type_name -> xstockstrat.identity.v1.TokenClaims
-	43, // 2: xstockstrat.identity.v1.TokenClaims.issued_at:type_name -> google.protobuf.Timestamp
-	43, // 3: xstockstrat.identity.v1.TokenClaims.expires_at:type_name -> google.protobuf.Timestamp
-	43, // 4: xstockstrat.identity.v1.OAuthClient.created_at:type_name -> google.protobuf.Timestamp
-	43, // 5: xstockstrat.identity.v1.AuthorizedApp.authorized_at:type_name -> google.protobuf.Timestamp
-	43, // 6: xstockstrat.identity.v1.AuthorizedApp.last_used_at:type_name -> google.protobuf.Timestamp
+	50, // 2: xstockstrat.identity.v1.TokenClaims.issued_at:type_name -> google.protobuf.Timestamp
+	50, // 3: xstockstrat.identity.v1.TokenClaims.expires_at:type_name -> google.protobuf.Timestamp
+	50, // 4: xstockstrat.identity.v1.OAuthClient.created_at:type_name -> google.protobuf.Timestamp
+	50, // 5: xstockstrat.identity.v1.AuthorizedApp.authorized_at:type_name -> google.protobuf.Timestamp
+	50, // 6: xstockstrat.identity.v1.AuthorizedApp.last_used_at:type_name -> google.protobuf.Timestamp
 	16, // 7: xstockstrat.identity.v1.ListAuthorizedAppsResponse.apps:type_name -> xstockstrat.identity.v1.AuthorizedApp
-	44, // 8: xstockstrat.identity.v1.UserMetadata.metadata:type_name -> google.protobuf.Struct
-	43, // 9: xstockstrat.identity.v1.UserMetadata.metadata_updated_at:type_name -> google.protobuf.Timestamp
+	51, // 8: xstockstrat.identity.v1.UserMetadata.metadata:type_name -> google.protobuf.Struct
+	50, // 9: xstockstrat.identity.v1.UserMetadata.metadata_updated_at:type_name -> google.protobuf.Timestamp
 	21, // 10: xstockstrat.identity.v1.GetUserMetadataResponse.user_metadata:type_name -> xstockstrat.identity.v1.UserMetadata
-	44, // 11: xstockstrat.identity.v1.UpdateUserMetadataRequest.metadata:type_name -> google.protobuf.Struct
+	51, // 11: xstockstrat.identity.v1.UpdateUserMetadataRequest.metadata:type_name -> google.protobuf.Struct
 	21, // 12: xstockstrat.identity.v1.UpdateUserMetadataResponse.user_metadata:type_name -> xstockstrat.identity.v1.UserMetadata
-	44, // 13: xstockstrat.identity.v1.AdminUpdateUserMetadataRequest.metadata:type_name -> google.protobuf.Struct
+	51, // 13: xstockstrat.identity.v1.AdminUpdateUserMetadataRequest.metadata:type_name -> google.protobuf.Struct
 	0,  // 14: xstockstrat.identity.v1.User.roles:type_name -> xstockstrat.identity.v1.Role
-	43, // 15: xstockstrat.identity.v1.User.created_at:type_name -> google.protobuf.Timestamp
+	50, // 15: xstockstrat.identity.v1.User.created_at:type_name -> google.protobuf.Timestamp
 	0,  // 16: xstockstrat.identity.v1.CreateUserRequest.roles:type_name -> xstockstrat.identity.v1.Role
 	28, // 17: xstockstrat.identity.v1.CreateUserResponse.user:type_name -> xstockstrat.identity.v1.User
 	28, // 18: xstockstrat.identity.v1.ListUsersResponse.users:type_name -> xstockstrat.identity.v1.User
@@ -2563,55 +2941,64 @@ var file_identity_v1_identity_proto_depIdxs = []int32{
 	0,  // 20: xstockstrat.identity.v1.SetUserRolesRequest.roles:type_name -> xstockstrat.identity.v1.Role
 	28, // 21: xstockstrat.identity.v1.SetUserRolesResponse.user:type_name -> xstockstrat.identity.v1.User
 	28, // 22: xstockstrat.identity.v1.SetUserActiveResponse.user:type_name -> xstockstrat.identity.v1.User
-	1,  // 23: xstockstrat.identity.v1.IdentityService.AuthenticateUser:input_type -> xstockstrat.identity.v1.AuthenticateUserRequest
-	4,  // 24: xstockstrat.identity.v1.IdentityService.ValidateToken:input_type -> xstockstrat.identity.v1.ValidateTokenRequest
-	5,  // 25: xstockstrat.identity.v1.IdentityService.RefreshToken:input_type -> xstockstrat.identity.v1.RefreshTokenRequest
-	6,  // 26: xstockstrat.identity.v1.IdentityService.RevokeToken:input_type -> xstockstrat.identity.v1.RevokeTokenRequest
-	9,  // 27: xstockstrat.identity.v1.IdentityService.RegisterOAuthClient:input_type -> xstockstrat.identity.v1.RegisterOAuthClientRequest
-	10, // 28: xstockstrat.identity.v1.IdentityService.GetOAuthClient:input_type -> xstockstrat.identity.v1.GetOAuthClientRequest
-	11, // 29: xstockstrat.identity.v1.IdentityService.IssueAuthCode:input_type -> xstockstrat.identity.v1.IssueAuthCodeRequest
-	13, // 30: xstockstrat.identity.v1.IdentityService.ExchangeAuthCode:input_type -> xstockstrat.identity.v1.ExchangeAuthCodeRequest
-	15, // 31: xstockstrat.identity.v1.IdentityService.RefreshOAuthToken:input_type -> xstockstrat.identity.v1.RefreshOAuthTokenRequest
-	17, // 32: xstockstrat.identity.v1.IdentityService.ListAuthorizedApps:input_type -> xstockstrat.identity.v1.ListAuthorizedAppsRequest
-	19, // 33: xstockstrat.identity.v1.IdentityService.RevokeAuthorizedApp:input_type -> xstockstrat.identity.v1.RevokeAuthorizedAppRequest
-	22, // 34: xstockstrat.identity.v1.IdentityService.GetUserMetadata:input_type -> xstockstrat.identity.v1.GetUserMetadataRequest
-	24, // 35: xstockstrat.identity.v1.IdentityService.UpdateUserMetadata:input_type -> xstockstrat.identity.v1.UpdateUserMetadataRequest
-	26, // 36: xstockstrat.identity.v1.IdentityService.AdminGetUserMetadata:input_type -> xstockstrat.identity.v1.AdminGetUserMetadataRequest
-	27, // 37: xstockstrat.identity.v1.IdentityService.AdminUpdateUserMetadata:input_type -> xstockstrat.identity.v1.AdminUpdateUserMetadataRequest
-	29, // 38: xstockstrat.identity.v1.IdentityService.CreateUser:input_type -> xstockstrat.identity.v1.CreateUserRequest
-	31, // 39: xstockstrat.identity.v1.IdentityService.ListUsers:input_type -> xstockstrat.identity.v1.ListUsersRequest
-	33, // 40: xstockstrat.identity.v1.IdentityService.GetUser:input_type -> xstockstrat.identity.v1.GetUserRequest
-	35, // 41: xstockstrat.identity.v1.IdentityService.UpdatePassword:input_type -> xstockstrat.identity.v1.UpdatePasswordRequest
-	37, // 42: xstockstrat.identity.v1.IdentityService.SetUserRoles:input_type -> xstockstrat.identity.v1.SetUserRolesRequest
-	39, // 43: xstockstrat.identity.v1.IdentityService.SetUserActive:input_type -> xstockstrat.identity.v1.SetUserActiveRequest
-	41, // 44: xstockstrat.identity.v1.IdentityService.ListAdminUserIds:input_type -> xstockstrat.identity.v1.ListAdminUserIdsRequest
-	2,  // 45: xstockstrat.identity.v1.IdentityService.AuthenticateUser:output_type -> xstockstrat.identity.v1.AuthTokenResponse
-	3,  // 46: xstockstrat.identity.v1.IdentityService.ValidateToken:output_type -> xstockstrat.identity.v1.TokenClaims
-	2,  // 47: xstockstrat.identity.v1.IdentityService.RefreshToken:output_type -> xstockstrat.identity.v1.AuthTokenResponse
-	7,  // 48: xstockstrat.identity.v1.IdentityService.RevokeToken:output_type -> xstockstrat.identity.v1.RevokeTokenResponse
-	8,  // 49: xstockstrat.identity.v1.IdentityService.RegisterOAuthClient:output_type -> xstockstrat.identity.v1.OAuthClient
-	8,  // 50: xstockstrat.identity.v1.IdentityService.GetOAuthClient:output_type -> xstockstrat.identity.v1.OAuthClient
-	12, // 51: xstockstrat.identity.v1.IdentityService.IssueAuthCode:output_type -> xstockstrat.identity.v1.IssueAuthCodeResponse
-	14, // 52: xstockstrat.identity.v1.IdentityService.ExchangeAuthCode:output_type -> xstockstrat.identity.v1.OAuthTokenResponse
-	14, // 53: xstockstrat.identity.v1.IdentityService.RefreshOAuthToken:output_type -> xstockstrat.identity.v1.OAuthTokenResponse
-	18, // 54: xstockstrat.identity.v1.IdentityService.ListAuthorizedApps:output_type -> xstockstrat.identity.v1.ListAuthorizedAppsResponse
-	20, // 55: xstockstrat.identity.v1.IdentityService.RevokeAuthorizedApp:output_type -> xstockstrat.identity.v1.RevokeAuthorizedAppResponse
-	23, // 56: xstockstrat.identity.v1.IdentityService.GetUserMetadata:output_type -> xstockstrat.identity.v1.GetUserMetadataResponse
-	25, // 57: xstockstrat.identity.v1.IdentityService.UpdateUserMetadata:output_type -> xstockstrat.identity.v1.UpdateUserMetadataResponse
-	23, // 58: xstockstrat.identity.v1.IdentityService.AdminGetUserMetadata:output_type -> xstockstrat.identity.v1.GetUserMetadataResponse
-	25, // 59: xstockstrat.identity.v1.IdentityService.AdminUpdateUserMetadata:output_type -> xstockstrat.identity.v1.UpdateUserMetadataResponse
-	30, // 60: xstockstrat.identity.v1.IdentityService.CreateUser:output_type -> xstockstrat.identity.v1.CreateUserResponse
-	32, // 61: xstockstrat.identity.v1.IdentityService.ListUsers:output_type -> xstockstrat.identity.v1.ListUsersResponse
-	34, // 62: xstockstrat.identity.v1.IdentityService.GetUser:output_type -> xstockstrat.identity.v1.GetUserResponse
-	36, // 63: xstockstrat.identity.v1.IdentityService.UpdatePassword:output_type -> xstockstrat.identity.v1.UpdatePasswordResponse
-	38, // 64: xstockstrat.identity.v1.IdentityService.SetUserRoles:output_type -> xstockstrat.identity.v1.SetUserRolesResponse
-	40, // 65: xstockstrat.identity.v1.IdentityService.SetUserActive:output_type -> xstockstrat.identity.v1.SetUserActiveResponse
-	42, // 66: xstockstrat.identity.v1.IdentityService.ListAdminUserIds:output_type -> xstockstrat.identity.v1.ListAdminUserIdsResponse
-	45, // [45:67] is the sub-list for method output_type
-	23, // [23:45] is the sub-list for method input_type
-	23, // [23:23] is the sub-list for extension type_name
-	23, // [23:23] is the sub-list for extension extendee
-	0,  // [0:23] is the sub-list for field type_name
+	0,  // 23: xstockstrat.identity.v1.ResolveExternalIdentityResponse.roles:type_name -> xstockstrat.identity.v1.Role
+	1,  // 24: xstockstrat.identity.v1.IdentityService.AuthenticateUser:input_type -> xstockstrat.identity.v1.AuthenticateUserRequest
+	4,  // 25: xstockstrat.identity.v1.IdentityService.ValidateToken:input_type -> xstockstrat.identity.v1.ValidateTokenRequest
+	5,  // 26: xstockstrat.identity.v1.IdentityService.RefreshToken:input_type -> xstockstrat.identity.v1.RefreshTokenRequest
+	6,  // 27: xstockstrat.identity.v1.IdentityService.RevokeToken:input_type -> xstockstrat.identity.v1.RevokeTokenRequest
+	9,  // 28: xstockstrat.identity.v1.IdentityService.RegisterOAuthClient:input_type -> xstockstrat.identity.v1.RegisterOAuthClientRequest
+	10, // 29: xstockstrat.identity.v1.IdentityService.GetOAuthClient:input_type -> xstockstrat.identity.v1.GetOAuthClientRequest
+	11, // 30: xstockstrat.identity.v1.IdentityService.IssueAuthCode:input_type -> xstockstrat.identity.v1.IssueAuthCodeRequest
+	13, // 31: xstockstrat.identity.v1.IdentityService.ExchangeAuthCode:input_type -> xstockstrat.identity.v1.ExchangeAuthCodeRequest
+	15, // 32: xstockstrat.identity.v1.IdentityService.RefreshOAuthToken:input_type -> xstockstrat.identity.v1.RefreshOAuthTokenRequest
+	17, // 33: xstockstrat.identity.v1.IdentityService.ListAuthorizedApps:input_type -> xstockstrat.identity.v1.ListAuthorizedAppsRequest
+	19, // 34: xstockstrat.identity.v1.IdentityService.RevokeAuthorizedApp:input_type -> xstockstrat.identity.v1.RevokeAuthorizedAppRequest
+	22, // 35: xstockstrat.identity.v1.IdentityService.GetUserMetadata:input_type -> xstockstrat.identity.v1.GetUserMetadataRequest
+	24, // 36: xstockstrat.identity.v1.IdentityService.UpdateUserMetadata:input_type -> xstockstrat.identity.v1.UpdateUserMetadataRequest
+	26, // 37: xstockstrat.identity.v1.IdentityService.AdminGetUserMetadata:input_type -> xstockstrat.identity.v1.AdminGetUserMetadataRequest
+	27, // 38: xstockstrat.identity.v1.IdentityService.AdminUpdateUserMetadata:input_type -> xstockstrat.identity.v1.AdminUpdateUserMetadataRequest
+	29, // 39: xstockstrat.identity.v1.IdentityService.CreateUser:input_type -> xstockstrat.identity.v1.CreateUserRequest
+	31, // 40: xstockstrat.identity.v1.IdentityService.ListUsers:input_type -> xstockstrat.identity.v1.ListUsersRequest
+	33, // 41: xstockstrat.identity.v1.IdentityService.GetUser:input_type -> xstockstrat.identity.v1.GetUserRequest
+	35, // 42: xstockstrat.identity.v1.IdentityService.UpdatePassword:input_type -> xstockstrat.identity.v1.UpdatePasswordRequest
+	37, // 43: xstockstrat.identity.v1.IdentityService.SetUserRoles:input_type -> xstockstrat.identity.v1.SetUserRolesRequest
+	39, // 44: xstockstrat.identity.v1.IdentityService.SetUserActive:input_type -> xstockstrat.identity.v1.SetUserActiveRequest
+	41, // 45: xstockstrat.identity.v1.IdentityService.ListAdminUserIds:input_type -> xstockstrat.identity.v1.ListAdminUserIdsRequest
+	43, // 46: xstockstrat.identity.v1.IdentityService.ResolveExternalIdentity:input_type -> xstockstrat.identity.v1.ResolveExternalIdentityRequest
+	45, // 47: xstockstrat.identity.v1.IdentityService.IssueSessionForUser:input_type -> xstockstrat.identity.v1.IssueSessionForUserRequest
+	46, // 48: xstockstrat.identity.v1.IdentityService.LinkExternalIdentity:input_type -> xstockstrat.identity.v1.LinkExternalIdentityRequest
+	48, // 49: xstockstrat.identity.v1.IdentityService.GetExternalIdentityLinks:input_type -> xstockstrat.identity.v1.GetExternalIdentityLinksRequest
+	2,  // 50: xstockstrat.identity.v1.IdentityService.AuthenticateUser:output_type -> xstockstrat.identity.v1.AuthTokenResponse
+	3,  // 51: xstockstrat.identity.v1.IdentityService.ValidateToken:output_type -> xstockstrat.identity.v1.TokenClaims
+	2,  // 52: xstockstrat.identity.v1.IdentityService.RefreshToken:output_type -> xstockstrat.identity.v1.AuthTokenResponse
+	7,  // 53: xstockstrat.identity.v1.IdentityService.RevokeToken:output_type -> xstockstrat.identity.v1.RevokeTokenResponse
+	8,  // 54: xstockstrat.identity.v1.IdentityService.RegisterOAuthClient:output_type -> xstockstrat.identity.v1.OAuthClient
+	8,  // 55: xstockstrat.identity.v1.IdentityService.GetOAuthClient:output_type -> xstockstrat.identity.v1.OAuthClient
+	12, // 56: xstockstrat.identity.v1.IdentityService.IssueAuthCode:output_type -> xstockstrat.identity.v1.IssueAuthCodeResponse
+	14, // 57: xstockstrat.identity.v1.IdentityService.ExchangeAuthCode:output_type -> xstockstrat.identity.v1.OAuthTokenResponse
+	14, // 58: xstockstrat.identity.v1.IdentityService.RefreshOAuthToken:output_type -> xstockstrat.identity.v1.OAuthTokenResponse
+	18, // 59: xstockstrat.identity.v1.IdentityService.ListAuthorizedApps:output_type -> xstockstrat.identity.v1.ListAuthorizedAppsResponse
+	20, // 60: xstockstrat.identity.v1.IdentityService.RevokeAuthorizedApp:output_type -> xstockstrat.identity.v1.RevokeAuthorizedAppResponse
+	23, // 61: xstockstrat.identity.v1.IdentityService.GetUserMetadata:output_type -> xstockstrat.identity.v1.GetUserMetadataResponse
+	25, // 62: xstockstrat.identity.v1.IdentityService.UpdateUserMetadata:output_type -> xstockstrat.identity.v1.UpdateUserMetadataResponse
+	23, // 63: xstockstrat.identity.v1.IdentityService.AdminGetUserMetadata:output_type -> xstockstrat.identity.v1.GetUserMetadataResponse
+	25, // 64: xstockstrat.identity.v1.IdentityService.AdminUpdateUserMetadata:output_type -> xstockstrat.identity.v1.UpdateUserMetadataResponse
+	30, // 65: xstockstrat.identity.v1.IdentityService.CreateUser:output_type -> xstockstrat.identity.v1.CreateUserResponse
+	32, // 66: xstockstrat.identity.v1.IdentityService.ListUsers:output_type -> xstockstrat.identity.v1.ListUsersResponse
+	34, // 67: xstockstrat.identity.v1.IdentityService.GetUser:output_type -> xstockstrat.identity.v1.GetUserResponse
+	36, // 68: xstockstrat.identity.v1.IdentityService.UpdatePassword:output_type -> xstockstrat.identity.v1.UpdatePasswordResponse
+	38, // 69: xstockstrat.identity.v1.IdentityService.SetUserRoles:output_type -> xstockstrat.identity.v1.SetUserRolesResponse
+	40, // 70: xstockstrat.identity.v1.IdentityService.SetUserActive:output_type -> xstockstrat.identity.v1.SetUserActiveResponse
+	42, // 71: xstockstrat.identity.v1.IdentityService.ListAdminUserIds:output_type -> xstockstrat.identity.v1.ListAdminUserIdsResponse
+	44, // 72: xstockstrat.identity.v1.IdentityService.ResolveExternalIdentity:output_type -> xstockstrat.identity.v1.ResolveExternalIdentityResponse
+	2,  // 73: xstockstrat.identity.v1.IdentityService.IssueSessionForUser:output_type -> xstockstrat.identity.v1.AuthTokenResponse
+	47, // 74: xstockstrat.identity.v1.IdentityService.LinkExternalIdentity:output_type -> xstockstrat.identity.v1.LinkExternalIdentityResponse
+	49, // 75: xstockstrat.identity.v1.IdentityService.GetExternalIdentityLinks:output_type -> xstockstrat.identity.v1.GetExternalIdentityLinksResponse
+	50, // [50:76] is the sub-list for method output_type
+	24, // [24:50] is the sub-list for method input_type
+	24, // [24:24] is the sub-list for extension type_name
+	24, // [24:24] is the sub-list for extension extendee
+	0,  // [0:24] is the sub-list for field type_name
 }
 
 func init() { file_identity_v1_identity_proto_init() }
@@ -2628,7 +3015,7 @@ func file_identity_v1_identity_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_identity_v1_identity_proto_rawDesc), len(file_identity_v1_identity_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   42,
+			NumMessages:   49,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

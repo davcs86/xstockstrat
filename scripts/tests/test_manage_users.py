@@ -44,11 +44,13 @@ def _patch_db_url(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("DATABASE_URL", FAKE_DB_URL)
 
 
-def _mock_conn(execute_returns: list | None = None):
+def _mock_conn(
+    execute_returns: list | None = None, fetchall_returns: list | None = None
+):
     """Build a mock psycopg connection + cursor chain.
 
-    execute_returns: list of values that successive .fetchone() / .fetchall()
-    calls will return.  Each entry is fed to a fresh MagicMock cursor.
+    execute_returns: list of values that successive .fetchone() calls return.
+    fetchall_returns: list of values that successive .fetchall() calls return.
     """
     conn = MagicMock()
     cursor = MagicMock()
@@ -58,6 +60,8 @@ def _mock_conn(execute_returns: list | None = None):
 
     if execute_returns is not None:
         cursor.fetchone.side_effect = execute_returns
+    if fetchall_returns is not None:
+        cursor.fetchall.side_effect = fetchall_returns
     return conn
 
 
@@ -352,6 +356,137 @@ class TestUpdateRolesCmd:
         assert result.exit_code == 1
 
 
+MODE_ROWS = [("production", "local", "system:x"), ("staging", "local", "system:x")]
+
+
+def _sql_calls(conn: MagicMock) -> list[tuple[str, tuple]]:
+    return [
+        (c.args[0], c.args[1] if len(c.args) > 1 else ())
+        for c in conn.execute.call_args_list
+    ]
+
+
+class TestSetAuthModeCmd:
+    @patch("psycopg.connect")
+    def test_invalid_value_exits_2_before_connecting(self, mock_connect: MagicMock):
+        """@AC-71 row 2."""
+        result = runner.invoke(
+            mu.app,
+            ["set-auth-mode", "oidcc", "--environment", "staging", "--reason", "r"],
+        )
+        assert result.exit_code == 2
+        assert "local, both, oidc" in result.output
+        mock_connect.assert_not_called()
+
+    @pytest.mark.parametrize("value", ["both", "local"])
+    @patch("psycopg.connect")
+    def test_sets_value_and_always_notifies(self, mock_connect: MagicMock, value: str):
+        """@AC-71 row 1 / @AC-44."""
+        conn = _mock_conn([(1, 1)], [MODE_ROWS, MODE_ROWS])
+        mock_connect.return_value = conn
+        result = runner.invoke(
+            mu.app,
+            ["set-auth-mode", value, "--environment", "staging", "--reason", "pilot"],
+        )
+        assert result.exit_code == 0, result.output
+        cte = [(sql, p) for sql, p in _sql_calls(conn) if sql.startswith("WITH u AS")]
+        assert len(cte) == 1
+        sql, params = cte[0]
+        assert params == (value, "pilot", "staging", "staging")
+        assert "updated_by = 'operator:manage-users'" in sql
+        assert "pg_notify('config_changed'" in sql
+        assert "'namespace', 'identity'" in sql and "'key', 'auth.mode'" in sql
+        conn.commit.assert_called_once()
+
+    @patch("psycopg.connect")
+    def test_zero_rows_local_succeeds(self, mock_connect: MagicMock):
+        mock_connect.return_value = _mock_conn([(0, 1)], [[], []])
+        result = runner.invoke(
+            mu.app,
+            ["set-auth-mode", "local", "--environment", "production", "--reason", "r"],
+        )
+        assert result.exit_code == 0, result.output
+
+    @patch("psycopg.connect")
+    def test_zero_rows_oidc_fails(self, mock_connect: MagicMock):
+        mock_connect.return_value = _mock_conn([(0, 1)], [[], []])
+        result = runner.invoke(
+            mu.app,
+            ["set-auth-mode", "oidc", "--environment", "production", "--reason", "r"],
+        )
+        assert result.exit_code == 1
+        assert "seed migration not applied" in result.output
+
+    @patch("psycopg.connect")
+    def test_requires_database_url(self, mock_connect: MagicMock, monkeypatch):
+        monkeypatch.delenv("DATABASE_URL")
+        result = runner.invoke(
+            mu.app,
+            ["set-auth-mode", "both", "--environment", "staging", "--reason", "r"],
+        )
+        assert result.exit_code == 1
+        mock_connect.assert_not_called()
+
+
+class TestUnlinkSsoCmd:
+    @patch("psycopg.connect")
+    def test_force_deletes_and_prints_relink_sentence(self, mock_connect: MagicMock):
+        """@AC-50 script leg."""
+        conn = _mock_conn([(FAKE_UUID,)], [[("https://auth.example.test",)]])
+        mock_connect.return_value = conn
+        result = runner.invoke(mu.app, ["unlink-sso", "a@b.com", "--force"])
+        assert result.exit_code == 0, result.output
+        assert (
+            "can link again with Link SSO while the deployment's auth.mode is both"
+            in (" ".join(result.output.split()))
+        )
+        delete = [(q, p) for q, p in _sql_calls(conn) if q.startswith("DELETE")]
+        assert delete == [
+            (
+                "DELETE FROM identity.external_identities WHERE user_id = %s RETURNING issuer",
+                (FAKE_UUID,),
+            )
+        ]
+        conn.commit.assert_called_once()
+
+    @patch("psycopg.connect")
+    @patch("typer.confirm", return_value=False)
+    def test_declined_confirmation_deletes_nothing(
+        self, _confirm: MagicMock, mock_connect: MagicMock
+    ):
+        conn = _mock_conn([(FAKE_UUID,)])
+        mock_connect.return_value = conn
+        result = runner.invoke(mu.app, ["unlink-sso", "a@b.com"])
+        assert result.exit_code == 0
+        assert not any(q.startswith("DELETE") for q, _ in _sql_calls(conn))
+
+    @patch("psycopg.connect")
+    def test_unknown_email_exits_1(self, mock_connect: MagicMock):
+        mock_connect.return_value = _mock_conn([None])
+        result = runner.invoke(mu.app, ["unlink-sso", "ghost@b.com", "--force"])
+        assert result.exit_code == 1
+
+    @patch("psycopg.connect")
+    def test_nothing_deleted_exits_1(self, mock_connect: MagicMock):
+        mock_connect.return_value = _mock_conn([(FAKE_UUID,)], [[]])
+        result = runner.invoke(mu.app, ["unlink-sso", "a@b.com", "--force"])
+        assert result.exit_code == 1
+        assert "no SSO link found" in result.output
+
+    @patch("psycopg.connect")
+    def test_issuer_narrows_the_delete(self, mock_connect: MagicMock):
+        conn = _mock_conn([(FAKE_UUID,)], [[("https://a.test",)]])
+        mock_connect.return_value = conn
+        runner.invoke(
+            mu.app, ["unlink-sso", "a@b.com", "--issuer", "https://a.test", "--force"]
+        )
+        sql, params = next(
+            (q, p) for q, p in _sql_calls(conn) if q.startswith("DELETE")
+        )
+        assert sql.endswith("AND issuer = %s RETURNING issuer")
+        assert params == (FAKE_UUID, "https://a.test")
+
+
 class TestListUsersCmd:
     @patch("psycopg.connect")
     def test_lists_users(self, mock_connect: MagicMock):
@@ -469,3 +604,29 @@ class TestSqlParameterization:
         assert "%s" in sql
         assert "evil'--@x.com" not in sql
         assert "evil'--@x.com" in params
+
+    @patch("psycopg.connect")
+    def test_set_auth_mode_uses_params(self, mock_connect: MagicMock):
+        conn = _mock_conn([(1, 1)], [MODE_ROWS, MODE_ROWS])
+        mock_connect.return_value = conn
+        evil = "x'); DROP TABLE t;--"
+        runner.invoke(
+            mu.app,
+            ["set-auth-mode", "both", "--environment", "staging", "--reason", evil],
+        )
+        sql, params = next(
+            (q, p) for q, p in _sql_calls(conn) if q.startswith("WITH u AS")
+        )
+        assert evil not in sql
+        assert evil in params
+
+    @patch("psycopg.connect")
+    def test_unlink_sso_uses_params(self, mock_connect: MagicMock):
+        conn = _mock_conn([(FAKE_UUID,)], [[("i",)]])
+        mock_connect.return_value = conn
+        runner.invoke(
+            mu.app, ["unlink-sso", "evil'--@x.com", "--issuer", "i'--", "--force"]
+        )
+        for sql, params in _sql_calls(conn):
+            assert "evil'--@x.com" not in sql and "i'--" not in sql
+        assert ("evil'--@x.com",) in [p for _, p in _sql_calls(conn)]

@@ -163,6 +163,14 @@ def config_snapshots(monkeypatch):
         monkeypatch.setitem(watcher._WATCHERS, ns, w)
 
 
+@pytest.fixture(autouse=True)
+def sso_mode_log_once():
+    """Each test starts with an empty sso_mode log-once set (feature 345)."""
+    from app import sso_mode  # noqa: PLC0415
+
+    sso_mode._reset_log_once()
+
+
 @pytest.fixture
 def hung_config_server(monkeypatch):
     """Start an in-process ConfigService and point ``client.get_config_value`` at it (feature 247).
@@ -380,3 +388,100 @@ def metric_reader(otel_reset):
     reader = InMemoryMetricReader()
     metrics.set_meter_provider(MeterProvider(metric_readers=[reader]))
     return reader
+
+
+def _rsa_signer(kid: str):
+    from cryptography.hazmat.primitives.asymmetric import rsa  # noqa: PLC0415
+    from jwt.algorithms import RSAAlgorithm  # noqa: PLC0415
+
+    private = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    jwk = RSAAlgorithm.to_jwk(private.public_key(), as_dict=True)
+    jwk.update({"kid": kid, "alg": "RS256", "use": "sig"})
+    return private, jwk
+
+
+@pytest.fixture(scope="session")
+def sso_keys():
+    """Issuer signing keys (feature 345, C-13): `jwk`/`jwks`, and `mint(**claims)` signing RS256
+    with `kid` and `typ=at+jwt`; `rotated_jwk` is a second key under the same `kid`."""
+    import jwt  # noqa: PLC0415
+
+    kid = "test-kid-1"
+    private, jwk = _rsa_signer(kid)
+    rotated_private, rotated_jwk = _rsa_signer(kid)
+    signers = {"primary": private, "rotated": rotated_private}
+
+    def mint(*, headers: dict | None = None, signer: str = "primary", **claims) -> str:
+        hdr = {"kid": kid, "typ": "at+jwt", **(headers or {})}
+        return jwt.encode(claims, signers[signer], algorithm="RS256", headers=hdr)
+
+    return SimpleNamespace(
+        kid=kid,
+        jwk=jwk,
+        jwks={"keys": [jwk]},
+        rotated_jwk=rotated_jwk,
+        mint=mint,
+    )
+
+
+SSO_ISSUER = "https://auth.example.test"
+
+
+@pytest.fixture
+def oidc_mode(monkeypatch, sso_keys):
+    """`oidc` mode against a respx-mocked issuer (feature 345, C-13; three consumers).
+
+    Installs `identity` auth.mode=oidc and `agent` oidc.issuer, serves discovery + `sso_keys`' JWKS,
+    and resets the jwks/sso_auth caches. `claims(**over)` builds a valid access-token payload."""
+    import asyncio  # noqa: PLC0415
+    import time  # noqa: PLC0415
+
+    import httpx  # noqa: PLC0415
+    import respx  # noqa: PLC0415
+
+    from app import jwks, sso_auth  # noqa: PLC0415
+    from tests.test_config_watcher import install_watcher  # noqa: PLC0415
+
+    def install(namespace: str, **values):
+        # The lifespan waits on every watcher's snapshot event (watch_core.wait_for_snapshot).
+        w = install_watcher(monkeypatch, namespace, **values)
+        w._snapshot_event = asyncio.Event()
+        w._snapshot_event.set()
+        return w
+
+    install("identity", **{"auth.mode": "oidc"})
+    install("agent", **{"oidc.issuer": SSO_ISSUER})
+    jwks._reset_for_tests()
+    sso_auth._reset_for_tests()
+
+    def claims(**over):
+        base = {
+            "iss": SSO_ISSUER,
+            "sub": "sso-subject-1",
+            "aud": sso_auth.AGENT_PUBLIC_URL,
+            "exp": int(time.time()) + 600,
+            "scp": ["xstockstrat.read", "xstockstrat.write"],
+        }
+        base.update(over)
+        return {k: v for k, v in base.items() if v is not None}
+
+    with respx.mock(assert_all_called=False) as mock:
+        disc = mock.get(f"{SSO_ISSUER}/.well-known/openid-configuration").mock(
+            return_value=httpx.Response(
+                200, json={"issuer": SSO_ISSUER, "jwks_uri": f"{SSO_ISSUER}/jwks.json"}
+            )
+        )
+        keys = mock.get(f"{SSO_ISSUER}/jwks.json").mock(
+            return_value=httpx.Response(200, json=sso_keys.jwks)
+        )
+        yield SimpleNamespace(
+            issuer=SSO_ISSUER,
+            discovery=disc,
+            jwks=keys,
+            keys=sso_keys,
+            claims=claims,
+            token=lambda **over: sso_keys.mint(**claims(**over)),
+            install=install,
+        )
+    jwks._reset_for_tests()
+    sso_auth._reset_for_tests()

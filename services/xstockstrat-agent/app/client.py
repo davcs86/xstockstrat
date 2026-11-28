@@ -44,6 +44,12 @@ _CONFIG_READ_TIMEOUT_S = 3.0
 # Read at call time so tests can monkeypatch them.
 _RPC_TIMEOUT_S = 10.0
 _LONG_RPC_TIMEOUT_S = 45.0
+
+
+def rpc_timeout_s() -> float:
+    return _RPC_TIMEOUT_S
+
+
 # Fixed invariant (F-07): ExecuteFormula round-trip margin over the sandbox timeout + startup grace.
 _FORMULA_DEADLINE_MARGIN_MS = 2000
 # Trailer analysis sets on a successful ScoreStrategy (JSON array of str); the literal is asserted
@@ -1613,6 +1619,28 @@ async def validate_token(token: str) -> dict[str, Any]:
         "email": claims.email,
         "roles": list(claims.roles),
         "aud": claims.aud,
+    }
+
+
+async def resolve_external_identity(
+    issuer: str, subject: str, *, trace_id: str, timeout_s: float
+) -> dict[str, Any]:
+    """Map an SSO (issuer, subject) to the linked user via identity ResolveExternalIdentity.
+
+    Pre-auth: only `x-trace-id` is sent, never caller claims. `AioRpcError` propagates."""
+    from gen.identity.v1 import identity_pb2, identity_pb2_grpc  # noqa: PLC0415
+
+    async with mtls.secure_channel(IDENTITY_ENDPOINT, "xstockstrat-identity") as channel:
+        stub = identity_pb2_grpc.IdentityServiceStub(channel)
+        resp = await stub.ResolveExternalIdentity(
+            identity_pb2.ResolveExternalIdentityRequest(issuer=issuer, subject=subject),
+            metadata=[("x-trace-id", trace_id)],
+            timeout=timeout_s,
+        )
+    return {
+        "user_id": resp.user_id,
+        "roles": [identity_pb2.Role.Name(r).removeprefix("ROLE_").lower() for r in resp.roles],
+        "is_active": resp.is_active,
     }
 
 

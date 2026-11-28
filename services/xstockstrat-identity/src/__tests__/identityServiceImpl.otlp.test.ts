@@ -4,6 +4,7 @@ import { after, before, mock, test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as bcrypt from 'bcrypt';
 import { startOtlpReceiver, waitFor } from './fixtures/otlpReceiver';
+import { fakeConfig } from './fixtures/fakeConfig';
 
 mock.method(console, 'info', () => {});
 
@@ -34,10 +35,10 @@ after(async () => {
 function impl(userRow: Record<string, unknown>) {
   const pool = {
     async query(sql: string) {
-      return { rows: sql.includes('SELECT user_id, password_hash') ? [userRow] : [] };
+      return { rows: sql.includes('SELECT user_id, email, password_hash') ? [userRow] : [] };
     },
   };
-  return new IdentityServiceImpl(pool, { getInt: (_k: string, d: number) => d } as any);
+  return new IdentityServiceImpl(pool, fakeConfig());
 }
 
 function call(email: string, password: string) {
@@ -56,6 +57,7 @@ test('the exported seed-admin refusal record carries user_id and not the email',
         user_id: 'u-admin',
         password_hash: SEED_ADMIN_PASSWORD_HASH,
         roles: ['admin'],
+        is_active: true,
       }).authenticateUser(call('admin@localhost', 'admin'), () => resolve()),
     );
   } finally {
@@ -73,7 +75,7 @@ test('the exported seed-admin refusal record carries user_id and not the email',
 test('a served authenticateUser exports no password or token in any log record', async () => {
   const hash = await bcrypt.hash(PASSWORD, 4);
   const result: any = await new Promise((resolve) =>
-    impl({ user_id: 'u-1', password_hash: hash, roles: ['trader'] }).authenticateUser(
+    impl({ user_id: 'u-1', password_hash: hash, roles: ['trader'], is_active: true }).authenticateUser(
       call('someone@example.com', PASSWORD),
       (err: unknown, res: unknown) => resolve({ err, res }),
     ),

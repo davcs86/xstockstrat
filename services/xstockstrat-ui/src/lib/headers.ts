@@ -5,3 +5,4 @@
 export const HEADER_USER_ID = 'x-user-id';
 export const HEADER_ACCESS_SCOPE = 'x-access-scope';
 export const HEADER_TRACE_ID = 'x-trace-id';
+export const HEADER_INTERNAL_CALLER = 'x-internal-caller';

@@ -144,6 +144,26 @@ class IdentityServiceStub(object):
                 request_serializer=identity_dot_v1_dot_identity__pb2.ListAdminUserIdsRequest.SerializeToString,
                 response_deserializer=identity_dot_v1_dot_identity__pb2.ListAdminUserIdsResponse.FromString,
                 _registered_method=True)
+        self.ResolveExternalIdentity = channel.unary_unary(
+                '/xstockstrat.identity.v1.IdentityService/ResolveExternalIdentity',
+                request_serializer=identity_dot_v1_dot_identity__pb2.ResolveExternalIdentityRequest.SerializeToString,
+                response_deserializer=identity_dot_v1_dot_identity__pb2.ResolveExternalIdentityResponse.FromString,
+                _registered_method=True)
+        self.IssueSessionForUser = channel.unary_unary(
+                '/xstockstrat.identity.v1.IdentityService/IssueSessionForUser',
+                request_serializer=identity_dot_v1_dot_identity__pb2.IssueSessionForUserRequest.SerializeToString,
+                response_deserializer=identity_dot_v1_dot_identity__pb2.AuthTokenResponse.FromString,
+                _registered_method=True)
+        self.LinkExternalIdentity = channel.unary_unary(
+                '/xstockstrat.identity.v1.IdentityService/LinkExternalIdentity',
+                request_serializer=identity_dot_v1_dot_identity__pb2.LinkExternalIdentityRequest.SerializeToString,
+                response_deserializer=identity_dot_v1_dot_identity__pb2.LinkExternalIdentityResponse.FromString,
+                _registered_method=True)
+        self.GetExternalIdentityLinks = channel.unary_unary(
+                '/xstockstrat.identity.v1.IdentityService/GetExternalIdentityLinks',
+                request_serializer=identity_dot_v1_dot_identity__pb2.GetExternalIdentityLinksRequest.SerializeToString,
+                response_deserializer=identity_dot_v1_dot_identity__pb2.GetExternalIdentityLinksResponse.FromString,
+                _registered_method=True)
 
 
 class IdentityServiceServicer(object):
@@ -292,6 +312,38 @@ class IdentityServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def ResolveExternalIdentity(self, request, context):
+        """Maps an OIDC (issuer, subject) to its linked user (feature 345). Authorized by mTLS peer SAN
+        xstockstrat-ui or xstockstrat-agent only; every request header is ignored.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def IssueSessionForUser(self, request, context):
+        """Mints a session for an SSO-resolved user (feature 345). Authorized by mTLS peer SAN
+        xstockstrat-ui only; every request header is ignored.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def LinkExternalIdentity(self, request, context):
+        """Links an OIDC identity after a password re-check (feature 345). Authorized by mTLS peer SAN
+        xstockstrat-ui only; every request header is ignored.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def GetExternalIdentityLinks(self, request, context):
+        """Lists the issuers a user is linked to (feature 345). Authorized by mTLS peer SAN
+        xstockstrat-ui only; every request header is ignored.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_IdentityServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -404,6 +456,26 @@ def add_IdentityServiceServicer_to_server(servicer, server):
                     servicer.ListAdminUserIds,
                     request_deserializer=identity_dot_v1_dot_identity__pb2.ListAdminUserIdsRequest.FromString,
                     response_serializer=identity_dot_v1_dot_identity__pb2.ListAdminUserIdsResponse.SerializeToString,
+            ),
+            'ResolveExternalIdentity': grpc.unary_unary_rpc_method_handler(
+                    servicer.ResolveExternalIdentity,
+                    request_deserializer=identity_dot_v1_dot_identity__pb2.ResolveExternalIdentityRequest.FromString,
+                    response_serializer=identity_dot_v1_dot_identity__pb2.ResolveExternalIdentityResponse.SerializeToString,
+            ),
+            'IssueSessionForUser': grpc.unary_unary_rpc_method_handler(
+                    servicer.IssueSessionForUser,
+                    request_deserializer=identity_dot_v1_dot_identity__pb2.IssueSessionForUserRequest.FromString,
+                    response_serializer=identity_dot_v1_dot_identity__pb2.AuthTokenResponse.SerializeToString,
+            ),
+            'LinkExternalIdentity': grpc.unary_unary_rpc_method_handler(
+                    servicer.LinkExternalIdentity,
+                    request_deserializer=identity_dot_v1_dot_identity__pb2.LinkExternalIdentityRequest.FromString,
+                    response_serializer=identity_dot_v1_dot_identity__pb2.LinkExternalIdentityResponse.SerializeToString,
+            ),
+            'GetExternalIdentityLinks': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetExternalIdentityLinks,
+                    request_deserializer=identity_dot_v1_dot_identity__pb2.GetExternalIdentityLinksRequest.FromString,
+                    response_serializer=identity_dot_v1_dot_identity__pb2.GetExternalIdentityLinksResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -1000,6 +1072,114 @@ class IdentityService(object):
             '/xstockstrat.identity.v1.IdentityService/ListAdminUserIds',
             identity_dot_v1_dot_identity__pb2.ListAdminUserIdsRequest.SerializeToString,
             identity_dot_v1_dot_identity__pb2.ListAdminUserIdsResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ResolveExternalIdentity(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/xstockstrat.identity.v1.IdentityService/ResolveExternalIdentity',
+            identity_dot_v1_dot_identity__pb2.ResolveExternalIdentityRequest.SerializeToString,
+            identity_dot_v1_dot_identity__pb2.ResolveExternalIdentityResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def IssueSessionForUser(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/xstockstrat.identity.v1.IdentityService/IssueSessionForUser',
+            identity_dot_v1_dot_identity__pb2.IssueSessionForUserRequest.SerializeToString,
+            identity_dot_v1_dot_identity__pb2.AuthTokenResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def LinkExternalIdentity(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/xstockstrat.identity.v1.IdentityService/LinkExternalIdentity',
+            identity_dot_v1_dot_identity__pb2.LinkExternalIdentityRequest.SerializeToString,
+            identity_dot_v1_dot_identity__pb2.LinkExternalIdentityResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetExternalIdentityLinks(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/xstockstrat.identity.v1.IdentityService/GetExternalIdentityLinks',
+            identity_dot_v1_dot_identity__pb2.GetExternalIdentityLinksRequest.SerializeToString,
+            identity_dot_v1_dot_identity__pb2.GetExternalIdentityLinksResponse.FromString,
             options,
             channel_credentials,
             insecure,

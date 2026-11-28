@@ -36,6 +36,8 @@ MCP_TOOL_KEYS = {"gen_ai.tool.name", "outcome"}
 
 def _drive() -> None:
     tool_metrics.record_auth_rejected("missing_bearer")
+    tool_metrics.record_auth_rejected("jwks_unavailable")
+    tool_metrics.record_auth_rejected("account_refused")
     tool_metrics.record_oauth_request("authorization_code", "ok")
     tool_metrics.record_oauth_txn_rejected("bad_sig")
     tool_metrics.record_backend_rpc_error("ingest", grpc.StatusCode.UNAVAILABLE)

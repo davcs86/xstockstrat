@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { SignJWT } from 'jose';
 import { NextRequest } from 'next/server';
+import { existsSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 
 // Stub the Node-only identity client so the middleware's in-process refresh path
 // is driven without loading @connectrpc/connect-node. refreshSession is the exact
@@ -11,7 +13,13 @@ vi.mock('@/lib/identity', () => ({
   revokeToken: vi.fn(),
 }));
 
-import { config, middleware } from './middleware';
+import {
+  config,
+  middleware,
+  COOKIE_GATED_PATHS,
+  PUBLIC_HEALTH_PATHS,
+  SSO_PUBLIC_PATHS,
+} from './middleware';
 
 const TEST_SECRET = 'test-jwt-secret-value-at-least-32-bytes-long';
 
@@ -329,5 +337,92 @@ describe('segment health exemption (feature 271 @AC-3/@AC-4)', () => {
 
     expect(res.status).toBe(307);
     expect(res.headers.get('location')).toContain('/auth/login');
+  });
+});
+
+describe('SSO and cookie-gated exemptions (D-40/D-59/D-62)', () => {
+  const ORIGINAL_SECRET = process.env.JWT_SECRET;
+
+  beforeEach(() => {
+    process.env.JWT_SECRET = TEST_SECRET;
+    refreshSession.mockReset();
+  });
+
+  afterEach(() => {
+    if (ORIGINAL_SECRET === undefined) delete process.env.JWT_SECRET;
+    else process.env.JWT_SECRET = ORIGINAL_SECRET;
+  });
+
+  it('every exempt path has a route.ts', () => {
+    const paths = [...SSO_PUBLIC_PATHS, ...COOKIE_GATED_PATHS, ...PUBLIC_HEALTH_PATHS];
+    expect(paths.length).toBe(11);
+    for (const path of paths) {
+      expect(existsSync(fileURLToPath(new URL(`./app${path}/route.ts`, import.meta.url)))).toBe(
+        true,
+      );
+    }
+  });
+
+  it.each(['/api/auth/sso/start', '/api/auth/sso/callback'])(
+    'passes %s through without a session',
+    async (path) => {
+      const res = await middleware(new NextRequest(new URL('http://localhost' + path)));
+      expect(res.status).toBe(200);
+      expect(res.headers.get('location')).toBeNull();
+    },
+  );
+
+  it.each(['/api/auth/sso/startx', '/api/auth/logoutx', '/api/auth/sso'])(
+    'redirects the lookalike %s',
+    async (path) => {
+      const res = await middleware(new NextRequest(new URL('http://localhost' + path)));
+      expect(res.status).toBe(307);
+      expect(res.headers.get('location')).toContain('/auth/login');
+    },
+  );
+
+  it('a near-expiry token with a failing refresh on the callback passes through', async () => {
+    refreshSession.mockResolvedValue(null);
+    const access = await signNearExpiryToken();
+    const res = await middleware(
+      new NextRequest(new URL('http://localhost/api/auth/sso/callback?code=c&state=s'), {
+        headers: { cookie: `access_token=${access}; refresh_token=rt` },
+      }),
+    );
+    expect(res.status).toBe(200);
+    expect(res.headers.get('location')).toBeNull();
+    expect(refreshSession).not.toHaveBeenCalled();
+  });
+
+  it('logout without a cookie keeps the redirect', async () => {
+    const res = await middleware(
+      new NextRequest(new URL('http://localhost/api/auth/logout'), { method: 'POST' }),
+    );
+    expect(res.status).toBe(307);
+    expect(res.headers.get('location')).toContain('/auth/login');
+  });
+
+  it.each(['access_token=expired', 'refresh_token=rt'])(
+    'logout with a %s cookie passes through',
+    async (cookie) => {
+      const res = await middleware(
+        new NextRequest(new URL('http://localhost/api/auth/logout'), {
+          method: 'POST',
+          headers: { cookie },
+        }),
+      );
+      expect(res.status).toBe(200);
+      expect(res.headers.get('location')).toBeNull();
+      expect(refreshSession).not.toHaveBeenCalled();
+    },
+  );
+
+  // @AC-77 row 1: the handler never runs without a session (spec-level choice 5).
+  it('@AC-77 GET /accounts/api/sso without a session cookie redirects to /auth/login', async () => {
+    const res = await middleware(new NextRequest(new URL('http://localhost/accounts/api/sso')));
+    expect(res.status).toBe(307);
+    const loc = new URL(res.headers.get('location')!);
+    expect(loc.pathname).toBe('/auth/login');
+    expect(loc.searchParams.get('redirect')).toBe('/accounts/api/sso');
   });
 });

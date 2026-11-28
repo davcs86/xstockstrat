@@ -72,6 +72,8 @@
       "services/xstockstrat-agent/app/client.py:int_positive": "indicators",
       "services/xstockstrat-agent/app/oauth_server.py:client": "agent",
       "services/xstockstrat-agent/app/oauth_server.py:read_config_value": "agent",
+      "services/xstockstrat-agent/app/sso_mode.py:agent_config": "agent",
+      "services/xstockstrat-agent/app/sso_mode.py:identity_config": "identity",
       "services/xstockstrat-agent/app/tools.py:_agent_policy": "agent",
       "services/xstockstrat-agent/app/tools.py:client": "agent",
       "services/xstockstrat-agent/app/tools.py:read_config_value": "agent",
@@ -93,6 +95,7 @@
       "services/xstockstrat-analysis/app/handlers/servicer.py:str_nonempty": "analysis",
       "services/xstockstrat-analysis/app/services/screener.py:int_positive": "analysis",
       "services/xstockstrat-analysis/app/services/screener.py:self._cfg": "analysis",
+      "services/xstockstrat-identity/src/authMode.ts:config": "identity",
       "services/xstockstrat-identity/src/grpc/identityServiceImpl.ts:this.config": "identity",
       "services/xstockstrat-indicators/app/config/watcher.py:int_positive": "indicators",
       "services/xstockstrat-indicators/app/config/watcher.py:self": "indicators",
@@ -131,6 +134,9 @@
       "services/xstockstrat-trading/internal/service/trading.go:s.platformCfgW": "platform",
       "services/xstockstrat-ui/src/app/trader/positions/page.tsx:resp.values": "platform",
       "services/xstockstrat-ui/src/lib/indicatorChart.ts:values": "ui",
+      "services/xstockstrat-ui/src/lib/oidcConfig.ts:agent.values": "agent",
+      "services/xstockstrat-ui/src/lib/oidcConfig.ts:identity.values": "identity",
+      "services/xstockstrat-ui/src/lib/oidcConfig.ts:ui.values": "ui",
       "services/xstockstrat-ui/src/lib/performanceMetrics.ts:values": "ui"
     }
   }

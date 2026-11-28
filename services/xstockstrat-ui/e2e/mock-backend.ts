@@ -37,7 +37,13 @@ import {
 import { PortfolioService } from '@xstockstrat/proto/portfolio/v1/portfolio_pb';
 import { TradingService } from '@xstockstrat/proto/trading/v1/trading_pb';
 import { REFRESH_STALL_TOKEN, signTestJwt } from './helpers/auth';
-import { HEADER_ACCESS_SCOPE, HEADER_TRACE_ID, HEADER_USER_ID } from '../src/lib/headers';
+import {
+  HEADER_ACCESS_SCOPE,
+  HEADER_INTERNAL_CALLER,
+  HEADER_TRACE_ID,
+  HEADER_USER_ID,
+} from '../src/lib/headers';
+import { ssoStubRecord, ssoStubState } from './helpers/stubIdp';
 import { ADMIN_SCOPE } from '../src/lib/auth';
 import {
   TEST_USER_ID,
@@ -79,6 +85,8 @@ import {
   FUNDAMENTALS_AAPL,
   FUNDAMENTALS_STALL_SYMBOL,
   BACKTEST_EVAL_FAILED_WARNING,
+  SSO_LINK_PASSWORD,
+  SSO_WEB_CLIENT_SECRET,
 } from './fixtures';
 import { USER_VIEWS, LAST_ADMIN_USER_ID } from './fixtures/users';
 import { PLATFORM_TRADING_STATE_VALUES } from './fixtures/configKeys';
@@ -284,8 +292,15 @@ function stopServer(srv: MockServer | null): Promise<void> {
 export async function startMockBackend(): Promise<void> {
   const testAccessToken = await signTestJwt();
 
+  // Feature 345 — SSO identity RPCs answer from the stub-IdP state (e2e/helpers/stubIdp.ts).
+  const ssoRefusal = (detail: string | null) => {
+    if (detail) throw new ConnectError(detail, Code.FailedPrecondition);
+  };
   const identityHandlers = {
     async authenticateUser() {
+      if (ssoStubState.mode === 'oidc') {
+        throw new ConnectError('password login disabled', Code.PermissionDenied);
+      }
       return {
         accessToken: testAccessToken,
         refreshToken: 'test-refresh-token',
@@ -306,6 +321,35 @@ export async function startMockBackend(): Promise<void> {
     },
     async revokeToken() {
       return { success: true };
+    },
+    async resolveExternalIdentity() {
+      ssoRefusal(ssoStubState.resolveRefusal);
+      return { userId: TEST_USER_ID, roles: [], isActive: true };
+    },
+    async issueSessionForUser(req: { userId: string }) {
+      ssoRefusal(ssoStubState.issueRefusal);
+      return {
+        accessToken: await signTestJwt([], { id: req.userId, email: TEST_USER_EMAIL }),
+        refreshToken: 'test-refresh-token',
+        claims: { userId: req.userId, email: TEST_USER_EMAIL, roles: [] },
+      };
+    },
+    async linkExternalIdentity(req: {
+      userId: string;
+      issuer: string;
+      subject: string;
+      password: string;
+    }) {
+      if (ssoStubState.mode !== 'both') ssoRefusal('link disabled');
+      if (req.password !== SSO_LINK_PASSWORD) ssoRefusal('invalid credentials');
+      ssoRefusal(ssoStubState.linkRefusal);
+      ssoStubRecord.links.push({ userId: req.userId, issuer: req.issuer, subject: req.subject });
+      return {};
+    },
+    async getExternalIdentityLinks(req: { userId: string }) {
+      return {
+        issuers: ssoStubRecord.links.filter((l) => l.userId === req.userId).map((l) => l.issuer),
+      };
     },
     // Feature 051 — authorized-apps management. Returns one app (no token/secret fields)
     // so the /accounts page renders a deterministic row through the real BFF→gRPC path.
@@ -1557,10 +1601,45 @@ export async function startMockBackend(): Promise<void> {
         // (no platform-wide restriction) so the existing suite's happy-path assertions are
         // unaffected. Overridden per-test via page.route() for the REDUCE_ONLY/HALTED cases
         // (positions-reconciliation.spec.ts).
+        // Feature 345 — only ui/oidc.client_secret, and only for the `x-internal-caller: ui` header.
+        async getSecret(req, ctx) {
+          if (ssoStubState.getConfigFails) {
+            throw new ConnectError('config unreachable', Code.Unavailable);
+          }
+          if (req.namespace !== 'ui' || req.key !== 'oidc.client_secret') {
+            return { found: false, value: '' };
+          }
+          if (ctx.requestHeader.get(HEADER_INTERNAL_CALLER) !== 'ui') {
+            throw new ConnectError('caller not allowed', Code.PermissionDenied);
+          }
+          return ssoStubState.secretFound
+            ? { found: true, value: SSO_WEB_CLIENT_SECRET }
+            : { found: false, value: '' };
+        },
         async getConfig(req) {
           // Every UI GetConfig must carry the deployment's environment (feature 295, AC-9).
           if (req.environment === Environment.UNSPECIFIED) {
             throw new ConnectError('getConfig: environment is required', Code.InvalidArgument);
+          }
+          // Feature 345 — the SSO namespaces; by default the identity `auth.mode` row is absent.
+          if (ssoStubState.getConfigFails) {
+            throw new ConnectError('config unreachable', Code.Unavailable);
+          }
+          const str = (value: string) => ({ value: { case: 'stringVal' as const, value } });
+          if (req.namespace === 'identity') {
+            const mode = ssoStubState.mode;
+            return {
+              namespace: 'identity',
+              version: '1',
+              values: mode === null ? {} : { 'auth.mode': str(mode) },
+            };
+          }
+          if (req.namespace === 'agent') {
+            return {
+              namespace: 'agent',
+              version: '1',
+              values: { 'oidc.issuer': str(ssoStubState.agentIssuer) },
+            };
           }
           // feature 031 — the /insights performance dashboard reads ui.performance.* one-shot via
           // GetConfig(namespace:'ui'). The map is keyed by the bare sub-key (namespace filtered),
@@ -1575,6 +1654,14 @@ export async function startMockBackend(): Promise<void> {
               'performance.equity_curve_start_date': {
                 value: { case: 'stringVal', value: '2026-01-01' },
               },
+              'oidc.issuer': str(ssoStubState.uiIssuer),
+              'oidc.client_id': str(ssoStubState.uiClientId),
+              'oidc.mcp_client_id': str(ssoStubState.mcpClientIds.claude),
+              'oidc.mcp_client_id_readonly': str(ssoStubState.mcpClientIds.claudeReadonly),
+              'oidc.mcp_client_id_claude_code': str(ssoStubState.mcpClientIds.claudeCode),
+              'oidc.mcp_client_id_claude_code_readonly': str(
+                ssoStubState.mcpClientIds.claudeCodeReadonly,
+              ),
             };
             return { namespace: 'ui', version: '1', values: uiValues };
           }

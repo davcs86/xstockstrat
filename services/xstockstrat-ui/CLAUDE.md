@@ -173,6 +173,13 @@ propagation in `docs/patterns/header-propagation.md`.
 | `src/app/auth/{login,oauth-login}/page.tsx` | Browser / Server | Unified login (domain root, outside all basePaths) + OAuth agent login. Kept non-static by the segment layout above. `oauth-login` is a server page: it follows only the server-resolved `${AGENT_PUBLIC_URL}/oauth/callback` (exact `agent_cb` match, `src/lib/oauthCallback.ts`), never the client-supplied URL. |
 | `src/app/api/auth/{login,refresh,logout,me}/route.ts` | Node | Auth endpoints (set/clear cookies, current session) |
 | `src/app/<segment>/api/[...connect]/route.ts` | Node | Segment BFF entrypoint — re-exports `dispatchConnect` |
+| `src/app/api/auth/sso/{start,callback}/route.ts` | Node | SSO sign-in (feature 345): `start` is POST-only with a required same-origin `Origin`; `callback` exchanges the code, then `ResolveExternalIdentity` → `IssueSessionForUser`, or finishes a Link SSO round trip into the `sso_link` cookie |
+| `src/app/accounts/sso/page.tsx`, `src/app/accounts/api/sso{,/link,/confirm}/route.ts` | Browser / Node | **Link SSO** (`auth.mode` `both` only): status, start (`prompt=login`, `max_age=1`) and password confirm → `LinkExternalIdentity`; the page calls them through `apiFetch` |
+| `src/lib/oidcConfig.ts` | Node | `loadAuthMode` (`identity/auth.mode`), `loadOidcConfig` (`ui/oidc.*` + `APP_URL` validity), `loadOidcClientSecret` (`GetSecret`), `loadAgentIssuer` (`agent/oidc.issuer`); every read global, any fault → `'error'` |
+| `src/lib/oidcClient.ts` | Node | `openid-client` wiring: cached discovery `Configuration`, authorization URLs, `exchangeCode` |
+| `src/lib/ssoTxn.ts` | Node | JWE `sso_txn_*` (callback path, 600 s) and `sso_link` cookies, keyed from `JWT_SECRET` |
+| `src/lib/sameOrigin.ts` | Node | `APP_URL` parsing and the `Origin` checks (SSO start/link/confirm, logout) |
+| `src/lib/ssoErrors.ts` | Node | Error-code redirects and refusal → code maps; the codes and messages live in the client-safe `src/lib/ssoErrorCodes.ts` (a `'use client'` page must not import `ssoErrors.ts`, which pulls `node:crypto`) |
 
 ## Browser typed clients
 
@@ -198,7 +205,7 @@ without re-checking that table. All other segments are stateless.
 
 ## Config Keys Consumed
 
-Namespace: `ui` (plus `platform` for the positions banner). Read **one-shot** via `GetConfig(namespace: 'ui')` in `insightsBff.ts`; `/trader` also reads namespace `ui` one-shot, through `traderConfigClient` (`traderBff.ts`) — the UI is a
+Namespace: `ui` (plus `platform` for the positions banner, and `identity` / `agent` for SSO, feature 345). Read **one-shot** via `GetConfig(namespace: 'ui')` in `insightsBff.ts`; `/trader` also reads namespace `ui` one-shot, through `traderConfigClient` (`traderBff.ts`) — the UI is a
 stateless BFF with **no `WatchConfig` subscription** (it cannot hold a server stream). Values are read
 with an oneof-presence check (never `value || default`), so a stored `0` / empty string survives.
 
@@ -207,6 +214,11 @@ with an oneof-presence check (never `value || default`), so a stored `0` / empty
 | `performance.risk_free_rate_annual` | float | `0.045` | Annualized risk-free rate for the `/insights/performance` dashboard rolling-30d Sharpe (feature 031, FR-3). A stored `0` is legitimate. Seed migration `023_ui_performance_keys`. |
 | `performance.equity_curve_start_date` | string | `""` (auto = earliest closed-position date) | ISO date the cumulative-P&L equity curve starts from (feature 031, FR-1). Empty ⇒ the UI defaults to the earliest closed-position date. Seed migration `023_ui_performance_keys`. |
 | `chart.indicator_history_bars` | int | `200` | Bars of history the `/trader` symbol page fetches for its indicator panes (feature 341); the chart still draws the latest 200. Read by `readHistoryBars` (`src/lib/indicatorChart.ts`), clamped to [200, 1000]; absent, wrong type, error or timeout ⇒ 200. DigitalOcean stays at 200; a raise needs the gate in `docs/runbooks/ohlcv-lock-budget-tuning.md` § Homelab deep indicator history. Seed migration `050_ui_chart_history_bars`. |
+| `auth.mode` (namespace `identity`) | string | `local` | Login surfaces per mode (feature 345): `local` password, `both` SSO + password + Link SSO, `oidc` SSO only. Read per request by `loadAuthMode`; unreadable → the `local` login. |
+| `oidc.issuer`, `oidc.client_id` | string | `""` | The web OIDC client (feature 345), `ui/oidc.*`; invalid or empty in `both`/`oidc` → `?error=not_configured`. |
+| `oidc.client_secret` | secret | unset | Read only via `GetSecret` with `x-internal-caller: ui` (`loadOidcClientSecret`). |
+| `oidc.mcp_client_id`, `oidc.mcp_client_id_readonly`, `oidc.mcp_client_id_claude_code`, `oidc.mcp_client_id_claude_code_readonly` | string | `""` | Client IDs shown on `/accounts/authorized-apps` in `oidc`; empty hides the line. |
+| `oidc.issuer` (namespace `agent`) | string | `""` | `agent/oidc.issuer`, read by `loadAgentIssuer` for the UI's protected-resource document in `oidc`. |
 | `trading_state` (namespace `platform`) | string | *(none; owned by trading)* | Read one-shot by `/trader/positions` via `GetConfig(namespace: 'platform')` (`traderConfigClient`, polled every 30 s) to show the REDUCE_ONLY/HALTED banner; the UI never writes it. |
 
 ## Environment Variables
@@ -217,6 +229,7 @@ with an oneof-presence check (never `value || default`), so a stored `0` / empty
 JWT_SECRET                  # required — src/lib/auth.ts jose verification
 *_ENDPOINT                  # the 10 backends — see docker-compose.yml
 AGENT_ENDPOINT              # agent tool catalog (internal gRPC): host:port, no scheme; unset ⇒ the MCP Tools page reports the agent unreachable; never falls back to AGENT_PUBLIC_URL
+APP_URL                     # feature 345 — the exact browser origin (scheme://host[:port], no path, no trailing slash): SSO redirect_uri, Origin checks, logout redirects; invalid ⇒ ERROR app_url_invalid and SSO answers not_configured
 AGENT_PUBLIC_URL            # runtime (never NEXT_PUBLIC_*): /accounts connector URL + the /auth/oauth-login callback check; unset ⇒ every OAuth agent login is rejected
 VAPID_PUBLIC_KEY            # feature 165 — Web Push public key, exposed to the browser via VapidKeyContext (server→client prop, NOT NEXT_PUBLIC_*); empty ⇒ push enable control reports "not configured"
 DATABASE_URL                # config-ui audit route only
@@ -258,6 +271,10 @@ unearnable.
 `e2e/auth.spec.ts`) against a mock gRPC backend (`e2e/mock-backend.ts`, `e2e/global-setup.ts`,
 `e2e/helpers/`). Run `pnpm test:e2e` (or `pnpm test:e2e:ui`) locally, or `python3 scripts/run-e2e.py`
 for a hermetic Docker-based run (no local Node/Playwright/Chromium needed — see `Dockerfile.e2e`).
+
+SSO e2e (feature 345) runs in the serialized `chromium-sso` project (`workers: 1`) against the stub IdP
+(`e2e/helpers/stubIdp.ts`); every e2e case that changes `auth.mode` or other stub state lives in
+`e2e/sso/sso.spec.ts`, which `chromium` ignores.
 
 E2E harness internals — SSR pre-warming (`e2e/warmup.setup.ts` `ROUTES`), the serial-`describe` page-reuse optimization, and Playwright browser resolution (`launchOptions.executablePath`, Firefox drop, exact-version pin) — live on-demand in this service's `docs/` folder (**`e2e-testing.md`**).
 

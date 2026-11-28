@@ -110,10 +110,21 @@ the operator orphan sweep (`docs/runbooks/config-rollout.md`) reclaims it.
 Stateless OAuth 2.1 RS + AS facade (state lives in identity; the `txn` blob is HMAC-signed with
 `JWT_SECRET`); MCP requires an `aud`-bound JWT (`aud` == `AGENT_PUBLIC_URL`). Routes, the `aud`-binding
 contract and the discovery path-insertion quirk → `oauth.md` in this service's `docs/` folder.
+This is the MCP auth path in `auth.mode` `local` and `both`.
+
+### SSO (feature 345)
+
+`identity` / `auth.mode` (`local` | `both` | `oidc`, read per request by `app/sso_mode.py#current_auth_mode`) picks
+the MCP auth path. In `oidc` the agent is a resource server for `agent/oidc.issuer` only (`app/sso_auth.py`,
+`app/jwks.py`): it verifies the issuer's access token, resolves `(iss, sub)` to the xstockstrat user with identity
+`ResolveExternalIdentity` (cached 60 s), stamps that `user_id` and `roles_to_access_scope(roles) & scopes_to_mask(granted)`,
+and 404s the built-in OAuth routes. The web UI's SSO uses the `ui/oidc.*` keys; users connect their issuer account
+through Link SSO in the UI while the mode is `both`. Statuses and PRM by mode → `oauth.md` in this service's `docs/` folder; connector setup →
+`docs/runbooks/mcp-tools.md`.
 
 ## Config Keys Consumed
 
-Namespace: `agent` (plus `indicators` for the formula deadline). Keys are listed and read as namespace-relative
+Namespace: `agent` (plus `indicators` for the formula deadline and `identity` for `auth.mode`). Keys are listed and read as namespace-relative
 (`signal.alert_threshold`); logs and tool text may print the FQN `agent.<key>`. Reads are lifespan `WatchConfig`
 snapshot lookups (constitution **AGENT-9**); an absent key falls back to the caller's default. The `ExecuteFormula`
 deadline is derived per call by `client.formula_deadline_s()`: `sandbox.timeout_ms` plus `sandbox.startup_grace_ms`
@@ -121,6 +132,8 @@ deadline is derived per call by `client.formula_deadline_s()`: `sandbox.timeout_
 
 | Key | Type | Default | Description |
 |---|---|---|---|
+| `auth.mode` (namespace `identity`) | string | `local` | MCP auth path (feature 345): `oidc` → issuer tokens only; else the built-in OAuth server. Any other value → `local` + WARN `auth_mode_invalid` once per value |
+| `oidc.issuer` | string | `""` | Issuer whose access tokens MCP accepts in `auth.mode` `oidc` (feature 345); invalid or empty → every MCP call and the PRM answer 503, ERROR `sso_issuer_invalid` |
 | `oauth.registration_enabled` | bool | `true` | Allow RFC 7591 DCR at `/oauth/register` (disabled ⇒ 403; policy snapshot absent ⇒ 503) |
 | `oauth.allowed_redirect_uris` | string | `""` | Comma-separated exact redirect URIs; empty = require `https://` at registration only |
 | `signal.alert_threshold` | float | `0.6` | Conviction threshold above which `ingest_signal` auto-emits an alert (feature 093 — was env-blind, so effectively always the default; now env-scoped, best-effort) |

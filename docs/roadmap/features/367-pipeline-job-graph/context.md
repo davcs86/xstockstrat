@@ -676,3 +676,13 @@ Carried from design.md § Open Risks; each needs an owner at `/sdd-spec` or late
 - Deviations: none.
 - All 19 steps done. `node scripts/check-config-wiring.mjs --final` exit 0 (two `REPORTED` baseline
   findings, neither this feature's). Status → `code-completed`.
+
+### Merge of origin/main-dev (feature 345 landed)
+- `origin/main-dev` brought feature 345 (`authelia-sso`, config `060_authelia_sso_keys`). This
+  feature's `061` stays above it: no renumber (merge-order.md § Config seed number: 367 ↔ 345).
+- The only conflict was the generated `scripts/config-wiring-stored.json`, resolved by regenerating it
+  on a throwaway PostgreSQL 16 (the operator-approved route; cluster removed afterwards): 12 rows from
+  `061`, 18 from `060`; `config-heal-dryrun.py --fresh` unchanged.
+- Post-merge gates: wiring `--final` and `--doc-check` exit 0; migration order ok; watcher copies,
+  context map and ledger guard clean; config 464 passed (c8 ≥ 40, lint 0 errors); analysis 2162 passed,
+  coverage 92.28%, ruff clean.

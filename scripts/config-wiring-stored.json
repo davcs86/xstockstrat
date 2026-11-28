@@ -169,6 +169,30 @@
             "consuming_service": "xstockstrat-agent"
         },
         {
+            "key": "oidc.issuer",
+            "file": "060_authelia_sso_keys.up.sql",
+            "global": true,
+            "is_secret": false,
+            "namespace": "agent",
+            "value_type": "string",
+            "description": "OIDC issuer URL for MCP bearer tokens in auth.mode oidc. Read by xstockstrat-agent. Valid form (FR-14): https (http only on localhost, 127.0.0.1 or [::1]), a lowercase host, no IP except loopback, no IDN or xn-- label, no default port, no userinfo, query, fragment or %, and no trailing slash. Empty is invalid in auth.mode both or oidc.",
+            "environment": "production",
+            "default_value": "",
+            "consuming_service": "xstockstrat-agent"
+        },
+        {
+            "key": "oidc.issuer",
+            "file": "060_authelia_sso_keys.up.sql",
+            "global": true,
+            "is_secret": false,
+            "namespace": "agent",
+            "value_type": "string",
+            "description": "OIDC issuer URL for MCP bearer tokens in auth.mode oidc. Read by xstockstrat-agent. Valid form (FR-14): https (http only on localhost, 127.0.0.1 or [::1]), a lowercase host, no IP except loopback, no IDN or xn-- label, no default port, no userinfo, query, fragment or %, and no trailing slash. Empty is invalid in auth.mode both or oidc.",
+            "environment": "staging",
+            "default_value": "",
+            "consuming_service": "xstockstrat-agent"
+        },
+        {
             "key": "opportunities.read_timeout_seconds",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
@@ -2159,6 +2183,30 @@
             "environment": "staging",
             "default_value": "4",
             "consuming_service": "xstockstrat-analysis"
+        },
+        {
+            "key": "auth.mode",
+            "file": "060_authelia_sso_keys.up.sql",
+            "global": true,
+            "is_secret": false,
+            "namespace": "identity",
+            "value_type": "string",
+            "description": "Login mode for this deployment: local (password; built-in MCP OAuth), both (SSO and password; Link SSO; built-in MCP OAuth) or oidc (SSO only; MCP accepts issuer tokens only). Any other value reads as local. Read globally; set with scripts/manage-users.py set-auth-mode.",
+            "environment": "production",
+            "default_value": "local",
+            "consuming_service": "xstockstrat-identity"
+        },
+        {
+            "key": "auth.mode",
+            "file": "060_authelia_sso_keys.up.sql",
+            "global": true,
+            "is_secret": false,
+            "namespace": "identity",
+            "value_type": "string",
+            "description": "Login mode for this deployment: local (password; built-in MCP OAuth), both (SSO and password; Link SSO; built-in MCP OAuth) or oidc (SSO only; MCP accepts issuer tokens only). Any other value reads as local. Read globally; set with scripts/manage-users.py set-auth-mode.",
+            "environment": "staging",
+            "default_value": "local",
+            "consuming_service": "xstockstrat-identity"
         },
         {
             "key": "jwt.access_ttl_seconds",
@@ -5329,6 +5377,174 @@
             "consuming_service": "xstockstrat-ui"
         },
         {
+            "key": "oidc.client_id",
+            "file": "060_authelia_sso_keys.up.sql",
+            "global": true,
+            "is_secret": false,
+            "namespace": "ui",
+            "value_type": "string",
+            "description": "OIDC client ID of the xstockstrat web client registered at ui/oidc.issuer. Empty is invalid in auth.mode both or oidc.",
+            "environment": "production",
+            "default_value": "",
+            "consuming_service": "xstockstrat-ui"
+        },
+        {
+            "key": "oidc.client_id",
+            "file": "060_authelia_sso_keys.up.sql",
+            "global": true,
+            "is_secret": false,
+            "namespace": "ui",
+            "value_type": "string",
+            "description": "OIDC client ID of the xstockstrat web client registered at ui/oidc.issuer. Empty is invalid in auth.mode both or oidc.",
+            "environment": "staging",
+            "default_value": "",
+            "consuming_service": "xstockstrat-ui"
+        },
+        {
+            "key": "oidc.client_secret",
+            "file": "060_authelia_sso_keys.up.sql",
+            "global": true,
+            "is_secret": true,
+            "namespace": "ui",
+            "value_type": "string",
+            "description": "OIDC client secret of the xstockstrat web client (encrypted secret; set per environment with SetConfig). Decrypted only by GetSecret for xstockstrat-ui.",
+            "environment": "production",
+            "default_value": null,
+            "consuming_service": "xstockstrat-ui"
+        },
+        {
+            "key": "oidc.client_secret",
+            "file": "060_authelia_sso_keys.up.sql",
+            "global": true,
+            "is_secret": true,
+            "namespace": "ui",
+            "value_type": "string",
+            "description": "OIDC client secret of the xstockstrat web client (encrypted secret; set per environment with SetConfig). Decrypted only by GetSecret for xstockstrat-ui.",
+            "environment": "staging",
+            "default_value": null,
+            "consuming_service": "xstockstrat-ui"
+        },
+        {
+            "key": "oidc.issuer",
+            "file": "060_authelia_sso_keys.up.sql",
+            "global": true,
+            "is_secret": false,
+            "namespace": "ui",
+            "value_type": "string",
+            "description": "OIDC issuer URL for web sign-in and Link SSO. Read by xstockstrat-ui. Valid form (FR-14): https (http only on localhost, 127.0.0.1 or [::1]), a lowercase host, no IP except loopback, no IDN or xn-- label, no default port, no userinfo, query, fragment or %, and no trailing slash. Empty is invalid in auth.mode both or oidc.",
+            "environment": "production",
+            "default_value": "",
+            "consuming_service": "xstockstrat-ui"
+        },
+        {
+            "key": "oidc.issuer",
+            "file": "060_authelia_sso_keys.up.sql",
+            "global": true,
+            "is_secret": false,
+            "namespace": "ui",
+            "value_type": "string",
+            "description": "OIDC issuer URL for web sign-in and Link SSO. Read by xstockstrat-ui. Valid form (FR-14): https (http only on localhost, 127.0.0.1 or [::1]), a lowercase host, no IP except loopback, no IDN or xn-- label, no default port, no userinfo, query, fragment or %, and no trailing slash. Empty is invalid in auth.mode both or oidc.",
+            "environment": "staging",
+            "default_value": "",
+            "consuming_service": "xstockstrat-ui"
+        },
+        {
+            "key": "oidc.mcp_client_id",
+            "file": "060_authelia_sso_keys.up.sql",
+            "global": true,
+            "is_secret": false,
+            "namespace": "ui",
+            "value_type": "string",
+            "description": "Pre-registered issuer client ID shown on /accounts/authorized-apps for Claude.ai MCP connectors (full scope) in auth.mode oidc. Empty hides the line.",
+            "environment": "production",
+            "default_value": "",
+            "consuming_service": "xstockstrat-ui"
+        },
+        {
+            "key": "oidc.mcp_client_id",
+            "file": "060_authelia_sso_keys.up.sql",
+            "global": true,
+            "is_secret": false,
+            "namespace": "ui",
+            "value_type": "string",
+            "description": "Pre-registered issuer client ID shown on /accounts/authorized-apps for Claude.ai MCP connectors (full scope) in auth.mode oidc. Empty hides the line.",
+            "environment": "staging",
+            "default_value": "",
+            "consuming_service": "xstockstrat-ui"
+        },
+        {
+            "key": "oidc.mcp_client_id_claude_code",
+            "file": "060_authelia_sso_keys.up.sql",
+            "global": true,
+            "is_secret": false,
+            "namespace": "ui",
+            "value_type": "string",
+            "description": "Pre-registered issuer client ID shown on /accounts/authorized-apps for Claude Code MCP clients (full scope) in auth.mode oidc. Empty hides the line.",
+            "environment": "production",
+            "default_value": "",
+            "consuming_service": "xstockstrat-ui"
+        },
+        {
+            "key": "oidc.mcp_client_id_claude_code",
+            "file": "060_authelia_sso_keys.up.sql",
+            "global": true,
+            "is_secret": false,
+            "namespace": "ui",
+            "value_type": "string",
+            "description": "Pre-registered issuer client ID shown on /accounts/authorized-apps for Claude Code MCP clients (full scope) in auth.mode oidc. Empty hides the line.",
+            "environment": "staging",
+            "default_value": "",
+            "consuming_service": "xstockstrat-ui"
+        },
+        {
+            "key": "oidc.mcp_client_id_claude_code_readonly",
+            "file": "060_authelia_sso_keys.up.sql",
+            "global": true,
+            "is_secret": false,
+            "namespace": "ui",
+            "value_type": "string",
+            "description": "Pre-registered issuer client ID shown on /accounts/authorized-apps for Claude Code MCP clients (read-only scope) in auth.mode oidc. Empty hides the line.",
+            "environment": "production",
+            "default_value": "",
+            "consuming_service": "xstockstrat-ui"
+        },
+        {
+            "key": "oidc.mcp_client_id_claude_code_readonly",
+            "file": "060_authelia_sso_keys.up.sql",
+            "global": true,
+            "is_secret": false,
+            "namespace": "ui",
+            "value_type": "string",
+            "description": "Pre-registered issuer client ID shown on /accounts/authorized-apps for Claude Code MCP clients (read-only scope) in auth.mode oidc. Empty hides the line.",
+            "environment": "staging",
+            "default_value": "",
+            "consuming_service": "xstockstrat-ui"
+        },
+        {
+            "key": "oidc.mcp_client_id_readonly",
+            "file": "060_authelia_sso_keys.up.sql",
+            "global": true,
+            "is_secret": false,
+            "namespace": "ui",
+            "value_type": "string",
+            "description": "Pre-registered issuer client ID shown on /accounts/authorized-apps for Claude.ai MCP connectors (read-only scope) in auth.mode oidc. Empty hides the line.",
+            "environment": "production",
+            "default_value": "",
+            "consuming_service": "xstockstrat-ui"
+        },
+        {
+            "key": "oidc.mcp_client_id_readonly",
+            "file": "060_authelia_sso_keys.up.sql",
+            "global": true,
+            "is_secret": false,
+            "namespace": "ui",
+            "value_type": "string",
+            "description": "Pre-registered issuer client ID shown on /accounts/authorized-apps for Claude.ai MCP connectors (read-only scope) in auth.mode oidc. Empty hides the line.",
+            "environment": "staging",
+            "default_value": "",
+            "consuming_service": "xstockstrat-ui"
+        },
+        {
             "key": "performance.equity_curve_start_date",
             "file": "023_ui_performance_keys.up.sql",
             "global": true,
@@ -5377,5 +5593,5 @@
             "consuming_service": "xstockstrat-ui"
         }
     ],
-    "inputs_sha256": "58bdc3e7707ecddbda2f3d53df264091b6a11c2b10b84081a4254f024fec92a0"
+    "inputs_sha256": "40b4b8eef95fa237c0282142c8fdd6884ca4c8d2782f3346a1e9b0a313400f72"
 }

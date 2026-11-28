@@ -24,7 +24,7 @@ export const config = {
 };
 
 // Exact paths only (FR-3) — a prefix match would exempt lookalikes. agent-health keeps its own session check (route.ts:7-8).
-const PUBLIC_HEALTH_PATHS = new Set([
+export const PUBLIC_HEALTH_PATHS = new Set([
   '/trader/health',
   '/trader/api/health',
   '/insights/health',
@@ -35,8 +35,21 @@ const PUBLIC_HEALTH_PATHS = new Set([
   '/accounts/api/agent-health',
 ]);
 
+// The SSO routes run their own checks and must not be redirected mid-flow (D-40); /accounts/api/sso* is not exempt.
+export const SSO_PUBLIC_PATHS = new Set(['/api/auth/sso/start', '/api/auth/sso/callback']);
+// Logout clears a dead session itself; without either cookie there is nothing to clear (D-62).
+export const COOKIE_GATED_PATHS = new Set(['/api/auth/logout']);
+
 export async function middleware(req: NextRequest) {
-  if (PUBLIC_HEALTH_PATHS.has(req.nextUrl.pathname)) return NextResponse.next();
+  const path = req.nextUrl.pathname;
+  if (SSO_PUBLIC_PATHS.has(path)) return NextResponse.next();
+  if (
+    COOKIE_GATED_PATHS.has(path) &&
+    (req.cookies.has('access_token') || req.cookies.has('refresh_token'))
+  ) {
+    return NextResponse.next();
+  }
+  if (PUBLIC_HEALTH_PATHS.has(path)) return NextResponse.next();
 
   const claims = await getSessionFromRequest(req);
 

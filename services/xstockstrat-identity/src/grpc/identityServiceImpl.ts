@@ -7,9 +7,18 @@ import { ConfigWatcher } from '../services/configWatcher';
 import { getLogger } from '../services/logger';
 import { userIdFrom, hasAdminAccessScope, ADMIN_SCOPE_ERROR } from './authz';
 import { LedgerAudit, NOOP_LEDGER_AUDIT } from './ledgerAudit';
-import { listAdminUserIds } from './adminDirectory';
+import { hasPeerSan, listAdminUserIds } from './adminDirectory';
+import {
+  EXTERNAL_IDENTITIES_ISSUER_USER_KEY,
+  EXTERNAL_IDENTITIES_PKEY,
+  EXTERNAL_IDENTITY_PEER_SANS,
+  ExternalIdentityRpc,
+  peerDenied,
+} from './externalIdentity';
+import { readAuthMode } from '../authMode';
 import {
   recordExchangeFailure,
+  recordLinkFailure,
   recordLoginFailure,
   recordRefreshRejection,
   recordRevokeUnverifiable,
@@ -56,6 +65,38 @@ export const SEED_ADMIN_PASSWORD_HASH =
 // (APPLICATION_ENV != 'production') keep the convenience login.
 export function isBlockedDefaultAdmin(passwordHash: string, appEnv: string | undefined): boolean {
   return (appEnv ?? 'development') === 'production' && passwordHash === SEED_ADMIN_PASSWORD_HASH;
+}
+
+interface PasswordUser {
+  user_id: string;
+  email: string;
+  password_hash: string;
+  roles: string[] | null;
+  is_active: boolean;
+}
+type PasswordCheck =
+  | { ok: true; user: PasswordUser }
+  | { ok: false; reason: 'unknown' | 'inactive' | 'bad_password' }
+  | { ok: false; reason: 'blocked_default_admin'; user_id: string };
+
+// Every argument is required: the reply shape of AuthenticateUser and RefreshToken (D-122).
+export function sessionResponse(
+  minted: { accessToken: string; issuedAt: number; expiresAt: number },
+  refreshToken: string,
+  claims: { userId: string; email: string; roles: string[] | null },
+) {
+  return {
+    accessToken: minted.accessToken,
+    refreshToken,
+    expiresAt: secondsToDate(minted.expiresAt),
+    claims: {
+      userId: claims.userId,
+      email: claims.email,
+      roles: claims.roles ?? [],
+      issuedAt: secondsToDate(minted.issuedAt),
+      expiresAt: secondsToDate(minted.expiresAt),
+    },
+  };
 }
 
 function toUserView(row: any) {
@@ -145,6 +186,26 @@ export class IdentityServiceImpl {
     return this.config.getInt('jwt.refresh_ttl_seconds', 2592000);
   }
 
+  // Records no metric and logs nothing: each caller maps the reason to its own reply (D-102).
+  private async verifyPassword(
+    selector: { email: string } | { userId: string },
+    password: string,
+  ): Promise<PasswordCheck> {
+    const [column, value] = 'email' in selector ? ['email', selector.email] : ['user_id', selector.userId];
+    const result = await this.pool.query(
+      `SELECT user_id, email, password_hash, roles, is_active FROM identity.users WHERE ${column} = $1`,
+      [value]
+    );
+    if (result.rows.length === 0) return { ok: false, reason: 'unknown' };
+    const user: PasswordUser = result.rows[0];
+    if (!user.is_active) return { ok: false, reason: 'inactive' };
+    if (isBlockedDefaultAdmin(user.password_hash, process.env.APPLICATION_ENV)) {
+      return { ok: false, reason: 'blocked_default_admin', user_id: user.user_id };
+    }
+    if (!(await bcrypt.compare(password, user.password_hash))) return { ok: false, reason: 'bad_password' };
+    return { ok: true, user };
+  }
+
   /**
    * AuthenticateUser — validates credentials, returns JWT pair.
    */
@@ -154,51 +215,32 @@ export class IdentityServiceImpl {
       recordLoginFailure('missing_fields');
       return callback({ code: 3, message: 'email and password required' });
     }
+    if (readAuthMode(this.config) === 'oidc') {
+      recordLoginFailure('password_login_disabled');
+      return callback({ code: 7, message: 'password login disabled' });
+    }
     try {
-      const result = await this.pool.query(
-        'SELECT user_id, password_hash, roles FROM identity.users WHERE email = $1 AND is_active = true',
-        [email]
-      );
-      if (result.rows.length === 0) {
-        recordLoginFailure('unknown_or_inactive');
+      const check = await this.verifyPassword({ email }, password);
+      if (!('user' in check)) {
+        if (check.reason === 'blocked_default_admin') {
+          // Production refuses the committed default-admin seed credential until it is rotated.
+          log.warn(
+            'Refused default seed-admin login in production; rotate its password via scripts/manage-users.py reset-password',
+            { user_id: check.user_id }
+          );
+          recordLoginFailure('blocked_default_admin');
+        } else {
+          recordLoginFailure(check.reason === 'bad_password' ? 'bad_password' : 'unknown_or_inactive');
+        }
         return callback({ code: 16, message: 'invalid credentials' });
       }
-      const user = result.rows[0];
+      const { user } = check;
 
-      // Refuse the committed default-admin seed credential in production (migration 002 seeds a
-      // known "admin" password for local dev only). This blocks a known-credential takeover until
-      // an operator rotates it via scripts/manage-users.py; dev/staging keep the convenience login.
-      if (isBlockedDefaultAdmin(user.password_hash, process.env.APPLICATION_ENV)) {
-        log.warn(
-          'Refused default seed-admin login in production; rotate its password via scripts/manage-users.py reset-password',
-          { user_id: user.user_id }
-        );
-        recordLoginFailure('blocked_default_admin');
-        return callback({ code: 16, message: 'invalid credentials' });
-      }
-
-      const passwordValid = await bcrypt.compare(password, user.password_hash);
-      if (!passwordValid) {
-        recordLoginFailure('bad_password');
-        return callback({ code: 16, message: 'invalid credentials' });
-      }
-
-      const { accessToken, issuedAt, expiresAt } = this.mintAccessToken(user.user_id, email, user.roles);
+      const minted = this.mintAccessToken(user.user_id, email, user.roles);
       const refreshToken = await this.issueRefreshToken(user.user_id);
 
       log.info('User authenticated', { userId: user.user_id });
-      callback(null, {
-        accessToken,
-        refreshToken,
-        expiresAt: secondsToDate(expiresAt),
-        claims: {
-          userId: user.user_id,
-          email,
-          roles: user.roles ?? [],
-          issuedAt: secondsToDate(issuedAt),
-          expiresAt: secondsToDate(expiresAt),
-        },
-      });
+      callback(null, sessionResponse(minted, refreshToken, { userId: user.user_id, email, roles: user.roles }));
     } catch (err: any) {
       recordLoginFailure('internal');
       log.error('authenticateUser failed', { error: err.message });
@@ -253,21 +295,10 @@ export class IdentityServiceImpl {
       const { user_id, email, roles } = rotated.row;
       const newRefreshToken = rotated.refreshToken;
 
-      const { accessToken: newAccessToken, issuedAt, expiresAt } = this.mintAccessToken(user_id, email, roles);
+      const minted = this.mintAccessToken(user_id, email, roles);
 
       log.info('Token refreshed', { userId: user_id });
-      callback(null, {
-        accessToken: newAccessToken,
-        refreshToken: newRefreshToken,
-        expiresAt: secondsToDate(expiresAt),
-        claims: {
-          userId: user_id,
-          email,
-          roles: roles ?? [],
-          issuedAt: secondsToDate(issuedAt),
-          expiresAt: secondsToDate(expiresAt),
-        },
-      });
+      callback(null, sessionResponse(minted, newRefreshToken, { userId: user_id, email, roles }));
     } catch (err: any) {
       log.error('refreshToken failed', { error: err.message });
       callback({ code: 13, message: err.message });
@@ -996,5 +1027,140 @@ export class IdentityServiceImpl {
 
   async listAdminUserIds(call: any, callback: any) {
     return listAdminUserIds(this.pool, call, callback);
+  }
+
+  // SAN gate shared by the four external-identity RPCs: runs before any header or pool access.
+  private peerGate(rpc: ExternalIdentityRpc, call: any, callback: any): boolean {
+    if (hasPeerSan(call, EXTERNAL_IDENTITY_PEER_SANS[rpc])) return true;
+    callback(peerDenied(rpc));
+    return false;
+  }
+
+  async resolveExternalIdentity(call: any, callback: any) {
+    if (!this.peerGate('ResolveExternalIdentity', call, callback)) return;
+    const { issuer, subject } = call.request;
+    if (!issuer || !subject) return callback({ code: 3, message: 'issuer and subject required' });
+    try {
+      const r = await this.pool.query(
+        `SELECT u.user_id, u.roles, u.is_active FROM identity.external_identities e
+         JOIN identity.users u USING (user_id) WHERE e.issuer = $1 AND e.subject = $2`,
+        [issuer, subject]
+      );
+      if (r.rows.length === 0) return callback({ code: 9, message: 'not linked' });
+      const row = r.rows[0];
+      if (!row.is_active) return callback({ code: 9, message: 'account inactive' });
+      callback(null, { userId: row.user_id, roles: stringsToRoles(row.roles), isActive: true });
+    } catch (err: any) {
+      log.error('resolveExternalIdentity failed', { error: err?.message });
+      callback({ code: 13, message: 'resolve failed' });
+    }
+  }
+
+  async issueSessionForUser(call: any, callback: any) {
+    if (!this.peerGate('IssueSessionForUser', call, callback)) return;
+    const { userId } = call.request;
+    if (!userId) return callback({ code: 3, message: 'userId required' });
+    try {
+      const r = await this.pool.query(
+        'SELECT user_id, email, roles, is_active FROM identity.users WHERE user_id = $1',
+        [userId]
+      );
+      if (r.rows.length === 0) return callback({ code: 5, message: 'user not found' });
+      const user = r.rows[0];
+      if (!user.is_active) return callback({ code: 9, message: 'account inactive' });
+      const minted = this.mintAccessToken(user.user_id, user.email, user.roles);
+      const refreshToken = await this.issueRefreshToken(user.user_id);
+      callback(
+        null,
+        sessionResponse(minted, refreshToken, { userId: user.user_id, email: user.email, roles: user.roles }),
+      );
+    } catch (err: any) {
+      log.error('issueSessionForUser failed', { error: err?.message });
+      callback({ code: 13, message: 'session issue failed' });
+    }
+  }
+
+  async linkExternalIdentity(call: any, callback: any) {
+    if (!this.peerGate('LinkExternalIdentity', call, callback)) return;
+    const { userId, issuer, subject, password } = call.request;
+    if (!userId || !issuer || !subject || !password) {
+      return callback({ code: 3, message: 'userId, issuer, subject and password required' });
+    }
+    if (readAuthMode(this.config) !== 'both') {
+      recordLinkFailure('link_disabled');
+      return callback({ code: 9, message: 'link disabled' });
+    }
+    try {
+      const check = await this.verifyPassword({ userId }, password);
+      if (!('user' in check)) {
+        if (check.reason === 'inactive') {
+          recordLinkFailure('inactive');
+          return callback({ code: 9, message: 'account inactive' });
+        }
+        recordLinkFailure('invalid_credentials');
+        return callback({ code: 9, message: 'invalid credentials' });
+      }
+      const refusal = await this.insertLink(issuer, subject, userId);
+      if (refusal) {
+        recordLinkFailure(refusal === 'account already linked' ? 'already_linked' : 'already_linked_issuer');
+        return callback({ code: 9, message: refusal });
+      }
+      callback(null, {});
+      void this.auditSafe('identity.external.linked', userId, call.metadata, {
+        user_id: userId,
+        issuer,
+        outcome: 'linked',
+      });
+    } catch (err: any) {
+      recordLinkFailure('internal');
+      log.error('linkExternalIdentity failed', { error: err?.message });
+      callback({ code: 13, message: 'link failed' });
+    }
+  }
+
+  // Returns a refusal message, or null once the row is inserted; a unique violation is mapped by
+  // constraint name before mapDbError ever sees it (D-118).
+  private async insertLink(
+    issuer: string,
+    subject: string,
+    userId: string,
+    retried = false,
+  ): Promise<string | null> {
+    try {
+      await this.pool.query(
+        'INSERT INTO identity.external_identities (issuer, subject, user_id) VALUES ($1, $2, $3)',
+        [issuer, subject, userId]
+      );
+      return null;
+    } catch (err: any) {
+      if (err?.code !== '23505') throw err;
+      if (err.constraint === EXTERNAL_IDENTITIES_ISSUER_USER_KEY) return 'already linked to this issuer';
+      if (err.constraint !== EXTERNAL_IDENTITIES_PKEY) throw err;
+      const owner = await this.pool.query(
+        'SELECT user_id FROM identity.external_identities WHERE issuer = $1 AND subject = $2',
+        [issuer, subject]
+      );
+      if (owner.rows.length === 0) {
+        if (retried) throw err;
+        return this.insertLink(issuer, subject, userId, true);
+      }
+      return owner.rows[0].user_id === userId ? 'already linked to this issuer' : 'account already linked';
+    }
+  }
+
+  async getExternalIdentityLinks(call: any, callback: any) {
+    if (!this.peerGate('GetExternalIdentityLinks', call, callback)) return;
+    const { userId } = call.request;
+    if (!userId) return callback({ code: 3, message: 'userId required' });
+    try {
+      const r = await this.pool.query(
+        'SELECT issuer FROM identity.external_identities WHERE user_id = $1 ORDER BY issuer',
+        [userId]
+      );
+      callback(null, { issuers: r.rows.map((row: any) => row.issuer) });
+    } catch (err: any) {
+      log.error('getExternalIdentityLinks failed', { error: err?.message });
+      callback({ code: 13, message: 'link lookup failed' });
+    }
   }
 }
