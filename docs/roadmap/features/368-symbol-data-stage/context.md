@@ -149,3 +149,15 @@
   a missed session is not run later and its bars are filled by the next run. To be confirmed at
   the approval gate.
 - Standing gate choice still applies: run further rounds while they make progress.
+
+## Session 2026-11-28T08:40Z — sdd-design round 3
+
+- Round 3 run on the consolidated design (lenses: spec author, test writer, operator on a bad day,
+  numeric sweep). Register: +8 decisions (D-33 to D-40), 7 objections closed, 8 raised (O-31 to
+  O-38). No Floor breach, no register violation, no C-16 regression.
+- Open: O-7/O-36 (ledger volume sign-off), O-20, O-21 (fundamentals values, pending sign-off),
+  O-28 (finality is unmeasured at runtime), O-31 (run gate must be fixed per run), O-32 (outage
+  loses the session), O-33 (a daily-failing symbol blocks the run every day), O-34 (fundamentals
+  checks bunch), O-35, O-37, O-38.
+- Needs the operator before round 4: outage recovery (O-32), the failing-symbol policy (O-33,
+  touches `@AC-10`), ledger volume (O-36), fundamentals cadence values (O-20, O-21, O-34).
