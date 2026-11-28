@@ -239,3 +239,20 @@ async def test_failed_task_without_awaiter_is_retrieved(idp, sso_keys, clock):
     finally:
         loop.set_exception_handler(None)
     assert not [m for m in seen if m and "never retrieved" in m]
+
+
+@pytest.mark.parametrize("use", ["enc", "", "SIG"])
+async def test_370_ac10_non_signing_use_skipped_with_warn(idp, sso_keys, caplog, use):
+    _, keys = idp
+    keys.mock(return_value=_ok({"keys": [{**sso_keys.jwk, "use": use}]}))
+    with caplog.at_level(logging.WARNING, logger="app.jwks"):
+        assert await jwks.key_for(ISSUER, sso_keys.kid) == "unavailable"
+    assert [getattr(r, "reason", None) for r in caplog.records] == ["use"]
+
+
+@pytest.mark.parametrize("extra", [{"use": "sig"}, {}])
+async def test_370_ac10_signing_or_absent_use_is_used(idp, sso_keys, extra):
+    _, keys = idp
+    jwk = {k: v for k, v in sso_keys.jwk.items() if k != "use"}
+    keys.mock(return_value=_ok({"keys": [{**jwk, **extra}]}))
+    assert _n(await jwks.key_for(ISSUER, sso_keys.kid)) == _modulus(sso_keys.jwk)

@@ -110,6 +110,9 @@ def _ingest(body) -> dict:
         if not isinstance(kid, str) or not kid or alg not in _ASYMMETRIC_ALGS:
             log.warning("jwks key skipped", extra={"reason": "kid_or_alg"})
             continue
+        if "use" in jwk and jwk["use"] != "sig":
+            log.warning("jwks key skipped", extra={"reason": "use"})
+            continue
         try:
             keys[kid] = (PyJWK(jwk), alg)
         except Exception:
