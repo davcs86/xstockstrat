@@ -1190,3 +1190,8 @@
 ## Session 2026-11-28 — Claude Code loopback redirect (owner probe)
 - Owner ran Claude Code against the homelab staging agent (`auth.mode` `local`): DCR answered `400 invalid_redirect_uri` ("redirect_uris must be https"); the debug log shows a per-login loopback port (61228) but not the path.
 - `docs/runbooks/mcp-tools.md` now states the redirect as `http` to `localhost` on a per-login port (path not asserted) and that Claude Code cannot connect to the homelab agent in any mode. Closes the open "loopback redirect unverified" thread.
+
+## Session 2026-11-28 — review nits fixed (owner request)
+- Owner request 2026-11-28, relayed by the coordinating session: **"fix all nits"** — the five independent-review items left open on 2026-11-27 (4 middleware header strip, 5 identity SSO RPC mode check, 6 link txn session binding, 7 SSO cookie hygiene, 8 agent JWKS `use`).
+- Routed as a review-found SEV-3 bug (Track C): defect report `docs/reports/2026-11-28-sso-review-hardening-nits-defect.md` → feature `370-fix-sso-review-hardening`; branch `claude/345-sso-security-nits`, one PR to `main-dev`.
+- Item 6 (coordinator decision 2026-11-28 under the owner's standing authority): bind the link to SHA-256 of the session's `refresh_token` (identity's `token_hash`); pre-rotate at link start when fewer than 600 + 60 s remain; fail closed when the access-token TTL is under 660 s. Rejected: plain hash (10–20 % false refusals), a stable session id (identity migration, disproportionate for a nit). **TTL coupling**: link needs `identity/jwt.access_ttl_seconds` ≥ 660. Details and the middleware cookie-forwarding call → 370 `context.md`.
