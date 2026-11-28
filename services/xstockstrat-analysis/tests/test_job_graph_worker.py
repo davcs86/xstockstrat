@@ -447,12 +447,15 @@ class _HangingPool:
 
 
 async def test_a_control_lane_operation_lasts_at_most_eight_seconds(virtual_time):
+    virtual_time.now = 60.19212977  # a CI clock origin where (t + 8) - t > 8 in floats
     repo = PipelineJobsRepository(_HangingPool(), monotonic=lambda: virtual_time.now)
-    task = asyncio.create_task(repo.reap(5))
     start = virtual_time.now
-    await virtual_time.advance(8)
+    task = asyncio.create_task(repo.reap(5))
+    ended = []
+    task.add_done_callback(lambda _t: ended.append(virtual_time.now))
+    await virtual_time.advance(10)
     assert task.done() and isinstance(task.exception(), Exception)
-    assert virtual_time.now - start <= 8
+    assert ended[0] - start <= 8
 
 
 async def test_a_runner_holds_the_lane_at_most_fourteen_seconds(virtual_time, bg):
@@ -469,9 +472,8 @@ async def test_a_runner_holds_the_lane_at_most_fourteen_seconds(virtual_time, bg
     await virtual_time.advance(0.5)
     gate.set()
     await virtual_time.advance(0.1)
-    started = virtual_time.now
     await virtual_time.advance(14)
-    assert repo.jobs[1]["state"] == "succeeded" and virtual_time.now - started <= 14
+    assert repo.jobs[1]["state"] == "succeeded"  # within the 14 s just advanced
     assert not repo._lane.locked()
 
 

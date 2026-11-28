@@ -706,3 +706,15 @@ Carried from design.md § Open Risks; each needs an owner at `/sdd-spec` or late
 **Progress**: 19 done / 19 total
 **Stopped at**: all complete; integration PR https://github.com/davcs86/xstockstrat/pull/1639 (CI watch on)
 **Next**: merge PR #1639 when CI passes and reviewers approve
+
+### CI fix on PR #1639 — float-exact virtual-time bound
+- `Python test and coverage (xstockstrat-analysis)` failed on `43bb05e`:
+  `test_a_control_lane_operation_lasts_at_most_eight_seconds` asserted `virtual_time.now - start <= 8`
+  right after `advance(8)`, which measures the clock, not the operation; with CI's loop-time origin
+  `(t + 8) - t` is `8.000000000000007`. Reproduced locally by pinning the clock to `60.19212977`.
+- Fix (test only): the test records the operation's own completion time with a done-callback and keeps
+  the CI origin pinned; the runner test's tautological `now - started <= 14` clause is dropped (its
+  "succeeded within the 14 s advanced" check is the bound). Worker file 24 passed ×3; full suite 2162
+  passed, coverage 92.28%; ruff clean.
+- The earlier red `Secret scan` was a superseded run on `2983c38`: gitleaks listed PR commits up to
+  `43bb05e`, absent from that checkout; TruffleHog found 0 secrets.
