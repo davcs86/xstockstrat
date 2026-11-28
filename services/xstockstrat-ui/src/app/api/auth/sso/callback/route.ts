@@ -156,6 +156,7 @@ async function completeLink(
       sub: claims.sub,
       label: claims.email ?? claims.preferred_username ?? LINK_LABEL_DEFAULT,
       user_id: txn.user_id,
+      session_hash: txn.session_hash,
       exp: txn.exp,
     }),
     ssoLinkCookieOpts(txn.exp),

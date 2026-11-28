@@ -8,7 +8,7 @@ import { loadAuthMode } from '@/lib/oidcConfig';
 import { restBackendHeaders } from '@/lib/restBackendHeaders';
 import { isSameOrigin } from '@/lib/sameOrigin';
 import { linkRefusalCode, type LinkErrorCode } from '@/lib/ssoErrors';
-import { clearSsoLink, openSsoLink, SSO_LINK_COOKIE } from '@/lib/ssoTxn';
+import { clearSsoLink, openSsoLink, sessionHashMatches, SSO_LINK_COOKIE } from '@/lib/ssoTxn';
 
 // A refusal is never 401: apiFetch would retry it after a refresh (authRedirect.ts).
 function refuse(code: LinkErrorCode, status: number, clearLink: boolean): NextResponse {
@@ -30,7 +30,12 @@ async function postHandler(req: NextRequest) {
   const body = await req.json().catch(() => ({}));
   const sealed = req.cookies.get(SSO_LINK_COOKIE)?.value;
   const link = sealed ? await openSsoLink(sealed) : null;
-  if (!link || link.user_id !== claims.user_id || link.link_id !== body?.linkId) {
+  if (
+    !link ||
+    link.user_id !== claims.user_id ||
+    link.link_id !== body?.linkId ||
+    !sessionHashMatches(link.session_hash, req.cookies.get('refresh_token')?.value)
+  ) {
     return refuse('failed', 400, true);
   }
   const password = typeof body.password === 'string' ? body.password : '';

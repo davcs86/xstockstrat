@@ -41,6 +41,7 @@ const link = (userId = TEST_USER_ID) =>
     sub: 'sso-subject-1',
     label: 'sso@example.test',
     user_id: userId,
+    session_hash: 'c'.repeat(64),
     exp: NOW_S + 600,
   });
 

@@ -61,6 +61,7 @@ const loginTxn = (over: { remember?: boolean; redirect?: string } = {}) =>
     remember: over.remember ?? false,
     redirect: over.redirect ?? '/trader',
   });
+const SESSION_HASH = 'a'.repeat(64);
 const linkTxn = () =>
   sealSsoTxn({
     purpose: 'link',
@@ -68,6 +69,7 @@ const linkTxn = () =>
     nonce: 'n-1',
     code_verifier: 'v-1',
     user_id: TEST_USER_ID,
+    session_hash: SESSION_HASH,
   });
 
 type Call = {
@@ -413,6 +415,7 @@ describe('link purpose', () => {
         label,
         user_id: TEST_USER_ID,
         exp: NOW_S + 600,
+        session_hash: SESSION_HASH,
       });
       expect(link!.link_id).toMatch(/^[0-9a-f-]{36}$/);
       expect(clearedNames(res)).toContain(txnCookieName(STATE));
