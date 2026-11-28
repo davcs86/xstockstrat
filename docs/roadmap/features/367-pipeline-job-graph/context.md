@@ -519,3 +519,14 @@ Carried from design.md § Open Risks; each needs an owner at `/sdd-spec` or late
   `services/xstockstrat-analysis/tests/test_pipeline_jobs_real_pg.py`, and (deviation)
   `services/xstockstrat-analysis/app/repositories/pipeline_jobs.py` (park sorts its children).
 - Deviations: the park-order fix (Deviation Log).
+
+### Step 9 — engine primitives [done]
+- `app/engine/job_graph.py`: `Lane`, `Child`, `Succeeded`/`WaitOn`/`Verdict`, `PermanentJobError`,
+  `AttemptStopped`, `classify`, `check_outcome` (a non-outcome return → `PermanentJobError`),
+  `backoff_seconds`, `truncate_error`, `HandlerRegistry` (`register`/`kinds`/`get`/`child_kinds`/
+  `validate`), `validate_wait_on`, `validate_verdict`, the named constants and the prune identity
+  (`PRUNE_KIND`, `PRUNE_SUBJECT`, `PRUNE_LANE`, `prune_epoch`, `prune_run_id`).
+- TDD: red/green recorded under Step 10. Gate: ruff clean; import ok (CI-equivalent `PYTHONPATH`,
+  Deviation Log); settings + classification tests pass; no `is_transient_db_error`.
+- Files modified: `services/xstockstrat-analysis/app/engine/job_graph.py`.
+- Deviations: none (import-check path only).

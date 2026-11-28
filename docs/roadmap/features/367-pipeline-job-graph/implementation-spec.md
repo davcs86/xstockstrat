@@ -852,7 +852,7 @@ uv run --extra dev pytest tests/test_pipeline_jobs_real_pg.py -q -rs | grep -c S
 
 ### Step 9 — service: engine primitives (lanes, outcomes, classifier, backoff, handler registry)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/engine/job_graph.py` — modify
@@ -1645,3 +1645,8 @@ _Populated by /sdd-execute as implementation proceeds._
   in `app/repositories/pipeline_jobs.py` (outside Step 8's **Files**) make the repository sort children by
   key, so its lock order is deterministic for any caller. **Disposition**: in-scope fix of Step 7's own
   code, staged with Step 8 and reported at the feature-end checkpoint (F-08 exception, P-03).
+- **Steps 7+ (execute, 2026-11-27) — CLI import checks.** Outside pytest, `gen` is not importable
+  (`tests/conftest.py:_setup_gen_path` registers it). The `python -c "from app… import …"` checks run with
+  `PYTHONPATH` = a scratchpad `gen` symlink to `packages/proto/gen/python` plus that directory itself,
+  mirroring the image (`Dockerfile`: editable install of the stubs and `/app/gen` symlink).
+  **Disposition**: CI-equivalent fallback.
