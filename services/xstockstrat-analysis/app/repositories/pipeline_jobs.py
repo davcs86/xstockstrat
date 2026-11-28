@@ -260,11 +260,11 @@ SELECT job_id FROM analysis.pipeline_jobs WHERE kind = $1 AND subject = $2 AND e
                     return job_id, False
         raise RuntimeError(f"enqueue of {kind}/{subject}/{epoch} found no row twice")
 
-    async def claim(self, kinds, limit, lease_seconds, *, conn=None):
+    async def claim(self, kinds, limit, lease_seconds, *, conn=None, lane_held=False):
         """Claim up to `limit` ready jobs → (rows, send time of the claim transaction)."""
         if not kinds or limit <= 0:
             return [], None
-        async with self._txn(conn) as tx:
+        async with self._txn(conn, lane_held=lane_held) as tx:
             rows = await tx.fetch(CLAIM_SQL, list(kinds), int(limit), float(lease_seconds))
             sent = getattr(tx, "begin_sent_at", None)
         return [dict(r) for r in rows], sent

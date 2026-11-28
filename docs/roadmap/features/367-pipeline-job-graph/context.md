@@ -541,3 +541,22 @@ Carried from design.md § Open Risks; each needs an owner at `/sdd-spec` or late
   green — 25 passed; full suite 2090 passed, coverage 92.34%; ruff clean; no local fixture (C-13).
 - Files modified: `services/xstockstrat-analysis/tests/test_job_graph_core.py`.
 - Deviations: none.
+
+### Step 11 — attempt, stop path, the three loops and the worker [done]
+- `app/engine/job_graph.py`: `ClaimedJob` (`db(budget)` behind a per-worker `asyncio.Lock` gate,
+  inside `bounded_txn` on the service pool, stage `gate`/`acquire`/`txn` with `txn` set by
+  `on_acquired`), `_Attempt`, and `JobGraphWorker` with `claim_tick` / `maintenance_tick` /
+  `heartbeat_tick`, `run_*_forever` through `run_supervised`, `start_listening`, `stats_step`, the
+  runner (handler through `supervision.spawn`, lane → `reporting` → wait ≤ 6 s for an in-flight batch
+  → report or park, retry 1…30 s to the 300 s give-up from the handler's end), the stop path
+  (lost / self-fence / 900 s deadline; abort in `txn`, cancel otherwise; 10 s grace → abandoned) and
+  the fixed constants. `app/jobs/__init__.py:build_registry` returns an empty validated registry.
+- Build choice: an attempt whose handler has ended but which is still waiting for the lane stays in
+  the heartbeat batch (phase `awaiting_lane`), as design.md § Heartbeat loop requires.
+- TDD: behaviour gated by Step 12. Gate: ruff clean; import ok; no `create_task(`,
+  `asyncio.Semaphore(` or `asyncio.shield`; `spawn(` present; core/settings/limits tests 57 passed;
+  watcher copies identical.
+- Files modified: `services/xstockstrat-analysis/app/engine/job_graph.py`,
+  `services/xstockstrat-analysis/app/jobs/__init__.py`, and (deviation)
+  `services/xstockstrat-analysis/app/repositories/pipeline_jobs.py` (`claim(lane_held=)`).
+- Deviations: `claim(lane_held=)` (Deviation Log).

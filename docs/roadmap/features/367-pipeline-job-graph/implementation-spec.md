@@ -958,7 +958,7 @@ grep -n "pytest.fixture" tests/test_job_graph_core.py ; test $? -eq 1   # C-13: 
 
 ### Step 11 — service: attempt, stop path, the three loops and the worker
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/engine/job_graph.py` — modify
@@ -1650,3 +1650,8 @@ _Populated by /sdd-execute as implementation proceeds._
   `PYTHONPATH` = a scratchpad `gen` symlink to `packages/proto/gen/python` plus that directory itself,
   mirroring the image (`Dockerfile`: editable install of the stubs and `/app/gen` symlink).
   **Disposition**: CI-equivalent fallback.
+- **Step 11 (execute, 2026-11-27) — `claim(lane_held=)`.** The claim tick reads `worker_enabled` after
+  the control lane is taken and then claims on that lane (design.md § Worker runtime, Claim loop), so
+  `PipelineJobsRepository.claim` gained the `lane_held=False` keyword `report` and `park` already have
+  (one line in `app/repositories/pipeline_jobs.py`, outside Step 11's **Files**). **Disposition**:
+  required by the step's own instructions; staged with Step 11 and reported at the feature-end checkpoint.
