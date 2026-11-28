@@ -11,6 +11,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-11-28 | `idea` → `draft` | /sdd-story | Product spec generated. Feature 3 of 9 in `docs/roadmap/program-job-graph-analysis-pipeline.md` |
+| 2026-11-28 | `draft` → `spec-ready` | /sdd-review | Product spec approved (round 1 failed on criteria 6 and 8/9; round 2 passed with advisory warnings, fixed in the spec). Overlap clean |
 
 ---
 
@@ -44,4 +45,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-review strategy-eval-projection product-spec` — AI review of product spec before running /sdd-spec
+`/sdd-design strategy-eval-projection` — full design recommended (DB migration, new effect path and read path, depends on 368)

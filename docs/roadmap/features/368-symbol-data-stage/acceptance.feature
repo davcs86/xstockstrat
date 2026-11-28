@@ -160,8 +160,9 @@ Feature: symbol-data-stage
   @AC-21 @FR-7
   Scenario: A stored source value is not changed by the feature
     Given the stored global value of marketdata.fundamentals.snapshot_source is "vendor" in production
-    When the feature's config migration is applied
+    When the feature is deployed
     Then the stored value is still "vendor"
+    And the key's seeded default is "edgar"
     And the fundamentals of "AAPL" are served with the configured vendor as their source
 
   @AC-22 @FR-6

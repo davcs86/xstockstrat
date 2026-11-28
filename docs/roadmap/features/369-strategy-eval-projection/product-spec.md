@@ -138,17 +138,18 @@ Both keys are in namespace `analysis`, written below in their display FQN, store
 namespace-relative (`pipeline.evaluation_enabled`, `projection.read_source`) and read fresh at
 each use through the service's `WatchConfig` watcher (PLAT-6).
 
-- Reader of `pipeline.evaluation_enabled`: a new accessor on
+- Reader of `pipeline.evaluation_enabled`: a new accessor (name fixed at `/sdd-spec`) on
   `services/xstockstrat-analysis/app/engine/job_graph.py:JobGraphSettings`, read as
   `get_bool("pipeline.evaluation_enabled", default=True)` like the existing `worker_enabled`, so a
   missing row reads `true` (feature-100 trap).
 - Readers of `projection.read_source`: the servicer methods `ListOpportunities`,
   `EvaluateReadiness` and `GetWatchlistReadiness` in
-  `services/xstockstrat-analysis/app/handlers/servicer.py`, through one shared accessor; a missing
+  `services/xstockstrat-analysis/app/handlers/servicer.py`, through one shared accessor in that
+  file (name fixed at `/sdd-spec`); a missing
   or unrecognised value reads `legacy`.
 
 Seed migration:
-`services/xstockstrat-config/migrations/063_analysis_evaluation_keys` (`061` is the latest on
+`services/xstockstrat-config/migrations/063_analysis_evaluation_keys` (an up and down pair; `061` is the latest on
 `main-dev` today and `062` is planned by feature 368; re-check at `/sdd-spec` and `/sdd-execute`).
 
 - `analysis.pipeline.evaluation_enabled` — bool, code default `true`. Kill switch for evaluation jobs, the outbox and the parity step (FR-11).
@@ -160,7 +161,7 @@ either a constant or a key added to this section before `/sdd-spec`.
 ## Database Changes
 
 New tables in the `analysis` schema for evaluation result rows (including position state) and for
-the outbox, with the indexes the opportunity and readiness reads need. One migration pair, `033`
+the outbox, with the indexes the opportunity and readiness reads need. One up and down migration pair, `033`
 in `services/xstockstrat-analysis/migrations/` (`031` is the latest today and `032` is planned by
 feature 368; re-check at `/sdd-spec`). Table and column names are design outputs.
 

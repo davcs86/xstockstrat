@@ -60,3 +60,12 @@
   no-progress detector and the approval gate still apply.
 - Fixed after the review: config readers cited; FR-7, FR-9 and FR-12 tightened; `@AC-6`, `@AC-10`,
   `@AC-11`, `@AC-14`, `@AC-23` reworded (IDs unchanged); `@AC-24` to `@AC-29` added.
+
+## Session 2026-11-28T05:05Z — sdd-review product-spec (round 2)
+
+- Product spec approved. Status: draft → spec-ready.
+- Warnings: advisory scenario wording and accessor naming, fixed in the spec after the verdict.
+- Overlap findings: none (round-1 scan reused; only this program's two feature directories changed).
+- Recommended design depth: full (DB migration, new effect path and read path, depends on 368).
+- Pending operator confirmation (shared file, not yet written): a `merge-order.md` row
+  `strategy-eval-projection` (369) after `symbol-data-stage` (368).

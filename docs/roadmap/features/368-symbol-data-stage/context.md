@@ -61,3 +61,12 @@
   the waiting-job clause (owned by 369); FR-7 rewritten; config section states stored keys and both
   readers; proto box ticked "undecided, additive only"; migration run order stated; `@AC-8`,
   `@AC-10`, `@AC-13`, `@AC-19` reworded (IDs unchanged); `@AC-21` to `@AC-23` added.
+
+## Session 2026-11-28T05:05Z — sdd-review product-spec (round 2)
+
+- Product spec approved. Status: draft → spec-ready.
+- Warnings: advisory scenario wording and accessor naming, fixed in the spec after the verdict.
+- Overlap findings: none (round-1 scan reused; only this program's two feature directories changed).
+- Recommended design depth: full (DB migration, 5 affected services, changed default on a shared key).
+- Pending operator confirmation (shared file, not yet written): a `merge-order.md` row
+  `symbol-data-stage` (368) after `pipeline-job-graph` (367).

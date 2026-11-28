@@ -84,7 +84,6 @@ Feature: strategy-eval-projection
     Given "S1" on "AAPL" is out of position after 2026-11-25
     When the evaluation for 2026-11-27 decides entry
     Then 1 outbox row exists for user "u1", "S1", "AAPL", 2026-11-27 and kind "entry"
-    And a job that fails after computing the entry leaves neither the result row nor the outbox row
 
   @AC-12 @FR-6
   Scenario: A retried job does not duplicate the outbox row
@@ -189,11 +188,12 @@ Feature: strategy-eval-projection
 
   @AC-26 @FR-10
   Scenario: Burst measurements are exported per lane
-    Given 40 ready jobs in lane "held" and 900 in lane "watchlist", the oldest ready for 120 seconds
+    Given 40 ready jobs in lane "held" and 900 in lane "watchlist"
+    And the oldest ready job in lane "watchlist" has been ready for 120 seconds
     And 15 attempts finished in the last second and the job table has 200 dead and 1000 live tuples
     When telemetry is collected
     Then it reports ready depth 40 for "held" and 900 for "watchlist"
-    And it reports an oldest-ready age of 120 seconds for the lane holding that job
+    And it reports an oldest-ready age of 120 seconds for lane "watchlist"
     And it reports 15 attempts per second and a dead-tuple ratio of 0.2
 
   @AC-27 @FR-2
@@ -217,3 +217,10 @@ Feature: strategy-eval-projection
     When the parity step for the run of 2026-11-27 runs
     Then the logged report states 1 opportunity in both, 1 legacy-only and 1 projection-only for user "u1"
     And it states 10 readiness pairs compared and 1 mismatching
+
+  @AC-30 @FR-6
+  Scenario: A job that fails after deciding an entry leaves no partial write
+    Given "S1" on "AAPL" is out of position after 2026-11-25
+    And the evaluation for 2026-11-27 decides entry
+    When the job fails before it finishes
+    Then neither a result row nor an outbox row exists for "S1", "AAPL" and 2026-11-27
