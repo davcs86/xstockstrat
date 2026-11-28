@@ -12,8 +12,9 @@
 
 Paths are relative to `services/xstockstrat-<name>/` unless they start with `packages/`, `docs/` or
 `scripts/`. Every citation was checked against the tree `origin/main-dev@bc497728`. Decision IDs
-(`D-n`) refer to debate.md. Product-spec and scenario amendments listed in §20 are **not yet
-applied**; the operator sees their exact text before they are.
+(`D-n`) refer to debate.md. The product-spec and scenario amendments indexed in §20 are written
+to `product-spec.md` and `acceptance.feature` as proposed text; they take effect with the
+operator's approval of this design.
 
 **Consumer surface (C-14):** none. The stage is internal; its records are read by feature 369
 (§17) and operators observe it through telemetry, logs and the tables.
@@ -116,8 +117,9 @@ message GetLastClosedSessionResponse {
 - **Write (D-33).**
   1. Block 1 runs `DELETE … WHERE session_date=S` (it clears a crashed attempt's partial rows), then the first chunk.
   2. Further `job.db(30)` blocks insert at most 5,000 rows each.
-  3. A last block writes all `data_stage_users` rows. This is the marker.
+  3. A last block writes all `data_stage_users` rows, always including one row for the user `system` (`snapshotted=false` with `failed_source='system_signals'` when the system-scope read failed on the last attempt; a failed system read does not mark owners as not snapshotted). This block is the marker, so it exists even with zero owners.
   - If the marker is present at round 0 (a later pass, a takeover or a requeue), the job skips reads and writes.
+- **Round-0 order:** (1) kill switch: off → `Succeeded`, nothing deleted or written; (2) retention (pass 1 only); (3) marker check; (4) reads; (5) write; (6) park.
 - **Retention (D-20, D-35).** Pass 1, round 0 only. Batches of 5,000 rows, one `job.db(30)` each, stopping after the first batch that ends 120 s after round 0 began.
   - Session-keyed tables (runs, users, universe, coverage, bar, finality) are pruned below `S − max(30, retention_days)`.
   - Holes are pruned when `last_session < S − 730`; filings rows when `next_check_on < S − 365`.
@@ -159,7 +161,7 @@ message GetLastClosedSessionResponse {
    - `BackfillBars([sym], 1D, [min U start, day_start − 1 s])`, 120 s, with the quiet caller header and **without** `return_bars` (the server refuses that flag on a range over 7 days, §9.2) → outcome h. Then coverage₂ with the same range as coverage₁, and G = coverage₂.
    - Otherwise G = coverage₁ and h = none. A symbol with nothing to repair costs one coverage scan.
 6. **Holes R** (only if h ∈ {written, EMPTY}): each G gap, clipped to [history start date, S − 1 d]. "Long" means more than 30 d.
-7. **Verdict (D-10, D-56):**
+7. **Bar verdict (D-10, D-56)** (a value written to the coverage record, not the job graph's `Verdict` outcome, which no handler returns):
 
 | F | `latest(G)` = S | pre-S gap not in stored ∪ R | verdict |
 |---|---|---|---|
@@ -172,9 +174,9 @@ message GetLastClosedSessionResponse {
 9. **Write, one `job.db(10)`, in this order (D-52):**
    1. `SELECT pass, done_at FROM analysis.data_stage_runs WHERE session_date=$S FOR SHARE`. If `pass ≠ p` or `done_at IS NOT NULL` → INFO `data stage job superseded`, leave the block with nothing written and return `Succeeded` (D-62). The ensure's updates of that row take its row lock, so they wait for this block (at most its 10 s) and the read sees the latest committed row. Shared locks do not conflict with each other, so data jobs do not contend.
    2. `INSERT INTO symbol_coverage … ON CONFLICT DO NOTHING RETURNING 1`. No row back means a concurrent writer won: leave the block without further statements (nothing was written, so no rollback is needed) and return `Succeeded`.
-   3. The holes: `DELETE` the stored runs inside the history range (D-37), then upsert on `(symbol, first_session)` keeping `GREATEST(last_session)`.
-   4. The filings upsert.
-   5. If covered: `INSERT INTO symbol_bar (…, open, high, low, close, volume) … ON CONFLICT DO NOTHING`, with the captured bar, or NULLs if none was captured.
+   3. The holes: `DELETE` the stored runs inside the history range (D-37), then upsert on `(symbol, first_session)` keeping `GREATEST(last_session)`; `confirmed_on` is S of the confirming run, also kept as the greater value on conflict.
+   4. The filings upsert. It runs whenever no row exists or a call was made; it sets `next_check_on`, and `last_checked_on = S` and `last_outcome` when a call was made.
+   5. If covered: `INSERT INTO symbol_bar (…, open, high, low, close, volume) … ON CONFLICT DO NOTHING`, with the captured bar, or NULLs if none was captured. On both record tables `run_id` is the attempt's run id `data_stage:S#p`, and `pass` on the coverage record is p.
 
    Telemetry is recorded after the commit.
 
@@ -199,9 +201,9 @@ An attempt stops at its first fetch failure.
 - **Attempt 1** (`rpc`/`symbol`): raise a transient error; 367 retries after about 5–6 s.
 - **Attempt ≥ 2** (`FETCH_ATTEMPTS_PER_PASS`=2), and `budget` on any attempt:
   - **Passes 1–3:** `fetch_deferred{reason}` +1 and `Succeeded`, writing nothing. The symbol stays pending.
-  - **Pass 4:** write `bar_verdict='fetch_failed'` with `fail_reason`. No hole, no bar record, no filings call.
+  - **Pass 4:** write `bar_verdict='fetch_failed'` with `fail_reason`. No hole, no bar record, no filings call. The row is written through §6 step 9.1 and 9.2 (the `FOR SHARE` read, then the coverage insert); steps 9.3 to 9.5 are skipped. It stores the outcomes observed so far, and NULL where no call was made.
     - For `rpc`/`symbol`, the fundamentals state is read (D-47).
-    - For `budget`, no call at all is made, so `fundamentals_state='unavailable'` (refinement, §24).
+    - For `budget`, no call at all is made, so `fundamentals_state='unavailable'` (D-61).
 
 **Pass budget, the exact rule.** A data-job attempt whose step-1 read finds database `now() − pass_created_at > 30 min` makes no call.
 - **One clock.** The comparison runs inside the step-1 `job.db` read, so the database clock alone decides it, the same clock that gated the run.
@@ -322,6 +324,7 @@ Per sampled symbol, comparing captured values c with re-fetched values n, with r
 
 | Result | Rule |
 |---|---|
+| (zero values) | If the captured close or any captured price is 0, the result is `match` when the re-fetched values equal the captured ones exactly, else `drift`; with captured volume 0 the volume rule requires re-fetched volume 0 |
 | `unavailable` | The re-fetch gave no single S bar: gRPC error, `FAILED`/`EMPTY`/`SKIPPED`, or the 300 s check budget expired before this symbol |
 | `match` | Every \|r_f − 1\| ≤ 1e-6 and \|n_V − c_V\| ≤ 1% of c_V |
 | `adjusted` | With r̄ = n_C / c_C: (i) \|r̄ − 1\| > 1e-6; (ii) for every f ∈ {O, H, L}: \|n_f − r̄·c_f\| ≤ 0.011 + 1e-4·n_f (one cent of vendor rounding on each side plus relative slack); (iii) volume unchanged within 1% (a dividend), or \|n_V·r̄ − c_V\| ≤ 1% of c_V (a split, where volume scales inversely). This is the signature of an `alpaca.adjustment=all` rewrite (D-60) |
@@ -352,7 +355,7 @@ Per sampled symbol, comparing captured values c with re-fetched values n, with r
 - **No re-evaluation.** 369 evaluated on the old bar and is not re-run.
 - **Non-sampled bars** for S stay as captured. The operator can run an admin backfill of S if needed.
 - Lane WATCHLIST; no children.
-- Worst case 10 + 300 + 10 s, under the 900 s deadline.
+- Worst case 20 + 300 + 20 = 340 s (each `job.db(10)` block takes at most 20 s, §19), under the 900 s deadline.
 - 369 may ignore all of this.
 
 **What the operator does when the drift rule fires:**
@@ -535,8 +538,8 @@ No symbol, user or run labels (R-4).
 There is no `passes` counter (D-53).
 
 **Logs:**
-- INFO: `data stage pass started`, `data stage run done`, `data stage job superseded`;
-- WARN: `data stage finality drift`, `data stage finality unavailable`, `data stage: long hole confirmed`.
+- INFO: `data stage pass started`, `data stage run done`, `data stage job superseded`, `data stage disabled; session S pass p skipped`;
+- WARN: `data stage finality drift`, `data stage finality unavailable`, `data stage: long hole confirmed`, `data stage: final bar written but not stored`.
 
 The authoritative counts are SQL on the tables.
 
@@ -605,87 +608,103 @@ That is 900 − 510 = 390 s for snapshot blocks, which allows ≤ 6 blocks: 5 da
 
 ### 20. Spec and scenario amendments (IDs append-only)
 
+The exact amended text is `product-spec.md` and `acceptance.feature` in this directory, applied with
+the operator's approval of this design. This section is the index.
+
 #### FRs
 
-- **FR-2:** "one data job per symbol, session and pass, keyed by symbol and `S#p`"; re-enqueuing the same symbol, session and pass creates no second job.
-- **FR-4:** the data job calls `BackfillBars` itself: S first, then gaps-only history (D-30, D-56).
-- **FR-5:**
-  - three verdicts;
-  - a fetch failure is retried in later passes;
-  - `fetch_failed` (reason rpc | symbol | budget) is written only on the last pass;
-  - the dead-letter state is kept for real defects.
-- **FR-6:** the state comes from stored filings (D-31), with the D-44 cadence.
-- **FR-8:** "…Re-running the job for the same symbol and session leaves the existing record unchanged and creates no second one." This matches D-34.
-- **FR-10:** the gate is fixed per run, in database time.
-- **FR-11:** the §14 wording.
-- **FR-12:** adds `fetch_failed`, `fetch_deferred` and the finality results.
-- **FR-13 (new), automated vendor-finality check:** "For a session whose run is done, while the stage is enabled and analysis runs between 16 hours after the close and the next close, the stage re-fetches the session's daily bar for a deterministic sample of at most 50 covered symbols. It compares that bar with the bar the vendor returned at stage time and records `match`, `drift`, `adjusted` or `unavailable` per symbol, and counts each result in telemetry. The check changes no verdict, coverage record or bar record, marks no symbol warm, appends no ledger event and emits no alert to users."
-- **Affected Services:** marketdata gains the RPC (4 fields), `return_bars`, the quiet grant and the default flip. Ingest and portfolio are read only, with no code change. Notify is not involved.
+| FR | Change | Decisions |
+|---|---|---|
+| FR-1 | Users are strategy owners; the universe adds system-scope signals; the snapshot is immutable; a user whose read fails on the last attempt is left out | D-13, D-14, D-19, D-33 |
+| FR-2 | One data job per symbol, session and pass | D-29, D-46 |
+| FR-3 | `covered` allows vendor-confirmed holes; fixed 730-day window | D-10, D-26, D-32 |
+| FR-4 | The data job calls marketdata `BackfillBars` itself: session bar first, then unconfirmed history | D-11, D-30, D-56 |
+| FR-5 | Three bar verdicts; a fetch failure never reaches the dead-letter state | D-42, D-47 |
+| FR-6 | State from stored filings; new filings by `BackfillFundamentals` on the signed cadence | D-12, D-25, D-31, D-44 |
+| FR-7 | Unchanged | D-6, D-15 |
+| FR-8 | Three verdicts; a second job leaves the record unchanged | D-34, D-52 |
+| FR-9 | Written in the same transaction as the coverage record | D-5 |
+| FR-10 | The run starts at close + delay, decided once in database time; half days; missed sessions | D-11, D-22, D-45 |
+| FR-11 | The switch gates creation; honest list of visible effects; no ledger events | D-17, D-23, D-43 |
+| FR-12 | Counters named; authoritative counts by query | D-24, D-36 |
+| FR-13 | New: automated vendor-finality check | D-58 to D-60, D-63, D-64 |
+| FR-14 | New: retry passes, the pass budget and run completion | D-41, D-46, D-55, D-62, D-65 |
 
-#### Amended scenarios
+Also amended: Affected Services (ingest and portfolio have no code change), Consumer Surface (still
+None), Proto Contract Changes (decided), Config Key Changes (the delay key), Database Changes
+(eight tables), Out of Scope.
 
-- **@AC-1:** Given u1 owns a strategy.
-- **@AC-3:** u1's watchlist read fails on every attempt → on attempt 5, u2's rows are written and u1 is `snapshotted=false` with `failed_source` watchlist.
-- **@AC-4:** Then exactly 1 data job exists for MSFT with epoch `2026-11-27#1`.
-- **@AC-6:** Then the final fetch returned written, one coverage read, no history call, and the bar record carries the fetched close.
-- **@AC-7, @AC-8:** a history call covering 2026-11-25..26, or 2026-11-23.
-- **@AC-9:** the final and history calls are both `EMPTY`.
-- **@AC-10:** Given every `BackfillBars` for NVDA fails UNAVAILABLE → after 4 passes the record is `fetch_failed` (rpc), with no bar record and no hole, and every NVDA data job succeeded.
-- **@AC-11:** Given AAPL's check row is due on 2026-11-27 and MSFT has no row with a newest period 30 days old → a call for AAPL only; MSFT gets `next_check_on = shift(P+105)`.
-- **@AC-12:** Given AAPL is covered, due, its period ended 2026-08-10, and the call fails → covered, `fresh`, next = `shift(2026-12-04)`.
-- **@AC-18:** already-created jobs run to completion.
-- **@AC-20:** counts come from the coverage table.
-- **@AC-22:** Given history disabled and TSM's period is 200 days old → `stale`, `disabled`, next = `shift(S+7)`.
-- **@AC-23:** final `SKIPPED`.
+#### Scenarios
 
-#### New scenarios, part 1
+`@AC-49` is unused.
 
-- **@AC-24:** a confirmed hole is not fetched again and the symbol is covered.
-- **@AC-25:** a forming S bar whose final fetch returns `EMPTY` is not covered.
-- **@AC-26:** no run row exists before close + delay.
-- **@AC-27:** a due filing is checked at most once per 7 days.
-- **@AC-28:** a symbol with no filings is checked at most once per 28 days and reads `unavailable`.
-- **@AC-29:** a user without strategies is not snapshotted.
-- **@AC-30:** a system-scope signal is in every snapshotted user's universe.
-- **@AC-31:** an empty universe succeeds with no data jobs.
-- **@AC-32:** the live-loop page-cap drain is unchanged (no failure counted, same symbols).
-- **@AC-33:** a replay after a committed `no_vendor_data` starts no second backfill.
-- **@AC-34:** 1,200 symbols → 3 shards, each with at most 500 data jobs.
-- **@AC-35:** a dead data job does not stop its siblings.
-- **@AC-36:** session rows older than max(30, `retention_days`) days are pruned, including finality rows.
-- **@AC-37 (marketdata):** `GetLastClosedSession` at 16:15 New York on 2026-11-27 returns `2026-11-27` with `closed_at` 21:00Z, `day_start` 05:00Z and `day_end` 2026-11-28 04:59:59Z.
-- **@AC-38 fixed gate:** a run is created at 16:30 with delay 30; the delay key is set to 120 at 16:40 → the run row keeps `closed_at` 16:00 New York and `delay_minutes` 30, and no data job fails.
-- **@AC-39 missed session:** Given analysis is down from 2026-11-25 15:00 NY to 2026-11-27 17:00 NY, delay 30, and NVDA's latest bar is 2026-11-24 with vendor bars 11-25..27 → no run row for 11-25, a run row for 11-27, and NVDA's history call covers 2026-11-25.
-- **@AC-40 switch at round 0:** a pass-1 universe job exists and the switch turns false → it succeeds with no snapshot and no shards.
-- **@AC-41 marker reuse:** the marker exists and the universe job is requeued → no portfolio or ingest read, the same shards, the snapshot unchanged.
-- **@AC-42 long hole:** the vendor has no TINY bars 2026-09-01..10-30 → WARN `long hole confirmed`, `holes_confirmed{long}` +1, `confirmed_gaps` 1.
-- **@AC-43 half day:** 2026-11-27 closes at 13:00 → the run row is created at 16:30 New York.
-- **@AC-44 non-last attempt:** u1's watchlist read fails on attempt 1 of 5 → nothing is written and the attempt is retried.
-- **@AC-45 retry pass:** Given delay 30, spacing 30, max_attempts 5, NVDA in the snapshot, and every marketdata call UNAVAILABLE from 16:25 to 17:05 NY → passes 1 (16:30) and 2 (17:00) write no NVDA record, pass 3 (17:30) records `covered`, and `done_at` is set.
-- **@AC-46 deferred:** pass 1 of 4, NVDA's fetch fails on attempts 1 and 2 → the job succeeds and writes nothing; pass 2 creates a data job only for NVDA.
-- **@AC-47 dead retried:** NVDA's pass-1 job is dead → pass 2 runs NVDA under epoch `2026-11-27#2`.
-- **@AC-48 (marketdata) no ledger events:** a `BackfillBars` call carrying the `analysis-data-stage` caller from SAN `xstockstrat-analysis` appends no `marketdata.backfill.*` event; a call without it appends started and completed.
-- **@AC-49** is unused.
-- **@AC-50 run done:** all 4 passes finished with ZZZZ's job dead in pass 4 → `done_at` is set and ZZZZ has no record.
-
-#### New scenarios, part 2
-
-- **@AC-51 match:** run 11-27 done; AAPL sampled with a captured bar; at 2026-11-28 08:00 NY the vendor returns an identical bar → `match`; the drift counter does not move.
-- **@AC-52 drift:** AAPL and MSFT sampled; AAPL's close changes from 190.00 to 190.40 and MSFT's volume rises 5% → two `drift` rows, `finality{result=drift}` +2, no notify alert, and the coverage and bar records unchanged.
-- **@AC-53 adjusted:** the vendor returns O/H/L/C all × 0.5 with volume × 2 (a 2:1 split) → `adjusted`; a 3.00 stock rescaled by 0.995 and cent-rounded with unchanged volume → `adjusted`; neither counts as drift.
-- **@AC-54 unavailable:** marketdata is unavailable at 08:00 → 50 `unavailable` rows, the job succeeds, nothing counts as drift, one WARN.
-- **@AC-55 trigger:** two instances; the run is done; 2026-11-28 07:59 NY → no finality job; at 08:00 → exactly one. An undone run or switch off → none.
-- **@AC-56 no warm:** the finality job and the data jobs call no `GetBars`, `BatchGetBars`, `GetLatestQuote(s)`, `GetLatestPrice` or `BatchGetLatestPrice`.
-- **@AC-57 sample bound:** 1,200 covered symbols → exactly 50 are sampled, and a replay samples the same 50 and writes no second row.
-- **@AC-58 (marketdata) `return_bars`:** a one-day call with `return_bars` returns the written bar; without it, `bars` is empty; a 10-day range with `return_bars` → INVALID_ARGUMENT.
-- **@AC-59 budget defer:** pass 1 created 16:30; NVDA's attempt starts 17:01 → no marketdata call, nothing written, `fetch_deferred{budget}` +1, and pass 2 creates a data job for NVDA.
-- **@AC-60 budget, last pass:** a pass-4 NVDA attempt starts 31 min after pass 4 began → a `fetch_failed` record with reason `budget` and `fundamentals_state` `unavailable`, and no marketdata call.
-- **@AC-61 abandoned run:** the 11-25 run is at pass 2 with `done_at` NULL and the last closed session becomes 11-27 → a run row for 11-27, no pass 3 for 11-25, and 11-25's `done_at` stays NULL.
-- **@AC-62 budget source:** on the last attempt, u1's position pages stall until the 300 s read budget expires → u1 `snapshotted=false` with `failed_source='budget'`; u2 is snapshotted.
-- **@AC-63 superseded:** after `done_at`, an operator requeues NVDA's pass-2 job → it succeeds with no call and no record.
-- **@AC-64 done at once:** pass 1 records every symbol → `done_at` is set within 65 s of pass 1 finishing, before 30 min.
-- **@AC-65 lost pass:** the run row is at pass 2 and no job row exists for `data_stage:S#2` → the ensure enqueues the pass-2 universe job.
-- **@AC-66 conflict:** two data jobs race for AAPL → one coverage row, and the loser changes no hole or filings row.
+| ID | FR | Status | Scenario |
+|---|---|---|---|
+| `@AC-1` | FR-1 | amended | The universe snapshot is the union of positions, signals and watchlists per user |
+| `@AC-2` | FR-1 | unchanged | Two instances create one run per session |
+| `@AC-3` | FR-1 | amended | A user whose read fails on every attempt is left out without losing the others |
+| `@AC-4` | FR-2 | amended | A symbol shared by two users gets one data job per pass |
+| `@AC-5` | FR-2 | unchanged | A symbol held by any user runs in the held lane |
+| `@AC-6` | FR-3 FR-4 FR-8 FR-9 | amended | A symbol with complete history is covered after one final fetch |
+| `@AC-7` | FR-4 | amended | A symbol missing recent sessions is fetched without operator action |
+| `@AC-8` | FR-3 FR-4 | amended | An interior hole is fetched |
+| `@AC-9` | FR-5 FR-9 | amended | A symbol the vendor has nothing for gets the no-vendor-data verdict |
+| `@AC-10` | FR-5 FR-14 | amended | A fetch that keeps failing ends as fetch_failed, not in the dead-letter state |
+| `@AC-11` | FR-6 | amended | A due filings check fetches new filings and a symbol that is not due is left alone |
+| `@AC-12` | FR-6 | amended | A failed filings fetch does not change the bar verdict |
+| `@AC-13` | FR-7 | unchanged | A deployment with no stored source serves EDGAR |
+| `@AC-14` | FR-7 | unchanged | A non-filer falls back to the vendor |
+| `@AC-15` | FR-8 | amended | Running a data job again keeps one coverage record and one bar record |
+| `@AC-16` | FR-10 | unchanged | No run is created on a non-trading day |
+| `@AC-17` | FR-10 | amended | A market holiday is not a session |
+| `@AC-18` | FR-11 | amended | The kill switch stops creation and lets created jobs finish |
+| `@AC-19` | FR-11 | unchanged | Existing responses do not change |
+| `@AC-20` | FR-12 | amended | A session reports its verdict counts |
+| `@AC-21` | FR-7 | unchanged | A stored source value is not changed by the feature |
+| `@AC-22` | FR-6 | amended | With the filings backfill disabled the state still comes from stored filings |
+| `@AC-23` | FR-5 | amended | A symbol skipped as delisted gets the no-vendor-data verdict |
+| `@AC-24` | FR-3 | new | A confirmed hole is not fetched again and the symbol is covered |
+| `@AC-25` | FR-4 FR-9 | new | A bar written during the session does not count without a post-close fetch |
+| `@AC-26` | FR-10 | new | No run starts before the close plus the delay |
+| `@AC-27` | FR-6 | new | A due filing is checked at most once per 7 days |
+| `@AC-28` | FR-6 | new | A symbol with no filings is re-checked every 28 days and reads unavailable |
+| `@AC-29` | FR-1 | new | A user without strategies is not snapshotted |
+| `@AC-30` | FR-1 | new | A system-scope signal is in every snapshotted user's universe |
+| `@AC-31` | FR-1 | new | An empty universe succeeds with no data jobs |
+| `@AC-32` | FR-11 | new | The live loop's watchlist drain is unchanged at the page cap |
+| `@AC-33` | FR-8 | new | A replay after a committed no-vendor-data verdict starts no second fetch |
+| `@AC-34` | FR-2 | new | A large universe is split into shards |
+| `@AC-35` | FR-5 | new | A dead data job does not stop its siblings |
+| `@AC-36` | FR-8 | new | Old session rows are pruned |
+| `@AC-37` | FR-10 | new | The calendar RPC answers after the close |
+| `@AC-38` | FR-10 | new | Changing the delay does not affect a run already started |
+| `@AC-39` | FR-10 | new | A missed session gets no run and its bars are fetched by the next run |
+| `@AC-40` | FR-11 | new | The kill switch at the start of a universe job |
+| `@AC-41` | FR-1 | new | A complete snapshot is reused, never rewritten |
+| `@AC-42` | FR-12 | new | A long confirmed hole is visible |
+| `@AC-43` | FR-10 | new | A half-day session runs at the usual time |
+| `@AC-44` | FR-1 | new | A failed read on an early attempt writes nothing and is retried |
+| `@AC-45` | FR-14 | new | An outage is recovered by a later pass |
+| `@AC-46` | FR-14 | new | A fetch failure defers the symbol to the next pass |
+| `@AC-47` | FR-14 | new | A dead data job is retried by the next pass |
+| `@AC-48` | FR-11 | new | Stage fetches append no ledger events |
+| `@AC-50` | FR-14 | new | A run is done even when a symbol never got a record |
+| `@AC-51` | FR-13 | new | A sampled bar that did not change is a match |
+| `@AC-52` | FR-13 | new | A changed bar is recorded as drift without touching the records |
+| `@AC-53` | FR-13 | new | A corporate-action rescale is recorded as adjusted |
+| `@AC-54` | FR-13 | new | An unreachable vendor makes the check unavailable, not a failure |
+| `@AC-55` | FR-13 | new | The finality check is created once, 16 hours after the close |
+| `@AC-56` | FR-13 FR-11 | new | The stage reads no bar or quote through a warming RPC |
+| `@AC-57` | FR-13 | new | The sample is bounded and stable |
+| `@AC-58` | FR-13 | new | BackfillBars returns the written bars only on request |
+| `@AC-59` | FR-14 | new | A job that starts past the pass budget defers without calling the vendor |
+| `@AC-60` | FR-14 FR-5 | new | Past the budget on the last pass the symbol is recorded as fetch_failed |
+| `@AC-61` | FR-14 | new | A run that is not done when the next session closes is abandoned |
+| `@AC-62` | FR-1 | new | A user not fully read within the read budget is left out |
+| `@AC-63` | FR-14 | new | A job requeued after the run is done writes nothing |
+| `@AC-64` | FR-14 | new | A run with nothing pending is marked done at once |
+| `@AC-65` | FR-14 | new | A pass whose jobs are missing is created again |
+| `@AC-66` | FR-8 | new | Two jobs racing for one symbol leave one consistent record |
 
 ### 21. Affected services, proto and migration touchpoints
 
@@ -702,7 +721,11 @@ That is 900 − 510 = 390 s for snapshot blocks, which allows ≤ 6 blocks: 5 da
 
 **Analysis:**
 - `data_stage_ensure.py`, `app/jobs/data_stage.py` (four handlers), `universe_reads.py`, `app/identity.py`;
+- `app/engine/live_loop.py` (the drains and the system-read identity move out; wrappers stay), `app/handlers/servicer.py` (`_drain_positions_paged(timeout=None)`), `tests/test_owner_header_guard.py`;
+- docs: `docs/data-stage.md` (new: operations, hole SQL, the Grafana rule), `docs/pipeline-jobs.md` (the D-65 requeue note beside the recovery SQL), the service `CLAUDE.md` key table;
 - `build_registry`, the settings accessors, `app/main.py`.
+
+**Config:** `src/grpc/configServiceImpl.ts` gains a `SCALAR_BOUNDS_REGISTRY` entry [5, 360] for `pipeline.data_stage_delay_minutes` (D-27).
 
 **Migrations:** config `062` (two keys and the default) and analysis `032` (eight tables).
 
@@ -807,7 +830,7 @@ That is 900 − 510 = 390 s for snapshot blocks, which allows ≤ 6 blocks: 5 da
 - [ ] `BackfillFundamentals` duration is unmeasured and the first week downloads company facts for the whole universe — measured in the staging verification step; a per-run call cap is the lever (D-54).
 - [ ] An NYSE closure missing from `marketsession` makes one session `no_vendor_data` for every symbol — existing closure-table maintenance rule.
 - [ ] A session whose close + delay passes while analysis is down gets no run, a run still undone when the next session closes is abandoned, and a finality check is missed if analysis is down from close + 16 h to the next close — feature 369 must tolerate all three (§17).
-- [ ] A symbol whose fetch failed on every pass has no bar record for that session, and once a run is done its records cannot be repaired by requeueing (D-65) — documented in the service docs step.
+- [ ] A symbol whose fetch failed on every pass has no bar record for that session, and once a run is done its records cannot be repaired by requeueing (D-65) — documented beside the job-graph recovery SQL in `docs/pipeline-jobs.md`.
 - [ ] A user's universe larger than the snapshot bound of §19 (25,000 rows guaranteed per attempt) kills the universe job for that session — loud (dead job, no snapshot rows); revisit if the D-13 sizing is exceeded.
 - [ ] Portfolio creates the system signal watchlist once for a strategy owner who never read their watchlists — accepted side effect, listed in FR-11.
 
@@ -853,4 +876,5 @@ That is 900 − 510 = 390 s for snapshot blocks, which allows ≤ 6 blocks: 5 da
 - PRESERVE `@AC-1 @AC-2 @feature-154` (portfolio) — not regressed by: no new portfolio RPC or grant (D-13, R-10).
 - PRESERVE `@AC-1 … @AC-10 @feature-356`, `@AC-2 @feature-180` (analysis) — not regressed by: the drains are extracted, the legacy wrappers behave as today, pinned by a regression test (D-21, D-49).
 - PRESERVE `@AC-3 … @AC-9 @feature-154`, `@AC-1 @AC-2 @AC-3 @AC-7 @AC-8 @AC-9 @feature-158`, `@AC-1 … @AC-4 @feature-259` (analysis) — not regressed by: no existing loop is changed or removed.
+- PRESERVE `@AC-14 @feature-294` (`services/xstockstrat-marketdata/acceptance/signal-map-instrumentation.feature`) — not regressed by: with `return_bars` unset the `BackfillBars` response is unchanged, and quiet calls keep their metrics.
 - PRESERVE `@AC-7 @AC-41 @feature-294`, `@AC-3 @feature-337`, `@AC-36 @feature-279` (`docs/sdd/business-rules/platform.feature`) — not regressed by: no new loop name, no symbol, user or run label (R-4), `host.provider` on every instrument, no new pool.

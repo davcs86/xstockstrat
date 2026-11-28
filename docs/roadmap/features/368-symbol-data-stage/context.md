@@ -210,3 +210,18 @@
   only now (D-63).
 - All 42 objections are closed. Next: write design.md from the register with the round-5 text
   fixes, show the operator the exact spec amendments, then the approval gate.
+
+## Session 2026-11-28T12:10Z — sdd-design, design.md written (approval pending)
+
+- design.md written from the register with the round-5 text fixes, then checked on disk by a
+  verification pass: register-diff clean, all 14 text fixes present, 17 text defects found (8
+  major, none a Floor breach) and applied.
+- Proposed amendments written to product-spec.md (FR-1 to FR-14) and acceptance.feature
+  (`@AC-1` to `@AC-66`, `@AC-49` unused; 16 existing scenarios amended, 42 added). They are
+  proposed text until the operator approves the design; the pre-amendment versions are in git
+  (commit `ce488d6d` and earlier).
+- Author addition, not an operator statement: retry passes, the pass budget and run completion are
+  stated as a new FR-14 rather than folded into FR-5 and FR-10.
+- Still to confirm at the approval gate: the implementation constants as one sign-off item
+  (design.md § 12); D-22's rule that a missed session gets no run; the `merge-order.md` rows
+  (368 after 367, 369 after 368).
