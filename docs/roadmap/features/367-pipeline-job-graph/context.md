@@ -583,3 +583,16 @@ Carried from design.md § Open Risks; each needs an owner at `/sdd-spec` or late
 - Files modified: `services/xstockstrat-analysis/tests/{conftest,test_job_graph_worker,test_job_graph_worker_real_pg,test_job_handler_contract}.py`,
   and (deviation) `services/xstockstrat-analysis/tests/test_pipeline_jobs_real_pg.py`.
 - Deviations: shared seed helper (Deviation Log).
+
+### Step 13 — the retention-prune job kind [done]
+- `app/jobs/retention_prune.py:make_handler(settings, *, monotonic)`: reads `retention_days` once;
+  four DELETE loops (`failed`, `dead`, `blocked` at `max(TERMINAL_KEEP_MIN_DAYS, retention_days)`,
+  then `succeeded`), one `job.db(PRUNE_BLOCK_BUDGET_S)` block per `prune_batch(conn=…)`, the first
+  batch's cutoff reused for its loop, a loop ends on `full` false, self-stop before a batch after
+  `PRUNE_SELF_STOP_S`; no `try`/`except`. `build_registry` registers the kind (no `child_kinds`).
+- Build choice: the 30-day floor is a named module constant (`TERMINAL_KEEP_MIN_DAYS`), so Step 14's
+  test can name it rather than hold a literal 30.
+- TDD: red/green recorded under Step 14. Gate: ruff clean; the contract scan passes on the new file.
+- Files modified: `services/xstockstrat-analysis/app/jobs/retention_prune.py`,
+  `services/xstockstrat-analysis/app/jobs/__init__.py`.
+- Deviations: none.

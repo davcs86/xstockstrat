@@ -1169,7 +1169,7 @@ uv run --extra dev pytest tests/test_job_graph_worker_real_pg.py -q -rs | grep -
 
 ### Step 13 — service: the retention-prune job kind
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/jobs/retention_prune.py` — create
