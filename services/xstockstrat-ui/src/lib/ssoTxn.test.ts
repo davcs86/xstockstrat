@@ -162,7 +162,7 @@ describe('the link cookie', () => {
       httpOnly: true,
       sameSite: 'lax',
       secure: false,
-      path: '/',
+      path: '/accounts/api/sso',
       maxAge: 600,
     });
     vi.setSystemTime(T0.getTime() + 450_000);
@@ -171,10 +171,14 @@ describe('the link cookie', () => {
     expect(ssoLinkCookieOpts(exp).maxAge).toBe(0);
   });
 
-  test('clearSsoLink expires the cookie on /', () => {
+  test("370 @AC-9 clearSsoLink expires the cookie on its readers' path", () => {
     const res = NextResponse.json({});
     clearSsoLink(res);
-    expect(res.cookies.get('sso_link')).toMatchObject({ value: '', maxAge: 0, path: '/' });
+    expect(res.cookies.get('sso_link')).toMatchObject({
+      value: '',
+      maxAge: 0,
+      path: '/accounts/api/sso',
+    });
   });
 });
 

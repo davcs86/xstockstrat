@@ -10,6 +10,8 @@ const TXN_TTL_S = 600;
 export const LINK_MIN_ACCESS_LIFETIME_S = TXN_TTL_S + ACCESS_TOKEN_REFRESH_THRESHOLD_SECONDS;
 const TXN_COOKIE_PREFIX = 'sso_txn_';
 export const SSO_LINK_COOKIE = 'sso_link';
+// Only GET /accounts/api/sso and POST /accounts/api/sso/confirm read the pending link.
+const SSO_LINK_COOKIE_PATH = '/accounts/api/sso';
 
 type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
 
@@ -132,7 +134,7 @@ export function ssoLinkCookieOpts(exp: number) {
     httpOnly: true,
     sameSite: 'lax' as const,
     secure: isProduction,
-    path: '/',
+    path: SSO_LINK_COOKIE_PATH,
     maxAge: Math.max(0, exp - nowS()),
   };
 }

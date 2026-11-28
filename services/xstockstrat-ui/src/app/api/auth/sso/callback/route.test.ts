@@ -476,3 +476,58 @@ test('D-75 sentinels never reach a log argument', async () => {
     expect(text).not.toContain(s);
   }
 });
+
+describe('370 @AC-8 every failure after the txn is opened clears its cookie', () => {
+  const failures: Array<[string, 'login' | 'link', () => void]> = [
+    ['secret unreadable', 'login', () => loadOidcClientSecret.mockResolvedValue('error')],
+    [
+      'secret not configured',
+      'login',
+      () => loadOidcClientSecret.mockResolvedValue({ found: false }),
+    ],
+    ['the code exchange fails', 'login', () => exchangeCode.mockRejectedValue(new Error('bad'))],
+    [
+      'the subject is not linked',
+      'login',
+      () =>
+        resolveExternalIdentity.mockRejectedValue(
+          new ConnectError('not linked', Code.FailedPrecondition),
+        ),
+    ],
+    [
+      'IssueSessionForUser fails',
+      'login',
+      () => issueSessionForUser.mockRejectedValue(new ConnectError('down', Code.Unavailable)),
+    ],
+    ['the code exchange fails', 'link', () => exchangeCode.mockRejectedValue(new Error('bad'))],
+    [
+      'the ID token has no auth_time',
+      'link',
+      () => exchangeCode.mockResolvedValue({ iss: ISSUER, sub: SUBJECT }),
+    ],
+    [
+      'the mode left both',
+      'link',
+      () => {
+        loadAuthMode.mockResolvedValue('oidc');
+        exchangeCode.mockResolvedValue({ iss: ISSUER, sub: SUBJECT, auth_time: NOW_S });
+      },
+    ],
+  ];
+  test.each(failures)('%s (%s txn)', async (_, purpose, arrange) => {
+    if (purpose === 'link') loadAuthMode.mockResolvedValue('both');
+    arrange();
+    const res = await callback({ txn: await (purpose === 'link' ? linkTxn() : loginTxn()) });
+    expect(res.status).toBe(303);
+    expect(location(res)).toContain('error=');
+    expect(clearedNames(res)).toContain(txnCookieName(STATE));
+    expect(sessionSet(res)).toBe(false);
+  });
+
+  test('@AC-9 the sso_link cookie is scoped to /accounts/api/sso', async () => {
+    loadAuthMode.mockResolvedValue('both');
+    exchangeCode.mockResolvedValue({ iss: ISSUER, sub: SUBJECT, auth_time: NOW_S });
+    const res = await callback({ txn: await linkTxn() });
+    expect(cookieNamed(res, 'sso_link')).toContain('Path=/accounts/api/sso;');
+  });
+});

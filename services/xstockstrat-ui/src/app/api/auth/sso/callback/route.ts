@@ -61,8 +61,11 @@ async function getHandler(req: NextRequest) {
   }
   if (!txn) return loginFail('failed');
 
+  // From here on the txn is open: every failure expires its cookie.
   const fail = (code: SsoErrorCode & LinkErrorCode, fault = false) =>
-    txn.purpose === 'link' ? linkFail(code) : loginFail(code, { fault });
+    txn.purpose === 'link'
+      ? linkFail(code, cookieName)
+      : loginFail(code, { fault, clearTxnCookie: cookieName });
 
   const secret = await loadOidcClientSecret();
   if (secret === 'error') return fail('failed', true);
@@ -87,7 +90,7 @@ async function getHandler(req: NextRequest) {
     return fail('failed');
   }
 
-  if (txn.purpose === 'link') return completeLink(req, txn, claims, mode, origin);
+  if (txn.purpose === 'link') return completeLink(req, txn, claims, mode, origin, cookieName);
 
   const opts = { timeoutMs: AUTH_CONFIG_TIMEOUT_MS, headers: { [HEADER_TRACE_ID]: traceId } };
   let userId: string;
@@ -100,6 +103,7 @@ async function getHandler(req: NextRequest) {
     const ce = ConnectError.from(err);
     return loginFail(
       ce.code === Code.FailedPrecondition ? resolveRefusalCode(ce.rawMessage) : 'failed',
+      { clearTxnCookie: cookieName },
     );
   }
   let session: { accessToken: string; refreshToken: string };
@@ -109,6 +113,7 @@ async function getHandler(req: NextRequest) {
     const ce = ConnectError.from(err);
     return loginFail(
       ce.code === Code.FailedPrecondition ? sessionRefusalCode(ce.rawMessage) : 'failed',
+      { clearTxnCookie: cookieName },
     );
   }
   const res = new NextResponse(null, {
@@ -132,8 +137,10 @@ async function completeLink(
   claims: SsoClaims,
   mode: 'both' | 'oidc',
   origin: string,
+  txnCookie: string | undefined,
 ): Promise<NextResponse> {
-  const linkFailed = () => ssoErrorRedirect({ dest: 'link', code: 'failed' }, origin);
+  const linkFailed = () =>
+    ssoErrorRedirect({ dest: 'link', code: 'failed' }, origin, { clearTxnCookie: txnCookie });
   if (mode !== 'both') return linkFailed();
   const at = claims.auth_time;
   if (typeof at !== 'number' || !Number.isFinite(at)) {
