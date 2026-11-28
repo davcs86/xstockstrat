@@ -39,6 +39,9 @@ MIN_INSTRUMENTS = {
     "analysis.fundsignal.signals",
     "analysis.opportunity.recompute",
     "template.instantiate",
+    "analysis.pipeline.attempts",
+    "analysis.pipeline.lease_events",
+    "analysis.pipeline.db.duration",
 }
 RPC_KEYS = {"rpc.system", "rpc.service", "rpc.method", "rpc.grpc.status_code"}
 
@@ -54,6 +57,10 @@ def _drive() -> None:
     telemetry.record_template_instantiate()
     telemetry.record_template_instantiate(grpc.StatusCode.NOT_FOUND)
     telemetry.log_tick_ok(logging.getLogger("allowlist"), telemetry.Loop.FUNDSIGNAL, 1.0)
+    telemetry.record_pipeline_attempt("succeeded")
+    telemetry.record_pipeline_lease_event("report_rejected")
+    telemetry.record_pipeline_db_duration("claim", "total", 0.01, "ok")
+    telemetry.log_tick_ok(logging.getLogger("allowlist"), telemetry.Loop.PIPELINE_WORKER, 1.0)
 
 
 def _keys_by_instrument(reader) -> dict[str, set[str]]:

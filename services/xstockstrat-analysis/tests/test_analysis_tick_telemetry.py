@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import time
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
@@ -11,8 +12,9 @@ import pytest
 import app.handlers.servicer as servicer_mod
 from app import supervision, telemetry
 from app.engine import pnl_pattern_consumer as pnl_module
+from app.engine.job_graph import HandlerRegistry, JobGraphSettings, JobGraphWorker
 from tests import test_telemetry
-from tests.conftest import aio_rpc_error
+from tests.conftest import FakeJobRepo, aio_rpc_error, snapshot_watcher
 from tests.test_analysis_servicer import make_servicer
 from tests.test_fundsignal_loop import _emit_failure_loop
 from tests.test_live_loop import _StopLoop
@@ -50,6 +52,15 @@ def _refresh_svc(user_ids, compute=None):
     svc._compute_opportunities = compute or AsyncMock(return_value=([], None))
     svc._replace_and_stamp_compute_state = AsyncMock()
     return svc
+
+
+def _pipeline_worker():
+    return JobGraphWorker(
+        FakeJobRepo(time.monotonic),
+        None,
+        JobGraphSettings(snapshot_watcher()),
+        HandlerRegistry(),
+    )
 
 
 async def _drain_background():
@@ -160,6 +171,7 @@ async def test_ac7_every_analysis_tick_uses_a_fixed_loop_name(sleeps, caplog):
         fund = _emit_failure_loop()
         fund._ingest.IngestSignal = AsyncMock(return_value=MagicMock(signal_id=7))
         await fund._tick()
+        await _pipeline_worker().claim_tick()
     records = _ticks(caplog)
     names = {m.value for m in telemetry.Loop}
     assert len(names) <= 8

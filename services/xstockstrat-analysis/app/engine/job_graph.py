@@ -10,10 +10,10 @@ from datetime import UTC, date, datetime
 from enum import IntEnum
 from typing import NamedTuple
 
-from app import supervision
+from app import supervision, telemetry
 from app.config.live_limits import ResizableLimiter
 from app.config.watcher import int_positive
-from app.repositories.pipeline_jobs import ParkRace
+from app.repositories.pipeline_jobs import ParkRace, db_outcome
 from app.repositories.read_budget import bounded_txn
 
 log = logging.getLogger(__name__)
@@ -41,6 +41,16 @@ IDLE_CLAIM_CEILING_S = 5.0
 RUNNER_BATCH_WAIT_S = 6.0
 CLAIM_ACK_WINDOW_S = 7.0
 HANDLER_BLOCK_CAP_S = 30.0
+TICK_RECORD_EVERY_S = 60.0
+
+# Transition written by a report → the attempts outcome it counts.
+_REPORTED = {
+    "succeeded": "succeeded",
+    "blocked": "blocked",
+    "ready": "retried",
+    "failed": "failed",
+    "dead": "dead",
+}
 
 
 class Lane(IntEnum):
@@ -298,12 +308,16 @@ class ClaimedJob:
         if att.stop is not None or worker._monotonic() >= att.fence_deadline:
             raise AttemptStopped()
         gate = worker._gate
+        requested = worker._monotonic()
         att.stage = "gate"
         try:
             async with asyncio.timeout(budget):
                 await gate.acquire()
-        except BaseException:
+        except BaseException as e:
             att.stage = None
+            telemetry.record_pipeline_db_duration(
+                "handler", "total", worker._monotonic() - requested, db_outcome(e)
+            )
             raise
         held = True
 
@@ -314,11 +328,15 @@ class ClaimedJob:
                 gate.release()
 
         def on_acquired():
+            telemetry.record_pipeline_db_duration(
+                "handler", "wait", worker._monotonic() - requested
+            )
             if att.stop is not None:
                 raise AttemptStopped()
             att.stage = "txn"
 
         att.stage = "acquire"
+        error = None
         try:
             async with bounded_txn(
                 worker._service_pool,
@@ -329,9 +347,11 @@ class ClaimedJob:
             ) as tx:
                 att.txn = tx
                 yield tx
-        except (AttemptStopped, asyncio.CancelledError):
+        except (AttemptStopped, asyncio.CancelledError) as e:
+            error = e
             raise
         except BaseException as e:
+            error = e
             if att.stop is not None:
                 raise AttemptStopped() from e
             raise
@@ -339,6 +359,9 @@ class ClaimedJob:
             att.txn = None
             att.stage = None
             release_gate()
+            telemetry.record_pipeline_db_duration(
+                "handler", "total", worker._monotonic() - requested, db_outcome(error)
+            )
 
 
 class JobGraphWorker:
@@ -370,6 +393,7 @@ class JobGraphWorker:
         self._empty_delay: float | None = None
         self._maintenance_ticks = 0
         self._ensured_day: date | None = None
+        self._last_tick_record: float | None = None
         self.ready_stats = None
 
     def start_listening(self) -> None:
@@ -389,18 +413,21 @@ class JobGraphWorker:
     async def claim_tick(self) -> float:
         lim = self._limiter
         await lim.acquire()
+        started = self._monotonic()
         taken = 1
         while lim.in_use < lim.limit:
             await lim.acquire()
             taken += 1
         if not self._settings.worker_enabled():
             self._release_slots(taken)
+            self._tick_record(started, "disabled")
             return IDLE_CLAIM_CEILING_S
         poll_s = self._settings.poll_interval_ms() / 1000
         try:
             async with self._repo.lane():
                 if not self._settings.worker_enabled():
                     self._release_slots(taken)
+                    self._tick_record(started, "disabled")
                     return IDLE_CLAIM_CEILING_S
                 lease = self._settings.lease_seconds()
                 rows, sent = await self._repo.claim(
@@ -417,10 +444,19 @@ class JobGraphWorker:
                 log.warning("pipeline claim acknowledged %.1fs after it was sent", late)
         for row in rows:
             self._start(row, sent + lease - SELF_FENCE_MARGIN_S)
+        self._tick_record(started, None if rows else "idle")
         if not rows:
             return self._idle_delay(poll_s)
         self._empty_delay = None
         return 0.0 if len(rows) == taken else poll_s
+
+    def _tick_record(self, started: float, state: str | None) -> None:
+        now = self._monotonic()
+        if self._last_tick_record is None or now - self._last_tick_record >= TICK_RECORD_EVERY_S:
+            self._last_tick_record = now
+            telemetry.log_tick_ok(
+                log, telemetry.Loop.PIPELINE_WORKER, (now - started) * 1000, state
+            )
 
     def _idle_delay(self, poll_s: float) -> float:
         ceiling = max(poll_s, IDLE_CLAIM_CEILING_S)
@@ -472,6 +508,9 @@ class JobGraphWorker:
         att.stop_at = self._monotonic()
         if kind == "lost":
             att.lost.set()
+            telemetry.record_pipeline_lease_event("lost_heartbeat")
+        elif kind == "self_fence":
+            telemetry.record_pipeline_lease_event("lost_self_fence")
         if not att.handler_running():
             return
         if att.stage == "txn" and att.txn is not None:
@@ -483,6 +522,7 @@ class JobGraphWorker:
     def _abandon(self, att: _Attempt) -> None:
         if att.handler_running():
             att.abandoned = True
+            telemetry.record_pipeline_lease_event("handler_abandoned")
             log.error(
                 "pipeline job %s handler still running %.0fs after a %s stop; abandoned",
                 att.key[0],
@@ -498,6 +538,7 @@ class JobGraphWorker:
         else:
             att.stop = "lost"
             att.lost.set()
+            telemetry.record_pipeline_lease_event("lost_heartbeat")
 
     async def _run_handler(self, att: _Attempt):
         handler = self._registry.get(att.job.kind)
@@ -612,7 +653,12 @@ class JobGraphWorker:
                 except (ParkRace, Exception) as e:  # noqa: BLE001 — retried until the give-up
                     last_error = e
                 else:
-                    if not written:
+                    if written is True:
+                        telemetry.record_pipeline_attempt("parked")
+                    elif written:
+                        telemetry.record_pipeline_attempt(_REPORTED[written])
+                    else:
+                        telemetry.record_pipeline_lease_event("report_rejected")
                         log.info("pipeline job %s: result rejected by the fence", att.key[0])
                     return
             att.phase = "retry_wait"
@@ -626,6 +672,7 @@ class JobGraphWorker:
             retry_s = min(retry_s * 2, REPORT_RETRY_MAX_S)
 
     def _give_up(self, att: _Attempt, last_error) -> None:
+        telemetry.record_pipeline_lease_event("report_abandoned")
         log.error(
             "pipeline job %s: result not written within %.0fs; last error: %r",
             att.key[0],
@@ -671,7 +718,7 @@ class JobGraphWorker:
         self._maintenance_ticks += 1
         enabled = self._settings.worker_enabled
         if enabled():
-            await self._guarded("reap", lambda: self._repo.reap(self._settings.max_attempts()))
+            await self._guarded("reap", self._reap)
         if enabled():
             await self._settle()
         if enabled():
@@ -686,6 +733,13 @@ class JobGraphWorker:
         except Exception as e:  # noqa: BLE001 — one failing step never skips the others
             log.warning("pipeline %s failed (%s: %s)", step, type(e).__name__, e)
             return None
+
+    async def _reap(self) -> None:
+        requeued, dead = await self._repo.reap(self._settings.max_attempts())
+        for _ in range(requeued):
+            telemetry.record_pipeline_attempt("expired")
+        for _ in range(dead):
+            telemetry.record_pipeline_attempt("dead")
 
     async def _settle(self) -> None:
         began = self._monotonic()
@@ -711,4 +765,9 @@ class JobGraphWorker:
 
     async def stats_step(self):
         self.ready_stats = await self._repo.ready_stats()
+        # The real clock: the gauge callback compares against time.monotonic(), not ours.
+        telemetry.set_pipeline_ready_stats(
+            {Lane(lane).name.lower(): v for lane, v in self.ready_stats.items()},
+            at=time.monotonic(),
+        )
         return self.ready_stats

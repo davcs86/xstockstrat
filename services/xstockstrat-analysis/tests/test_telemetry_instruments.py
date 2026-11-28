@@ -105,6 +105,16 @@ def test_gauge_reports_nothing_when_observe_returns_none(metric_reader):
     assert _points(metric_reader, "test.instruments.gauge_none") == []
 
 
+def test_gauge_reports_one_point_per_labelled_pair(metric_reader):
+    pairs = [(4, {"lane": "watchlist"}), (1, {"lane": "held"})]
+    telemetry.Gauge("test.instruments.gauge_pairs", lambda: pairs).register()
+    got = {
+        (p.value, tuple(sorted(dict(p.attributes).items())))
+        for p in _data_points(metric_reader, "test.instruments.gauge_pairs")
+    }
+    assert got == {(4, (("lane", "watchlist"),)), (1, (("lane", "held"),))}
+
+
 def _raise(*_args, **_kwargs):
     raise RuntimeError("instrument fault")
 

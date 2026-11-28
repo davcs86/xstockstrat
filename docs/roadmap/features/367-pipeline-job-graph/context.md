@@ -609,3 +609,32 @@ Carried from design.md § Open Risks; each needs an owner at `/sdd-spec` or late
   92.39%; ruff clean; no real-PG test skipped; no literal 30 or 600 in the file.
 - Files modified: `services/xstockstrat-analysis/tests/test_retention_prune_job.py`.
 - Deviations: none.
+
+### Steps 15+16 — pipeline telemetry [done]
+- `app/telemetry.py`: `Loop.PIPELINE_WORKER` (6 of 8), `KEY_LANE`/`KEY_STEP`/`KEY_PHASE`, counters
+  `analysis.pipeline.attempts` and `.lease_events`, histogram `analysis.pipeline.db.duration` (the
+  13 buckets), `Gauge` accepting a list of `(value, attributes)`, the ready gauges over one snapshot
+  (`set_pipeline_ready_stats(stats, *, at)`, `PIPELINE_STATS_STALE_S = 45`, the only declaration),
+  `register_pipeline_gauges()`.
+- Record calls: the claim loop's `loop tick ok` (no state / `idle` / `disabled`, ≤ 1 per 60 s,
+  nothing while blocked on the limiter); `attempts` by the report/park writer and the reaper
+  (`expired`, `dead`); the five lease events; `stats_step` stores the snapshot on the real clock;
+  `db.duration` for every control step and for `step=handler` around `job.db()`. A method called with
+  `conn=` records nothing. `db_outcome` (`ok`/`error`/`timeout`) is a module function in
+  `app/repositories/pipeline_jobs.py`, shared by both record sites. No label carries an identifier.
+- Tests: `tests/test_pipeline_telemetry.py` (6: `@AC-13` gauges and the 45 s staleness, `@AC-4`
+  exactly one succeeded / one expired / one rejected, one count per transition, the tick-record
+  states and 60 s throttle on virtual time, `db.duration` labels, `@AC-3 @feature-337` host.provider
+  on all five instruments over OTLP); `test_telemetry_allowlist.py` (+3 instruments, driver);
+  `test_telemetry_instruments.py` (labelled gauge); `test_analysis_tick_telemetry.py` (drives one
+  pipeline claim tick).
+- TDD: red — adding `Loop.PIPELINE_WORKER` turned `test_ac7_every_analysis_tick_uses_a_fixed_loop_name`
+  red (`Extra items in the right set: 'pipeline_worker'`); with the snapshot call removed from
+  `stats_step`, `@AC-13` failed (`KeyError: 'watchlist'`). Green — the six files 98 passed; full suite
+  2155 passed, coverage 92.40%; ruff clean; `check-otel-produced-signals.py` exit 0; no real-PG test
+  skipped.
+- Files modified: `services/xstockstrat-analysis/app/telemetry.py`,
+  `services/xstockstrat-analysis/app/engine/job_graph.py`,
+  `services/xstockstrat-analysis/app/repositories/pipeline_jobs.py`,
+  `services/xstockstrat-analysis/tests/{test_pipeline_telemetry,test_telemetry_allowlist,test_telemetry_instruments,test_analysis_tick_telemetry}.py`.
+- Deviations: none.

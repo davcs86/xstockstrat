@@ -1273,7 +1273,7 @@ uv run --extra dev pytest tests/test_retention_prune_job.py -q -rs | grep -c SKI
 
 ### Step 15 — service: pipeline telemetry
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/telemetry.py` — modify
@@ -1349,7 +1349,7 @@ cd ../.. && python3 scripts/check-otel-produced-signals.py
 
 ### Step 16 — test: pipeline telemetry
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_pipeline_telemetry.py` — create

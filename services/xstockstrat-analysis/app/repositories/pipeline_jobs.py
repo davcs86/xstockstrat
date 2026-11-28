@@ -4,7 +4,10 @@ import asyncio
 import time
 from contextlib import asynccontextmanager
 
-from app.repositories.read_budget import bounded_txn
+import asyncpg.exceptions as apg
+
+from app.repositories.read_budget import DbBudgetExceeded, bounded_txn
+from app.telemetry import record_pipeline_db_duration
 
 # Recorded invariants (design.md § Build order), not config keys.
 CONTROL_BUDGET_S = 5.0
@@ -196,6 +199,15 @@ DELETE FROM analysis.pipeline_jobs j
 """
 
 
+def db_outcome(exc: BaseException | None) -> str:
+    """The `outcome` label of a `db.duration{phase=total}` point."""
+    if exc is None:
+        return "ok"
+    if isinstance(exc, DbBudgetExceeded | TimeoutError | apg.QueryCanceledError):
+        return "timeout"
+    return "error"
+
+
 def _count(tag: str) -> int:
     return int(tag.rsplit(" ", 1)[-1])
 
@@ -225,18 +237,40 @@ class PipelineJobsRepository:
             yield
 
     @asynccontextmanager
-    async def _txn(self, conn=None, *, lane_held=False):
+    async def _txn(self, conn=None, *, lane_held=False, step=None):
         if conn is not None:
             yield conn
-        elif lane_held:
-            async with bounded_txn(self._pool, CONTROL_BUDGET_S, monotonic=self._monotonic) as tx:
-                yield tx
-        else:
-            async with self._lane:
+            return
+        requested = self._monotonic()
+
+        def acquired():
+            if step is not None:
+                record_pipeline_db_duration(step, "wait", self._monotonic() - requested)
+
+        error = None
+        try:
+            if lane_held:
                 async with bounded_txn(
-                    self._pool, CONTROL_BUDGET_S, monotonic=self._monotonic
+                    self._pool, CONTROL_BUDGET_S, on_acquired=acquired, monotonic=self._monotonic
                 ) as tx:
                     yield tx
+            else:
+                async with self._lane:
+                    async with bounded_txn(
+                        self._pool,
+                        CONTROL_BUDGET_S,
+                        on_acquired=acquired,
+                        monotonic=self._monotonic,
+                    ) as tx:
+                        yield tx
+        except BaseException as e:
+            error = e
+            raise
+        finally:
+            if step is not None:
+                record_pipeline_db_duration(
+                    step, "total", self._monotonic() - requested, db_outcome(error)
+                )
 
     async def enqueue(self, kind, subject, epoch, *, run_id, lane, conn=None):
         """Insert if absent → (job_id, created); an existing row keeps its run_id and lane."""
@@ -250,7 +284,7 @@ RETURNING job_id
 SELECT job_id FROM analysis.pipeline_jobs WHERE kind = $1 AND subject = $2 AND epoch = $3
 """
         args = (kind, subject, epoch)
-        async with self._txn(conn) as tx:
+        async with self._txn(conn, step="ensure") as tx:
             for _ in range(2):
                 job_id = await tx.fetchval(insert, *args, run_id, int(lane))
                 if job_id is not None:
@@ -264,14 +298,14 @@ SELECT job_id FROM analysis.pipeline_jobs WHERE kind = $1 AND subject = $2 AND e
         """Claim up to `limit` ready jobs → (rows, send time of the claim transaction)."""
         if not kinds or limit <= 0:
             return [], None
-        async with self._txn(conn, lane_held=lane_held) as tx:
+        async with self._txn(conn, lane_held=lane_held, step="claim") as tx:
             rows = await tx.fetch(CLAIM_SQL, list(kinds), int(limit), float(lease_seconds))
             sent = getattr(tx, "begin_sent_at", None)
         return [dict(r) for r in rows], sent
 
     async def reap(self, max_attempts, *, conn=None):
         """Requeue or kill expired leases → (requeued, dead); attempts are not incremented."""
-        async with self._txn(conn) as tx:
+        async with self._txn(conn, step="reap") as tx:
             rows = await tx.fetch(_REAP_SQL, int(max_attempts))
         dead = sum(1 for r in rows if r["state"] == "dead")
         return len(rows) - dead, dead
@@ -282,9 +316,25 @@ SELECT job_id FROM analysis.pipeline_jobs WHERE kind = $1 AND subject = $2 AND e
             return set(), None
         ids = [job_id for job_id, _ in pairs]
         tokens = [token for _, token in pairs]
-        async with bounded_txn(self._pool, HEARTBEAT_BUDGET_S, monotonic=self._monotonic) as tx:
-            rows = await tx.fetch(_HEARTBEAT_SQL, ids, tokens, float(lease_seconds))
-            sent = tx.begin_sent_at
+        requested = self._monotonic()
+
+        def acquired():
+            record_pipeline_db_duration("heartbeat", "wait", self._monotonic() - requested)
+
+        error = None
+        try:
+            async with bounded_txn(
+                self._pool, HEARTBEAT_BUDGET_S, on_acquired=acquired, monotonic=self._monotonic
+            ) as tx:
+                rows = await tx.fetch(_HEARTBEAT_SQL, ids, tokens, float(lease_seconds))
+                sent = tx.begin_sent_at
+        except BaseException as e:
+            error = e
+            raise
+        finally:
+            record_pipeline_db_duration(
+                "heartbeat", "total", self._monotonic() - requested, db_outcome(error)
+            )
         return {(r["job_id"], r["lease_token"]) for r in rows}, sent
 
     async def report(
@@ -303,7 +353,7 @@ SELECT job_id FROM analysis.pipeline_jobs WHERE kind = $1 AND subject = $2 AND e
 
         `outcome` is one of `succeeded`, `permanent`, `verdict`, `transient`.
         """
-        async with self._txn(lane_held=lane_held) as tx:
+        async with self._txn(lane_held=lane_held, step="report") as tx:
             return await tx.fetchval(
                 _REPORT_SQL,
                 job_id,
@@ -326,7 +376,7 @@ SELECT job_id FROM analysis.pipeline_jobs WHERE kind = $1 AND subject = $2 AND e
         subjects = [c[1] for c in children]
         epochs = [c[2] for c in children]
         lanes = [None if c[3] is None else int(c[3]) for c in children]
-        async with self._txn(lane_held=lane_held) as tx:
+        async with self._txn(lane_held=lane_held, step="park") as tx:
             parent = await tx.fetchrow(_PARK_FENCE_SQL, job_id, lease_token)
             if parent is None:
                 return False
@@ -342,7 +392,7 @@ SELECT job_id FROM analysis.pipeline_jobs WHERE kind = $1 AND subject = $2 AND e
 
     async def settle_batch(self, *, conn=None):
         """Wake or block settleable waiting parents → (woken, blocked, full)."""
-        async with self._txn(conn) as tx:
+        async with self._txn(conn, step="settle") as tx:
             rows = await tx.fetch(_SETTLE_SQL)
         blocked = sum(1 for r in rows if r["state"] == "blocked")
         return len(rows) - blocked, blocked, len(rows) == BATCH_SIZE
@@ -353,7 +403,7 @@ SELECT job_id FROM analysis.pipeline_jobs WHERE kind = $1 AND subject = $2 AND e
 
     async def ready_stats(self, *, conn=None):
         """Per lane value → (depth, age in seconds) of claimable ready rows; absent lanes read 0."""
-        async with self._txn(conn) as tx:
+        async with self._txn(conn, step="stats") as tx:
             rows = await tx.fetch(_READY_STATS_SQL)
         stats = {10: (0, 0.0), 20: (0, 0.0)}
         for r in rows:

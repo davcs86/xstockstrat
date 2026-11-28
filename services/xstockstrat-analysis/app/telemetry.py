@@ -8,6 +8,7 @@ import asyncio
 import inspect
 import logging
 import os
+import time
 from enum import StrEnum
 
 import grpc
@@ -363,8 +364,9 @@ class Histogram(_Bound):
 
 
 class Gauge(_Bound):
-    """Observable gauge; `observe()` returns the sample, or None to report nothing. Call
-    `register()` after the MeterProvider is installed (and again after it changes)."""
+    """Observable gauge; `observe()` returns the sample, a list of `(value, attributes)` pairs, or
+    None to report nothing. Call `register()` after the MeterProvider is installed (and again
+    after it changes)."""
 
     def __init__(self, name: str, observe, unit: str = "", description: str = "") -> None:
         super().__init__(name, unit=unit, description=description)
@@ -380,6 +382,8 @@ class Gauge(_Bound):
                 # A superseded provider keeps calling this; only the current binding reports.
                 if created and self._inst is created[0]:
                     value = self._observe()
+                    if isinstance(value, list):
+                        return [Observation(v, attrs) for v, attrs in value]
                     if value is not None:
                         return [Observation(value)]
             except Exception:  # noqa: BLE001
@@ -409,6 +413,7 @@ class Loop(StrEnum):
     READINESS_MATERIALIZER = "readiness_materializer"
     TEMPLATE_INTENT_SWEEP = "template_intent_sweep"
     PNL_CONSUMER = "pnl_consumer"
+    PIPELINE_WORKER = "pipeline_worker"
 
 
 def log_tick_ok(logger: logging.Logger, loop, duration_ms: float, state: str | None = None) -> None:
@@ -425,6 +430,9 @@ KEY_SOURCE = "source"
 KEY_TRIGGER = "trigger"
 KEY_KIND = "kind"
 KEY_SERVICE = "service"
+KEY_LANE = "lane"
+KEY_STEP = "step"
+KEY_PHASE = "phase"
 
 _LIVE_LOOP_PAIRS = Counter(
     "analysis.live_loop.pairs", description="Live (strategy, symbol) evaluations by outcome"
@@ -451,6 +459,54 @@ _OPPORTUNITY_READ_REISSUE = Counter(
 _TEMPLATE_INSTANTIATE = Counter(
     "template.instantiate", description="InstantiateTemplate calls by outcome"
 )
+_PIPELINE_ATTEMPTS = Counter(
+    "analysis.pipeline.attempts", description="Pipeline job attempts by how they left running"
+)
+_PIPELINE_LEASE_EVENTS = Counter(
+    "analysis.pipeline.lease_events", description="Pipeline lease losses and dropped results"
+)
+_PIPELINE_DB_DURATION = Histogram(
+    "analysis.pipeline.db.duration",
+    unit="s",
+    description="Pipeline job-graph database steps: wait for a connection, and total",
+    buckets=[0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30],
+)
+
+# A ready-stats snapshot older than this reports nothing (stats run every 15 s).
+PIPELINE_STATS_STALE_S = 45
+_PIPELINE_READY: dict = {"stats": None, "at": 0.0}
+
+
+def set_pipeline_ready_stats(stats, *, at: float) -> None:
+    """stats: lane label → (depth, oldest ready age in seconds); `at` is a time.monotonic()."""
+    _PIPELINE_READY["stats"] = dict(stats)
+    _PIPELINE_READY["at"] = at
+
+
+def _pipeline_ready(index: int):
+    stats = _PIPELINE_READY["stats"]
+    if stats is None or time.monotonic() - _PIPELINE_READY["at"] > PIPELINE_STATS_STALE_S:
+        return None
+    return [(values[index], {KEY_LANE: lane}) for lane, values in sorted(stats.items())]
+
+
+_PIPELINE_READY_DEPTH = Gauge(
+    "analysis.pipeline.ready_depth",
+    lambda: _pipeline_ready(0),
+    description="Claimable ready pipeline jobs per lane",
+)
+_PIPELINE_OLDEST_READY_AGE = Gauge(
+    "analysis.pipeline.oldest_ready_age",
+    lambda: _pipeline_ready(1),
+    unit="s",
+    description="Age of the oldest claimable ready pipeline job per lane",
+)
+
+
+def register_pipeline_gauges() -> None:
+    _PIPELINE_READY_DEPTH.register()
+    _PIPELINE_OLDEST_READY_AGE.register()
+
 
 _TEMPLATE_ABORT_CODES = frozenset(
     {
@@ -505,3 +561,25 @@ def record_template_instantiate(code: grpc.StatusCode | None = None) -> None:
     else:
         outcome = "other"
     _TEMPLATE_INSTANTIATE.add(1, {KEY_SERVICE: "analysis", KEY_OUTCOME: outcome})
+
+
+def record_pipeline_attempt(outcome: str) -> None:
+    """outcome: succeeded | parked | blocked | retried | failed | dead | expired."""
+    _PIPELINE_ATTEMPTS.add(1, {KEY_OUTCOME: outcome})
+
+
+def record_pipeline_lease_event(outcome: str) -> None:
+    """outcome: lost_heartbeat | lost_self_fence | report_rejected | report_abandoned |
+    handler_abandoned."""
+    _PIPELINE_LEASE_EVENTS.add(1, {KEY_OUTCOME: outcome})
+
+
+def record_pipeline_db_duration(
+    step: str, phase: str, seconds: float, outcome: str | None = None
+) -> None:
+    """step: heartbeat | claim | reap | settle | ensure | stats | report | park | handler;
+    phase: wait | total; outcome (ok | error | timeout) only on phase=total."""
+    attrs = {KEY_STEP: step, KEY_PHASE: phase}
+    if outcome is not None:
+        attrs[KEY_OUTCOME] = outcome
+    _PIPELINE_DB_DURATION.record(seconds, attrs)
