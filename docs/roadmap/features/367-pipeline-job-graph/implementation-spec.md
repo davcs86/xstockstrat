@@ -1,6 +1,6 @@
 # Implementation Spec: pipeline-job-graph
 
-**Status**: `pending`
+**Status**: `complete`
 **Created**: 2026-11-27
 **Feature**: `docs/roadmap/features/367-pipeline-job-graph/feature.md`
 **Total Steps**: 19
@@ -1523,7 +1523,7 @@ test -z "$(git diff --name-only origin/main-dev -- ../../docker-compose.yml ../.
 
 ### Step 19 — docs: pool budget, pooling pattern, analysis service docs, recovery page, program plan
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/` and `services/xstockstrat-analysis/` (documentation only)
 **Files**:
 - `CLAUDE.md` — modify (the analysis row of § Connection Pool Budget only)

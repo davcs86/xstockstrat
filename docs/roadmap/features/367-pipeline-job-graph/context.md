@@ -660,3 +660,19 @@ Carried from design.md § Open Risks; each needs an owner at `/sdd-spec` or late
   `services/xstockstrat-analysis/tests/test_supervision.py`,
   `services/xstockstrat-analysis/tests/test_pipeline_boot.py`.
 - Deviations: none.
+
+### Step 19 — docs [done]
+- Root `CLAUDE.md` analysis pool row (service 2 + pipeline control 2; client connections, not backend
+  slots; totals unchanged, F-06); `docs/patterns/database.md` § Connection pooling paragraph; analysis
+  `CLAUDE.md` (the run-history pool sentence, a `### Pipeline job graph (feature 367)` section, the
+  Observability bullet); new `services/xstockstrat-analysis/docs/pipeline-jobs.md` (states, lanes,
+  at-least-once, timing and the takeover figure, the manual recovery SQL byte-identical to design.md,
+  what to watch, the not-running checklist, accepted risks); the program plan's line-81 note corrected
+  (row locks with a lease token, not advisory locks; R-1).
+- TDD: N/A (docs). Gate: context map ok; `--doc-check` exit 0; "pipeline control 2" present; the old
+  advisory-lock wording gone; `pipeline-jobs.md` linked; 1 `FOR NO KEY UPDATE`; "no new pool" gone.
+- Files modified: `CLAUDE.md`, `docs/patterns/database.md`, `services/xstockstrat-analysis/CLAUDE.md`,
+  `services/xstockstrat-analysis/docs/pipeline-jobs.md`, `docs/roadmap/program-job-graph-analysis-pipeline.md`.
+- Deviations: none.
+- All 19 steps done. `node scripts/check-config-wiring.mjs --final` exit 0 (two `REPORTED` baseline
+  findings, neither this feature's). Status → `code-completed`.

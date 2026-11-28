@@ -179,6 +179,11 @@ pooled services is the pool's own `size`, not `DB_POOL_MAX`; raising `DB_POOL_MA
 concurrency knob that does not consume cluster slots. Only the **direct** services (`config`, `ledger`,
 `identity`, `notify`, `ui`) still set `DB_POOL_MAX`, and theirs are the real backend-slot budget.
 
+**Analysis has a second, fixed client pool** (feature 367): the pipeline job graph's control operations
+use a pool of size 2, behind the same PgBouncer pool, so it adds no backend slot. Its `SKIP LOCKED` row
+locks and `SET LOCAL statement_timeout` are transaction-scoped and so work through transaction pooling;
+`LISTEN`/`NOTIFY` and session advisory locks do not, and the job graph uses neither.
+
 **Both environments are pooled.** Each database has its own transaction-mode pool on the cluster —
 `staging` (db `xstockstrat-staging`, wired in `.do/app.dev.yaml`) and `production` (db
 `xstockstrat-production`, wired in `.do/app.yaml`) — and both use the `:25061/<pool-name>` URL +
