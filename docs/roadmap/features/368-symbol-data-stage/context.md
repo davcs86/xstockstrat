@@ -100,3 +100,26 @@
 - Approval is not selectable after round 1 (full mode). Product-level forks go to the operator at
   this gate: users without strategies, system-scope signals, run timing, backfill path, interior
   vendor holes, new-filings refresh, and the C-16 CHANGE for twelve vendor-default scenarios.
+
+## Session 2026-11-28T06:40Z — sdd-design gate after round 1
+
+- **OPERATOR DECISION (backfill path): "Call marketdata BackfillBars directly"** — D-9. The backfill
+  child calls marketdata synchronously; ingest is out of the bar path. Rejected: self-serve under an
+  owner's identity (R-6); a system grant in ingest (R-7).
+- **OPERATOR DECISION (vendor holes): "Covered once the vendor confirmed the hole"** — D-10. Amends
+  FR-3 and FR-5; the exact spec text is still to be shown to the operator before it is applied.
+- **OPERATOR DECISION (run timing): "After the close, with a final-bar refetch"** — D-11. New
+  config key for the delay (proposed default 30 minutes). Rejected: after New York midnight (R-8).
+- **OPERATOR DECISION (new filings): "Also fetch new filings"** — D-12. Widens FR-6; adds a
+  fundamentals backfill path to this feature. Rejected: re-derive only (R-12).
+- **OPERATOR DECISION (users): "Strategy owners only"** — D-13. Narrows FR-1's "every user".
+- **OPERATOR DECISION (system signals): "Include them"** — D-14.
+- **OPERATOR SIGN-OFF (C-16 CHANGE): "Yes, pin them to vendor"** — D-15. Twelve promoted marketdata
+  scenarios (255 `@AC-1,2,3,5,6,9`; 340 `@AC-2,4`; 254 `@AC-1,2,5,7`) gain an explicit Given
+  `snapshot_source is "vendor"`; outcomes unchanged.
+- **OPERATOR DECISION (gate): "Run rounds until sound"** — standing choice of *Run another round*
+  while rounds make progress, each with a different lens; return at the approval gate or when a
+  round needs a product decision or a spec change. The approval gate itself is never skipped.
+- Pending: product-spec.md and acceptance.feature amendments for D-9 to D-14 (FR-1, FR-3, FR-4,
+  FR-5, FR-6, Affected Services, Config Key Changes). To be drafted when the design converges and
+  shown to the operator as exact text before being applied.
