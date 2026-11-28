@@ -9,7 +9,7 @@ import {
   rememberMeOptsFromRequest,
 } from '@/lib/auth';
 import { refreshSession } from '@/lib/identity';
-import { HEADER_TRACE_ID } from '@/lib/headers';
+import { HEADER_ACCESS_SCOPE, HEADER_TRACE_ID, HEADER_USER_ID } from '@/lib/headers';
 
 export const config = {
   runtime: 'nodejs',
@@ -40,16 +40,36 @@ export const SSO_PUBLIC_PATHS = new Set(['/api/auth/sso/start', '/api/auth/sso/c
 // Logout clears a dead session itself; without either cookie there is nothing to clear (D-62).
 export const COOKIE_GATED_PATHS = new Set(['/api/auth/logout']);
 
+// Every pass-through goes here: inbound identity headers are never trusted by UI handlers, and after a
+// rotation the handler must see the new tokens, not the refresh token identity just revoked.
+function forward(
+  req: NextRequest,
+  traceId?: string,
+  rotated?: { accessToken: string; refreshToken: string },
+): NextResponse {
+  const headers = new Headers(req.headers);
+  headers.delete(HEADER_USER_ID);
+  headers.delete(HEADER_ACCESS_SCOPE);
+  if (traceId) headers.set(HEADER_TRACE_ID, traceId);
+  if (rotated) {
+    const cookies = new Map(req.cookies.getAll().map((c) => [c.name, c.value]));
+    cookies.set('access_token', rotated.accessToken);
+    cookies.set('refresh_token', rotated.refreshToken);
+    headers.set('cookie', [...cookies].map(([n, v]) => `${n}=${encodeURIComponent(v)}`).join('; '));
+  }
+  return NextResponse.next({ request: { headers } });
+}
+
 export async function middleware(req: NextRequest) {
   const path = req.nextUrl.pathname;
-  if (SSO_PUBLIC_PATHS.has(path)) return NextResponse.next();
+  if (SSO_PUBLIC_PATHS.has(path)) return forward(req);
   if (
     COOKIE_GATED_PATHS.has(path) &&
     (req.cookies.has('access_token') || req.cookies.has('refresh_token'))
   ) {
-    return NextResponse.next();
+    return forward(req);
   }
-  if (PUBLIC_HEALTH_PATHS.has(path)) return NextResponse.next();
+  if (PUBLIC_HEALTH_PATHS.has(path)) return forward(req);
 
   const claims = await getSessionFromRequest(req);
 
@@ -57,7 +77,7 @@ export async function middleware(req: NextRequest) {
 
   if (!claims) {
     if (req.nextUrl.pathname === '/auth/login' || req.nextUrl.pathname === '/auth/oauth-login') {
-      return NextResponse.next();
+      return forward(req);
     }
 
     // Expired/missing access token: attempt refresh before redirecting — the refresh token
@@ -66,14 +86,7 @@ export async function middleware(req: NextRequest) {
     if (refreshToken) {
       const result = await refreshSession(refreshToken);
       if (result) {
-        const response = NextResponse.next({
-          request: {
-            headers: new Headers({
-              ...Object.fromEntries(req.headers),
-              [HEADER_TRACE_ID]: traceId,
-            }),
-          },
-        });
+        const response = forward(req, traceId, result);
         setSessionCookies(
           response,
           result.accessToken,
@@ -108,11 +121,7 @@ export async function middleware(req: NextRequest) {
       clearSessionCookies(res);
       return res;
     }
-    const response = NextResponse.next({
-      request: {
-        headers: new Headers({ ...Object.fromEntries(req.headers), [HEADER_TRACE_ID]: traceId }),
-      },
-    });
+    const response = forward(req, traceId, result);
     // Preserve "Remember me" persistence across rotation — keep the rolling Max-Age, don't
     // downgrade to a session cookie.
     setSessionCookies(
@@ -124,9 +133,5 @@ export async function middleware(req: NextRequest) {
     return response;
   }
 
-  return NextResponse.next({
-    request: {
-      headers: new Headers({ ...Object.fromEntries(req.headers), [HEADER_TRACE_ID]: traceId }),
-    },
-  });
+  return forward(req, traceId);
 }

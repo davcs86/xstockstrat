@@ -1036,10 +1036,18 @@ export class IdentityServiceImpl {
     return false;
   }
 
+  // SSO sessions exist only when an issuer is in play; `local` refuses like LinkExternalIdentity does.
+  private ssoDisabled(callback: any): boolean {
+    if (readAuthMode(this.config) !== 'local') return false;
+    callback({ code: 9, message: 'sso disabled' });
+    return true;
+  }
+
   async resolveExternalIdentity(call: any, callback: any) {
     if (!this.peerGate('ResolveExternalIdentity', call, callback)) return;
     const { issuer, subject } = call.request;
     if (!issuer || !subject) return callback({ code: 3, message: 'issuer and subject required' });
+    if (this.ssoDisabled(callback)) return;
     try {
       const r = await this.pool.query(
         `SELECT u.user_id, u.roles, u.is_active FROM identity.external_identities e
@@ -1060,6 +1068,7 @@ export class IdentityServiceImpl {
     if (!this.peerGate('IssueSessionForUser', call, callback)) return;
     const { userId } = call.request;
     if (!userId) return callback({ code: 3, message: 'userId required' });
+    if (this.ssoDisabled(callback)) return;
     try {
       const r = await this.pool.query(
         'SELECT user_id, email, roles, is_active FROM identity.users WHERE user_id = $1',

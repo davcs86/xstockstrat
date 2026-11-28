@@ -6,10 +6,13 @@ import { signTestJwt, TEST_JWT_SECRET } from '../../e2e/helpers/auth';
 import {
   clearAllTxnCookies,
   clearSsoLink,
+  LINK_MIN_ACCESS_LIFETIME_S,
   openSsoLink,
   openSsoTxn,
   sealSsoLink,
   sealSsoTxn,
+  sessionHash,
+  sessionHashMatches,
   SSO_LINK_COOKIE,
   ssoLinkCookieOpts,
   TXN_COOKIE_OPTS,
@@ -33,6 +36,7 @@ const LINK = {
   nonce: 'n-2',
   code_verifier: 'v-2',
   user_id: 'user-1',
+  session_hash: 'b'.repeat(64),
 };
 
 beforeEach(() => {
@@ -127,6 +131,7 @@ describe('the link cookie', () => {
     sub: 'authelia-sub-1',
     label: 'trader@example.test',
     user_id: 'user-1',
+    session_hash: 'b'.repeat(64),
   };
 
   test('round-trips with the given absolute exp', async () => {
@@ -157,7 +162,7 @@ describe('the link cookie', () => {
       httpOnly: true,
       sameSite: 'lax',
       secure: false,
-      path: '/',
+      path: '/accounts/api/sso',
       maxAge: 600,
     });
     vi.setSystemTime(T0.getTime() + 450_000);
@@ -166,9 +171,35 @@ describe('the link cookie', () => {
     expect(ssoLinkCookieOpts(exp).maxAge).toBe(0);
   });
 
-  test('clearSsoLink expires the cookie on /', () => {
+  test("370 @AC-9 clearSsoLink expires the cookie on its readers' path", () => {
     const res = NextResponse.json({});
     clearSsoLink(res);
-    expect(res.cookies.get('sso_link')).toMatchObject({ value: '', maxAge: 0, path: '/' });
+    expect(res.cookies.get('sso_link')).toMatchObject({
+      value: '',
+      maxAge: 0,
+      path: '/accounts/api/sso',
+    });
+  });
+});
+
+describe('370 session binding helpers', () => {
+  test("sessionHash is identity's token_hash: lowercase SHA-256 hex", () => {
+    expect(sessionHash('rt-1')).toBe(createHash('sha256').update('rt-1').digest('hex'));
+  });
+
+  test.each([
+    ['the same refresh token', 'rt-1', true],
+    ['another refresh token', 'rt-2', false],
+    ['no refresh token', undefined, false],
+  ])('sessionHashMatches with %s → %s', (_, token, ok) => {
+    expect(sessionHashMatches(sessionHash('rt-1'), token)).toBe(ok);
+  });
+
+  test.each([[''], [undefined], ['short'], [42]])('an unusable sealed hash %o → false', (h) => {
+    expect(sessionHashMatches(h, 'rt-1')).toBe(false);
+  });
+
+  test('the link window needs 600 + 60 s of access-token life', () => {
+    expect(LINK_MIN_ACCESS_LIFETIME_S).toBe(660);
   });
 });

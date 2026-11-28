@@ -177,7 +177,7 @@ propagation in `docs/patterns/header-propagation.md`.
 | `src/app/accounts/sso/page.tsx`, `src/app/accounts/api/sso{,/link,/confirm}/route.ts` | Browser / Node | **Link SSO** (`auth.mode` `both` only): status, start (`prompt=login`, `max_age=1`) and password confirm → `LinkExternalIdentity`; the page calls them through `apiFetch` |
 | `src/lib/oidcConfig.ts` | Node | `loadAuthMode` (`identity/auth.mode`), `loadOidcConfig` (`ui/oidc.*` + `APP_URL` validity), `loadOidcClientSecret` (`GetSecret`), `loadAgentIssuer` (`agent/oidc.issuer`); every read global, any fault → `'error'` |
 | `src/lib/oidcClient.ts` | Node | `openid-client` wiring: cached discovery `Configuration`, authorization URLs, `exchangeCode` |
-| `src/lib/ssoTxn.ts` | Node | JWE `sso_txn_*` (callback path, 600 s) and `sso_link` cookies, keyed from `JWT_SECRET` |
+| `src/lib/ssoTxn.ts` | Node | JWE `sso_txn_*` (callback path, 600 s) and `sso_link` (path `/accounts/api/sso`) cookies, keyed from `JWT_SECRET`; a link is bound to the session's refresh-token hash (feature 370) |
 | `src/lib/sameOrigin.ts` | Node | `APP_URL` parsing and the `Origin` checks (SSO start/link/confirm, logout) |
 | `src/lib/ssoErrors.ts` | Node | Error-code redirects and refusal → code maps; the codes and messages live in the client-safe `src/lib/ssoErrorCodes.ts` (a `'use client'` page must not import `ssoErrors.ts`, which pulls `node:crypto`) |
 

@@ -61,6 +61,7 @@ const loginTxn = (over: { remember?: boolean; redirect?: string } = {}) =>
     remember: over.remember ?? false,
     redirect: over.redirect ?? '/trader',
   });
+const SESSION_HASH = 'a'.repeat(64);
 const linkTxn = () =>
   sealSsoTxn({
     purpose: 'link',
@@ -68,6 +69,7 @@ const linkTxn = () =>
     nonce: 'n-1',
     code_verifier: 'v-1',
     user_id: TEST_USER_ID,
+    session_hash: SESSION_HASH,
   });
 
 type Call = {
@@ -329,6 +331,15 @@ describe('login purpose', () => {
     expect(sessionSet(res)).toBe(false);
   });
 
+  test('370 IssueSession "sso disabled" (mode-change window) → failed, not inactive', async () => {
+    issueSessionForUser.mockRejectedValue(
+      new ConnectError('sso disabled', Code.FailedPrecondition),
+    );
+    const res = await callback({ txn: await loginTxn() });
+    expect(location(res)).toBe(`${APP}/auth/login?error=failed`);
+    expect(sessionSet(res)).toBe(false);
+  });
+
   test('any other identity error → failed, no cookies', async () => {
     resolveExternalIdentity.mockRejectedValue(new ConnectError('down', Code.Unavailable));
     let res = await callback({ txn: await loginTxn() });
@@ -404,6 +415,7 @@ describe('link purpose', () => {
         label,
         user_id: TEST_USER_ID,
         exp: NOW_S + 600,
+        session_hash: SESSION_HASH,
       });
       expect(link!.link_id).toMatch(/^[0-9a-f-]{36}$/);
       expect(clearedNames(res)).toContain(txnCookieName(STATE));
@@ -463,4 +475,59 @@ test('D-75 sentinels never reach a log argument', async () => {
   for (const s of ['CODE-SENTINEL', 'IDTOKEN-SENTINEL', 'sentinel@example.test', SUBJECT]) {
     expect(text).not.toContain(s);
   }
+});
+
+describe('370 @AC-8 every failure after the txn is opened clears its cookie', () => {
+  const failures: Array<[string, 'login' | 'link', () => void]> = [
+    ['secret unreadable', 'login', () => loadOidcClientSecret.mockResolvedValue('error')],
+    [
+      'secret not configured',
+      'login',
+      () => loadOidcClientSecret.mockResolvedValue({ found: false }),
+    ],
+    ['the code exchange fails', 'login', () => exchangeCode.mockRejectedValue(new Error('bad'))],
+    [
+      'the subject is not linked',
+      'login',
+      () =>
+        resolveExternalIdentity.mockRejectedValue(
+          new ConnectError('not linked', Code.FailedPrecondition),
+        ),
+    ],
+    [
+      'IssueSessionForUser fails',
+      'login',
+      () => issueSessionForUser.mockRejectedValue(new ConnectError('down', Code.Unavailable)),
+    ],
+    ['the code exchange fails', 'link', () => exchangeCode.mockRejectedValue(new Error('bad'))],
+    [
+      'the ID token has no auth_time',
+      'link',
+      () => exchangeCode.mockResolvedValue({ iss: ISSUER, sub: SUBJECT }),
+    ],
+    [
+      'the mode left both',
+      'link',
+      () => {
+        loadAuthMode.mockResolvedValue('oidc');
+        exchangeCode.mockResolvedValue({ iss: ISSUER, sub: SUBJECT, auth_time: NOW_S });
+      },
+    ],
+  ];
+  test.each(failures)('%s (%s txn)', async (_, purpose, arrange) => {
+    if (purpose === 'link') loadAuthMode.mockResolvedValue('both');
+    arrange();
+    const res = await callback({ txn: await (purpose === 'link' ? linkTxn() : loginTxn()) });
+    expect(res.status).toBe(303);
+    expect(location(res)).toContain('error=');
+    expect(clearedNames(res)).toContain(txnCookieName(STATE));
+    expect(sessionSet(res)).toBe(false);
+  });
+
+  test('@AC-9 the sso_link cookie is scoped to /accounts/api/sso', async () => {
+    loadAuthMode.mockResolvedValue('both');
+    exchangeCode.mockResolvedValue({ iss: ISSUER, sub: SUBJECT, auth_time: NOW_S });
+    const res = await callback({ txn: await linkTxn() });
+    expect(cookieNamed(res, 'sso_link')).toContain('Path=/accounts/api/sso;');
+  });
 });

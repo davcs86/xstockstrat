@@ -79,6 +79,23 @@ export async function addCookieWithRoles(
     ]);
 }
 
+/** The refresh token every identity mock login/refresh hands out (`e2e/mock-backend.ts`). */
+export const TEST_REFRESH_TOKEN = 'test-refresh-token';
+
+/** A full session (access + refresh cookie): Link SSO binds to the refresh token (feature 370). */
+export async function addSessionCookies(page: Page): Promise<void> {
+  await addAuthCookie(page);
+  await page.context().addCookies([
+    {
+      name: 'refresh_token',
+      value: TEST_REFRESH_TOKEN,
+      url: BASE_URL,
+      httpOnly: true,
+      sameSite: 'Lax',
+    },
+  ]);
+}
+
 /** Authenticated, no roles — the default for most specs. */
 export async function addAuthCookie(page: Page): Promise<void> {
   await addCookieWithRoles(page, []);

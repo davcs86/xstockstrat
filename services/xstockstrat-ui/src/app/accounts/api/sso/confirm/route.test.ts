@@ -1,5 +1,6 @@
 // C-12: user ids from e2e/fixtures/users.ts, session JWTs from e2e/helpers/auth.ts; issuer, link
 // ids, passwords and Connect errors are scenario one-offs.
+import { createHash } from 'node:crypto';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 import { Code, ConnectError } from '@connectrpc/connect';
@@ -28,8 +29,10 @@ const SIBLING = 'https://dashboard.example.test';
 const SUBJECT = 'sso-subject-1';
 const NOW_S = 1_800_000_000;
 const LINK_ID = 'l-1';
+const REFRESH = 'rt-session-a';
+const sha256 = (v: string) => createHash('sha256').update(v).digest('hex');
 
-const sealed = (over: { user_id?: string; exp?: number } = {}) =>
+const sealed = (over: { user_id?: string; exp?: number; session_hash?: string } = {}) =>
   sealSsoLink({
     link_id: LINK_ID,
     iss: ISSUER,
@@ -37,6 +40,7 @@ const sealed = (over: { user_id?: string; exp?: number } = {}) =>
     label: 'sso@example.test',
     user_id: over.user_id ?? TEST_USER_ID,
     exp: over.exp ?? NOW_S + 600,
+    session_hash: over.session_hash ?? sha256(REFRESH),
   });
 
 async function confirm(
@@ -45,12 +49,18 @@ async function confirm(
     origin?: string | null;
     linkCookie?: string | null;
     body?: Record<string, unknown>;
+    refresh?: string | null;
   } = {},
 ): Promise<Response> {
   const token = opts.token ?? (await signTestJwt(['trader']));
   const linkCookie = opts.linkCookie === undefined ? await sealed() : opts.linkCookie;
+  const refresh = opts.refresh === undefined ? REFRESH : opts.refresh;
   const headers: Record<string, string> = {
-    cookie: [`access_token=${token}`, linkCookie ? `sso_link=${linkCookie}` : '']
+    cookie: [
+      `access_token=${token}`,
+      refresh ? `refresh_token=${refresh}` : '',
+      linkCookie ? `sso_link=${linkCookie}` : '',
+    ]
       .filter(Boolean)
       .join('; '),
     'content-type': 'application/json',
@@ -216,4 +226,28 @@ test('the password never reaches a log argument', async () => {
     ),
   );
   expect(text).not.toContain('PW-SENTINEL');
+});
+
+describe('370 @AC-5 the sso_link must belong to this session', () => {
+  test.each([
+    ['another session of the same user', { refresh: 'rt-session-b' }],
+    ['no refresh_token cookie', { refresh: null }],
+  ] as const)('%s → 400 failed, link cleared, identity not called', async (_, opts) => {
+    const res = await confirm(opts);
+    await expectError(res, 400, 'failed');
+    expect(linkCleared(res)).toBe(true);
+    expect(linkExternalIdentity).not.toHaveBeenCalled();
+  });
+
+  test('a link sealed without a session hash (issued before 370) → 400 failed', async () => {
+    const legacy = await sealed({ session_hash: '' });
+    await expectError(await confirm({ linkCookie: legacy }), 400, 'failed');
+    expect(linkExternalIdentity).not.toHaveBeenCalled();
+  });
+
+  test('the same session → linked', async () => {
+    const res = await confirm();
+    expect(res.status).toBe(200);
+    expect(linkExternalIdentity).toHaveBeenCalledTimes(1);
+  });
 });

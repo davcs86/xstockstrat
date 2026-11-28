@@ -1,5 +1,11 @@
 import { test, expect, type APIRequestContext, type Page } from '@playwright/test';
-import { addAuthCookie, BASE_URL, signExpiredTestJwt } from '../helpers/auth';
+import {
+  addAuthCookie,
+  addSessionCookies,
+  BASE_URL,
+  signExpiredTestJwt,
+  TEST_REFRESH_TOKEN,
+} from '../helpers/auth';
 import { readSsoRecord, resetSsoState, setSsoState, type SsoStubState } from '../helpers/stubIdp';
 import {
   SSO_IDENTITY,
@@ -292,7 +298,7 @@ test.describe('Sign out', () => {
     await state(request, { mode: 'both' });
     await page.context().addCookies([
       { name: 'access_token', value: await signExpiredTestJwt(), url: BASE_URL },
-      { name: 'refresh_token', value: 'test-refresh-token', url: BASE_URL },
+      { name: 'refresh_token', value: TEST_REFRESH_TOKEN, url: BASE_URL },
     ]);
     const res = await page.request.post('/api/auth/logout', { maxRedirects: 0 });
     expect(res.status()).toBe(200);
@@ -379,7 +385,7 @@ test.describe('Link SSO', () => {
     request,
   }) => {
     await state(request, { mode: 'both' });
-    await addAuthCookie(page);
+    await addSessionCookies(page);
     await page.goto('/accounts/sso');
     await expect(page.getByTestId('sso-link-status')).toHaveText(/not linked/);
     await startLink(page);
@@ -403,7 +409,7 @@ test.describe('Link SSO', () => {
 
   test('@AC-66 a wrong password → "Incorrect password."', async ({ page, request }) => {
     await state(request, { mode: 'both' });
-    await addAuthCookie(page);
+    await addSessionCookies(page);
     await startLink(page);
     const dialog = page.getByRole('alertdialog');
     await dialog.getByLabel('Your xstockstrat password').fill('wrong-password');
@@ -417,7 +423,7 @@ test.describe('Link SSO', () => {
   ] as const) {
     test(`${ac} ${detail} → the ${code} message`, async ({ page, request }) => {
       await state(request, { mode: 'both', linkRefusal: detail });
-      await addAuthCookie(page);
+      await addSessionCookies(page);
       await startLink(page);
       const dialog = page.getByRole('alertdialog');
       await dialog.getByLabel('Your xstockstrat password').fill(SSO_LINK_PASSWORD);
@@ -430,7 +436,7 @@ test.describe('Link SSO', () => {
   for (const authTime of ['absent', 'stale'] as const) {
     test(`@AC-74 auth_time ${authTime} → failed, no confirmation`, async ({ page, request }) => {
       await state(request, { mode: 'both', authTime });
-      await addAuthCookie(page);
+      await addSessionCookies(page);
       await startLink(page);
       await expect(page).toHaveURL(/\/accounts\/sso\?error=failed/);
       await expect(page.getByText(LINK_ERROR_MESSAGES.failed)).toBeVisible();
@@ -447,7 +453,7 @@ test.describe('Link SSO', () => {
       request,
     }) => {
       await state(request, { mode: 'both' });
-      await addAuthCookie(page);
+      await addSessionCookies(page);
       await idpErrorOnAuthorize(page, error);
       await startLink(page);
       await expect(page).toHaveURL(new RegExp(`/accounts/sso\\?error=${code}`));
@@ -458,7 +464,7 @@ test.describe('Link SSO', () => {
   for (const mode of ['local', 'oidc'] as const) {
     test(`@AC-69 ${mode} → status shown, no Link SSO, /link → 404`, async ({ page, request }) => {
       await state(request, { mode });
-      await addAuthCookie(page);
+      await addSessionCookies(page);
       await page.goto('/accounts/sso');
       await expect(page.getByTestId('sso-link-status')).toBeVisible();
       await expect(page.getByRole('button', { name: 'Link SSO' })).toHaveCount(0);

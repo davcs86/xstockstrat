@@ -1,11 +1,17 @@
-import { createHash, hkdfSync } from 'node:crypto';
+import { createHash, hkdfSync, timingSafeEqual } from 'node:crypto';
 import { CompactEncrypt, compactDecrypt } from 'jose';
 import type { NextRequest, NextResponse } from 'next/server';
+import { ACCESS_TOKEN_REFRESH_THRESHOLD_SECONDS } from './auth';
 
 // Encrypted (dir/A256GCM), never an HS256 JWS: verifyAccessToken accepts any JWT_SECRET JWS (R-7).
 const TXN_TTL_S = 600;
+// A link binds to the refresh token at its start, so the session must not rotate before confirm:
+// the access token needs this much life left, else the middleware refreshes it mid-link.
+export const LINK_MIN_ACCESS_LIFETIME_S = TXN_TTL_S + ACCESS_TOKEN_REFRESH_THRESHOLD_SECONDS;
 const TXN_COOKIE_PREFIX = 'sso_txn_';
 export const SSO_LINK_COOKIE = 'sso_link';
+// Only GET /accounts/api/sso and POST /accounts/api/sso/confirm read the pending link.
+const SSO_LINK_COOKIE_PATH = '/accounts/api/sso';
 
 type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
 
@@ -25,6 +31,7 @@ export type SsoTxn =
       nonce: string;
       code_verifier: string;
       user_id: string;
+      session_hash: string;
       created_at: number;
       exp: number;
     };
@@ -35,6 +42,7 @@ export type SsoLink = {
   sub: string;
   label: string;
   user_id: string;
+  session_hash: string;
   exp: number;
 };
 
@@ -89,6 +97,18 @@ export function openSsoTxn(jwe: string): Promise<SsoTxn | null> {
   return open<SsoTxn>(jwe, 'xstockstrat-ui/sso-txn');
 }
 
+// Identity stores the same digest as refresh_tokens.token_hash.
+export function sessionHash(refreshToken: string): string {
+  return createHash('sha256').update(refreshToken).digest('hex');
+}
+
+export function sessionHashMatches(expected: unknown, refreshToken: string | undefined): boolean {
+  if (typeof expected !== 'string' || !expected || !refreshToken) return false;
+  const a = Buffer.from(expected);
+  const b = Buffer.from(sessionHash(refreshToken));
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+
 export function txnCookieName(state: string): string {
   return `${TXN_COOKIE_PREFIX}${createHash('sha256').update(state).digest('hex').slice(0, 16)}`;
 }
@@ -114,7 +134,7 @@ export function ssoLinkCookieOpts(exp: number) {
     httpOnly: true,
     sameSite: 'lax' as const,
     secure: isProduction,
-    path: '/',
+    path: SSO_LINK_COOKIE_PATH,
     maxAge: Math.max(0, exp - nowS()),
   };
 }

@@ -26,7 +26,7 @@ _ROLE_TTL_S = 60.0
 # Fixed invariant (F-07): leeway for nbf/iat; `exp` is still checked strictly. Not a config key.
 _CLOCK_SKEW_S = 30
 # Mirror of the vector file's refusals.resolve: the only FAILED_PRECONDITION details passed through.
-RESOLVE_REFUSALS = ("not linked", "account inactive")
+RESOLVE_REFUSALS = ("not linked", "account inactive", "sso disabled")
 
 _ROLE_CACHE: dict[tuple[str, str], tuple[float, str, list[str]]] = {}
 

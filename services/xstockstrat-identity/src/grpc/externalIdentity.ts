@@ -2,7 +2,7 @@
 import * as grpc from '@grpc/grpc-js';
 
 export const EXTERNAL_IDENTITY_REFUSALS = {
-  resolve: ['not linked', 'account inactive'],
+  resolve: ['not linked', 'account inactive', 'sso disabled'],
   link: [
     'invalid credentials',
     'account inactive',
@@ -10,7 +10,7 @@ export const EXTERNAL_IDENTITY_REFUSALS = {
     'already linked to this issuer',
     'link disabled',
   ],
-  session: ['account inactive'],
+  session: ['account inactive', 'sso disabled'],
 } as const;
 
 // Must equal the CONSTRAINT names in migrations/007_external_identities.up.sql (D-118).

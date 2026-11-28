@@ -99,6 +99,6 @@
     {"name": "legacy_word", "value": "sso", "expected": "local", "logs": true},
     {"name": "typo", "value": "oidcc", "expected": "local", "logs": true}
   ],
-  "refusals": {"resolve": ["not linked", "account inactive"], "link": ["invalid credentials", "account inactive", "account already linked", "already linked to this issuer", "link disabled"], "session": ["account inactive"]},
+  "refusals": {"resolve": ["not linked", "account inactive", "sso disabled"], "link": ["invalid credentials", "account inactive", "account already linked", "already linked to this issuer", "link disabled"], "session": ["account inactive", "sso disabled"]},
   "prm": {"agent_public_url": "https://xstockstrat-staging.example.test/agent", "issuer": "https://auth.example.test", "expected": {"resource": "https://xstockstrat-staging.example.test/agent", "authorization_servers": ["https://auth.example.test"], "scopes_supported": ["xstockstrat.read", "xstockstrat.write", "xstockstrat.admin", "xstockstrat.trade"]}}
 }

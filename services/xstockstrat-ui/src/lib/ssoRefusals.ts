@@ -1,6 +1,6 @@
 // Must equal identity's EXTERNAL_IDENTITY_REFUSALS and the vector file's `refusals` (D-123).
 export const SSO_REFUSALS = {
-  resolve: ['not linked', 'account inactive'],
+  resolve: ['not linked', 'account inactive', 'sso disabled'],
   link: [
     'invalid credentials',
     'account inactive',
@@ -8,7 +8,7 @@ export const SSO_REFUSALS = {
     'already linked to this issuer',
     'link disabled',
   ],
-  session: ['account inactive'],
+  session: ['account inactive', 'sso disabled'],
 } as const;
 
 export type ResolveRefusal = (typeof SSO_REFUSALS.resolve)[number];

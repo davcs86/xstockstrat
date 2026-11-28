@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { recordAuthEvent } from './bffMetrics';
-import type { LinkRefusal, ResolveRefusal } from './ssoRefusals';
+import type { LinkRefusal, ResolveRefusal, SessionRefusal } from './ssoRefusals';
 import { TXN_COOKIE_OPTS } from './ssoTxn';
 import type { LinkErrorCode, SsoErrorCode } from './ssoErrorCodes';
 
@@ -17,6 +17,7 @@ export {
 const RESOLVE_REFUSAL_CODES: Record<ResolveRefusal, SsoErrorCode> = {
   'not linked': 'not_linked',
   'account inactive': 'inactive',
+  'sso disabled': 'failed',
 };
 const LINK_REFUSAL_CODES: Record<LinkRefusal, LinkErrorCode> = {
   'invalid credentials': 'invalid_credentials',
@@ -29,6 +30,17 @@ const LINK_REFUSAL_CODES: Record<LinkRefusal, LinkErrorCode> = {
 export function resolveRefusalCode(detail: string): SsoErrorCode {
   return Object.hasOwn(RESOLVE_REFUSAL_CODES, detail)
     ? RESOLVE_REFUSAL_CODES[detail as ResolveRefusal]
+    : 'failed';
+}
+
+const SESSION_REFUSAL_CODES: Record<SessionRefusal, SsoErrorCode> = {
+  'account inactive': 'inactive',
+  'sso disabled': 'failed',
+};
+
+export function sessionRefusalCode(detail: string): SsoErrorCode {
+  return Object.hasOwn(SESSION_REFUSAL_CODES, detail)
+    ? SESSION_REFUSAL_CODES[detail as SessionRefusal]
     : 'failed';
 }
 

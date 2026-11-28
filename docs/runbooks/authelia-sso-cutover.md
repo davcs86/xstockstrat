@@ -104,12 +104,12 @@ Sign in with SSO, sign out, and connect one MCP client, then check:
 |---|---|---|
 | `mcp.auth.rejected{reason=wrong_audience}` | agent | token `aud` is not `AGENT_PUBLIC_URL` (issuer audience setting) |
 | `mcp.auth.rejected{reason=jwks_unavailable}` | agent | issuer discovery or JWKS unreachable |
-| `mcp.auth.rejected{reason=account_refused}` | agent | `not linked` / `account inactive` (403) |
+| `mcp.auth.rejected{reason=account_refused}` | agent | `not linked` / `account inactive` / `sso disabled` (403; the last only while identity still reads `local`) |
 | `ui.auth.events{event=sso_login_failed}`, `{event=sso_login_error}` | UI | SSO sign-in refused / faulted |
 | `ui.auth.events{event=sso_link_failed}` | UI | a Link SSO confirm refused |
 | `ui.auth.events{event=logout,reason=cross_origin}` | UI | a logout POST from another origin (403) |
 | `identity.link.failures{reason}` | identity | link refusals |
-| WARN `sso_link_refused` | UI | link callback with a missing or stale `auth_time` |
+| WARN `sso_link_refused` | UI | link callback with a missing or stale `auth_time`; reason `access_ttl_too_short` at link start: `identity/jwt.access_ttl_seconds` is below 660 s, which Link SSO needs (feature 370) |
 | ERROR `sso_issuer_invalid`, `app_url_invalid`; WARN `auth_mode_invalid` | UI, agent, identity | bad configuration (§ 3) |
 
 Sign out goes to the issuer's portal logout (`<issuer>/logout?rd=<APP_URL>/auth/login`); Authelia redirects back only
