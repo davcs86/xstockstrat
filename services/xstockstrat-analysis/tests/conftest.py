@@ -502,6 +502,84 @@ def local_pg():
         shutil.rmtree(root, ignore_errors=True)
 
 
+_MIGRATIONS_DIR = pathlib.Path(__file__).resolve().parent.parent / "migrations"
+_PIPELINE_FINISHED = ("succeeded", "failed", "dead", "blocked")
+
+
+async def pipeline_pool(dsn, size=4):
+    """A pool on ``local_pg`` shaped like the service's PgBouncer pools (no statement cache)."""
+    return await asyncpg.create_pool(dsn, min_size=1, max_size=size, statement_cache_size=0)
+
+
+@pytest.fixture
+async def pipeline_pg(local_pg):
+    """Feature 367: a pool over fresh ``analysis.pipeline_jobs`` / ``pipeline_job_deps`` tables,
+    built by running the owning migration file alone (it is self-contained)."""
+    (owner,) = sorted(_MIGRATIONS_DIR.glob("*_pipeline_job_graph.up.sql"))
+    others = [
+        p.name
+        for p in sorted(_MIGRATIONS_DIR.glob("*.up.sql"))
+        if p != owner and "pipeline_job" in p.read_text()
+    ]
+    assert others == [], others
+    pool = await pipeline_pool(local_pg)
+    try:
+        await pool.execute(
+            "CREATE SCHEMA IF NOT EXISTS analysis; "
+            "DROP TABLE IF EXISTS analysis.pipeline_job_deps; "
+            "DROP TABLE IF EXISTS analysis.pipeline_jobs;"
+        )
+        await pool.execute(owner.read_text())
+        yield pool
+    finally:
+        await pool.close()
+
+
+async def insert_pipeline_job(pool, **overrides):
+    """Insert one job row in any state with consistent defaults; returns its ``job_id``.
+    Time columns default to the database clock; pass a value to set one directly."""
+    row = {
+        "kind": "probe",
+        "subject": "AAPL",
+        "epoch": "2026-11-27",
+        "run_id": "run-2026-11-27",
+        "lane": 10,
+        "state": "ready",
+        "attempts": 0,
+        "wait_round": 0,
+    }
+    row.update(overrides)
+    exprs = {"next_attempt_at": "now()"}
+    if row["state"] == "running":
+        exprs["lease_token"] = "gen_random_uuid()"
+        exprs["lease_expires_at"] = "now() + interval '60 seconds'"
+    if row["state"] in _PIPELINE_FINISHED:
+        exprs["finished_at"] = "now()"
+    if row["state"] == "blocked":
+        row.setdefault("verdict", "no_vendor_data")
+    exprs = {k: v for k, v in exprs.items() if k not in row}
+    columns = [*row, *exprs]
+    values = [f"${i}" for i in range(1, len(row) + 1)] + list(exprs.values())
+    return await pool.fetchval(
+        f"INSERT INTO analysis.pipeline_jobs ({', '.join(columns)}) "
+        f"VALUES ({', '.join(values)}) RETURNING job_id",
+        *row.values(),
+    )
+
+
+async def shift_pipeline_job(pool, job_id, **columns_to_seconds):
+    """Rewrite time columns to ``now()`` plus the given seconds (negative = past); never sleeps."""
+    sets = ", ".join(
+        f"{col} = now() + make_interval(secs => ${i}::float8)"
+        for i, col in enumerate(columns_to_seconds, start=2)
+    )
+    await pool.execute(
+        f"UPDATE analysis.pipeline_jobs SET {sets} WHERE job_id = $1",
+        job_id,
+        *columns_to_seconds.values(),
+    )
+
+
 @pytest.fixture
 def otel_reset(monkeypatch):
     """Isolate a test calling init_telemetry: the OTel providers are set-once per process."""

@@ -733,7 +733,7 @@ grep -c "SKIP LOCKED" app/repositories/pipeline_jobs.py   # claim, reap, settle,
 
 ### Step 8 — test: repository SQL against real PostgreSQL, and the job-row fixtures
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/conftest.py` — modify (add the pipeline fixtures)

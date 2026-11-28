@@ -500,3 +500,22 @@ Carried from design.md § Open Risks; each needs an owner at `/sdd-spec` or late
   `SKIP LOCKED` (claim, reap, settle, prune).
 - Files modified: `services/xstockstrat-analysis/app/repositories/pipeline_jobs.py`.
 - Deviations: none.
+
+### Step 8 — repository SQL against real PostgreSQL, and the job-row fixtures [done]
+- `tests/conftest.py`: `pipeline_pool`, the `pipeline_pg` fixture (runs the `031` file alone, asserts
+  no other migration names `pipeline_job`), `insert_pipeline_job`, `shift_pipeline_job`.
+- `tests/test_pipeline_jobs_real_pg.py`: 39 tests — 15 `test_ac*` scenario tests (`@AC-1`..`@AC-13`,
+  `@AC-18`) and the design's gate tests (opposite-order parks, a park naming a parking job, the prune
+  guard race in both orders, the recovery SQL run twice, 10 000 children under 5 s, 1 200 parents in
+  500/500/200 batches, `EXPLAIN` on both partial indexes, `FOR KEY SHARE` holders, reap+settle on two
+  instances, the enqueue retry, no statement for an empty claim or heartbeat).
+- TDD: red — on a scratch copy without the claim lock and the report fence, `@AC-2` failed
+  (`1 + 1 == 1`: both claimers took the job) and `@AC-4` failed (the stale holder's report wrote
+  `succeeded`). Green — the file 39 passed; full suite 2065 passed, coverage 92.23%; ruff clean; no
+  real-PG test skipped; 15 `test_ac*` functions.
+- One full-suite run showed 1 failure that five later full runs (three under the coverage gate) did
+  not reproduce; its name was lost to an output filter. Not attributed to this feature.
+- Files modified: `services/xstockstrat-analysis/tests/conftest.py`,
+  `services/xstockstrat-analysis/tests/test_pipeline_jobs_real_pg.py`, and (deviation)
+  `services/xstockstrat-analysis/app/repositories/pipeline_jobs.py` (park sorts its children).
+- Deviations: the park-order fix (Deviation Log).

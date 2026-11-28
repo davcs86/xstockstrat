@@ -320,6 +320,8 @@ SELECT job_id FROM analysis.pipeline_jobs WHERE kind = $1 AND subject = $2 AND e
 
         → True, False when fenced out; raises ParkRace when a child was pruned meanwhile.
         """
+        # Key order is the lock order, so overlapping parks never deadlock on the unique index.
+        children = sorted(children, key=lambda c: (c[0], c[1], c[2]))
         kinds = [c[0] for c in children]
         subjects = [c[1] for c in children]
         epochs = [c[2] for c in children]
