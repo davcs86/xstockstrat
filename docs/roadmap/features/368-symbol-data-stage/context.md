@@ -183,3 +183,14 @@
   regression. Scope check against the fix-ingest-seeded-config-keys ledger rule: every widening was
   an explicit operator decision at a gate.
 - Open: O-28 (operator waiver), O-39 (slow-outage bound: mechanism choice), O-40, O-41, O-42 (text).
+
+## Session 2026-11-28T10:30Z — sdd-design gate after round 4
+
+- **OPERATOR DECISION (slow outage): "Per-pass time budget"** — D-55. Rejected: an in-memory
+  breaker (R-22); no bound (R-23).
+- **OPERATOR REOPEN P-3 (D-16): "session-S fetch first"** — D-56.
+- **OPERATOR REOPEN P-4 (D-38): "done_at on the run row"** — D-57.
+- **OPERATOR DECISION (finality risk O-28): "Require an automated check"** — D-58. The manual
+  comparison alone is rejected (R-24). O-28 stays open until the check is designed; it adds a job
+  kind, a comparison store and an alert path to this feature.
+- Open for round 5: O-28 (design of the automated check), O-40, O-41, O-42 (text).
