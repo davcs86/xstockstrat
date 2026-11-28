@@ -20,6 +20,7 @@ import {
   PUBLIC_HEALTH_PATHS,
   SSO_PUBLIC_PATHS,
 } from './middleware';
+import { HEADER_ACCESS_SCOPE, HEADER_TRACE_ID, HEADER_USER_ID } from '@/lib/headers';
 
 const TEST_SECRET = 'test-jwt-secret-value-at-least-32-bytes-long';
 
@@ -424,5 +425,99 @@ describe('SSO and cookie-gated exemptions (D-40/D-59/D-62)', () => {
     const loc = new URL(res.headers.get('location')!);
     expect(loc.pathname).toBe('/auth/login');
     expect(loc.searchParams.get('redirect')).toBe('/accounts/api/sso');
+  });
+});
+
+// Next forwards request-header overrides as x-middleware-override-headers + x-middleware-request-*.
+const OVERRIDE = 'x-middleware-override-headers';
+const fwd = (res: Response, name: string) => res.headers.get(`x-middleware-request-${name}`);
+const FORGED = { [HEADER_USER_ID]: 'forged', [HEADER_ACCESS_SCOPE]: '15' };
+
+function expectIdentityHeadersStripped(res: Response) {
+  const overridden = res.headers.get(OVERRIDE);
+  expect(overridden).not.toBeNull();
+  const names = overridden!.split(',');
+  expect(names).not.toContain(HEADER_USER_ID);
+  expect(names).not.toContain(HEADER_ACCESS_SCOPE);
+  expect(fwd(res, HEADER_USER_ID)).toBeNull();
+  expect(fwd(res, HEADER_ACCESS_SCOPE)).toBeNull();
+}
+
+async function signToken(ttlS: number): Promise<string> {
+  const nowSec = Math.floor(Date.now() / 1000);
+  return new SignJWT({
+    user_id: 'u1',
+    email: 'trader@example.com',
+    roles: ['trader'],
+    issued_at: nowSec,
+    expires_at: nowSec + ttlS,
+  })
+    .setProtectedHeader({ alg: 'HS256' })
+    .sign(new TextEncoder().encode(TEST_SECRET));
+}
+
+describe('forwarded request headers (370 @AC-1/@AC-2/@AC-3)', () => {
+  const ORIGINAL_SECRET = process.env.JWT_SECRET;
+
+  beforeEach(() => {
+    process.env.JWT_SECRET = TEST_SECRET;
+    refreshSession.mockReset();
+    refreshSession.mockResolvedValue({
+      accessToken: 'newAccess',
+      refreshToken: 'newRefresh',
+      claims: { user_id: 'u1' },
+    });
+  });
+
+  afterEach(() => {
+    if (ORIGINAL_SECRET === undefined) delete process.env.JWT_SECRET;
+    else process.env.JWT_SECRET = ORIGINAL_SECRET;
+  });
+
+  const request = (path: string, cookie?: string) =>
+    new NextRequest(new URL('http://localhost' + path), {
+      headers: { ...FORGED, ...(cookie ? { cookie } : {}) },
+    });
+
+  it('@AC-1 strips forged identity headers on the plain session path and sets x-trace-id', async () => {
+    const res = await middleware(request('/trader', `access_token=${await signToken(900)}`));
+    expectIdentityHeadersStripped(res);
+    expect(fwd(res, HEADER_TRACE_ID)).toBeTruthy();
+  });
+
+  it('@AC-1 strips them on the near-expiry refresh path', async () => {
+    const res = await middleware(
+      request('/trader', `access_token=${await signNearExpiryToken()}; refresh_token=rt`),
+    );
+    expectIdentityHeadersStripped(res);
+    expect(fwd(res, HEADER_TRACE_ID)).toBeTruthy();
+  });
+
+  it('@AC-1 strips them on the expired-access refresh path', async () => {
+    const res = await middleware(request('/trader', 'refresh_token=rt'));
+    expectIdentityHeadersStripped(res);
+    expect(fwd(res, HEADER_TRACE_ID)).toBeTruthy();
+  });
+
+  it.each([
+    ['/api/auth/sso/callback', undefined],
+    ['/api/auth/sso/start', undefined],
+    ['/api/auth/logout', 'refresh_token=rt'],
+    ['/trader/health', undefined],
+    ['/auth/login', undefined],
+  ])('@AC-2 strips them on the public path %s', async (path, cookie) => {
+    expectIdentityHeadersStripped(await middleware(request(path, cookie)));
+  });
+
+  it.each([
+    ['near-expiry', async () => `access_token=${await signNearExpiryToken()}; refresh_token=rt`],
+    ['expired-access', async () => 'refresh_token=rt'],
+  ])('@AC-3 forwards the rotated cookies on the %s path', async (_label, cookie) => {
+    const res = await middleware(request('/trader', `${await cookie()}; theme=dark`));
+    const forwarded = fwd(res, 'cookie') ?? '';
+    expect(forwarded).toContain('access_token=newAccess');
+    expect(forwarded).toContain('refresh_token=newRefresh');
+    expect(forwarded).not.toContain('refresh_token=rt;');
+    expect(forwarded).toContain('theme=dark');
   });
 });
