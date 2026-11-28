@@ -530,3 +530,14 @@ Carried from design.md § Open Risks; each needs an owner at `/sdd-spec` or late
   Deviation Log); settings + classification tests pass; no `is_transient_db_error`.
 - Files modified: `services/xstockstrat-analysis/app/engine/job_graph.py`.
 - Deviations: none (import-check path only).
+
+### Step 10 — engine primitive tests [done]
+- `tests/test_job_graph_core.py`: 25 tests — `@AC-5` backoff bounds and sequence, `@AC-6` permanent
+  classification, `@AC-7` transient default (six exception types incl. `DbBudgetExceeded`), non-outcome
+  returns, the registry (DAG passes; two-kind cycle, self-edge, unregistered child, three-cycle raise),
+  `validate_wait_on` (dedup, sort, higher lane, five named failures), empty verdict, `truncate_error`
+  on a multi-byte string, prune identity.
+- TDD: red — collection failed (`cannot import name 'MAX_CHILDREN_PER_PARK'`) before Step 9's code;
+  green — 25 passed; full suite 2090 passed, coverage 92.34%; ruff clean; no local fixture (C-13).
+- Files modified: `services/xstockstrat-analysis/tests/test_job_graph_core.py`.
+- Deviations: none.

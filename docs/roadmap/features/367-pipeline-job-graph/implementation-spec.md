@@ -912,7 +912,7 @@ grep -n "is_transient_db_error" app/engine/job_graph.py ; test $? -eq 1
 
 ### Step 10 — test: engine primitives
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_job_graph_core.py` — create
