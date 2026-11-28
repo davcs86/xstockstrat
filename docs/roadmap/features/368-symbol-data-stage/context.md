@@ -173,3 +173,13 @@
   7 / 28 days and a per-symbol weekday spread. Rejected: config keys (R-21).
 - Open for round 4: O-28 (finality unmeasured at runtime), O-31, O-32 (mechanism for D-41), O-33
   (mechanism for D-42), O-35, O-37, O-38.
+
+## Session 2026-11-28T10:10Z — sdd-design round 4
+
+- Round 4 run on the revised consolidated design (lenses: run state machine, concurrent writers,
+  ledger-suppression mechanism, scope). Adversary verdict: approvable with text fixes plus one
+  mechanism choice. Register: +10 decisions (D-45 to D-54), 6 objections closed, 4 raised (O-39 to
+  O-42), 2 petitions pending the operator (P-3 on D-16, P-4 on D-38). No Floor breach, no C-16
+  regression. Scope check against the fix-ingest-seeded-config-keys ledger rule: every widening was
+  an explicit operator decision at a gate.
+- Open: O-28 (operator waiver), O-39 (slow-outage bound: mechanism choice), O-40, O-41, O-42 (text).
