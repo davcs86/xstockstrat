@@ -89,3 +89,14 @@
   - Twelve durable marketdata scenarios (255, 340, 254) rely on the `vendor` default without naming
     the key (FR-7, C-16).
   - No RPC exposes the trading calendar; closures after 2025-01-09 and early closes are not modelled.
+
+## Session 2026-11-28T06:20Z — sdd-design round 1
+
+- Round 1 run (proposer, adversary, synthesis). Register: 8 decisions, 5 rejected alternatives, 18
+  objections (9 blocking), no petitions. No Floor breach. No certain C-16 regression; at risk: the
+  feature 356 drain scenarios (O-16).
+- Settled skeleton: universe job → data job per symbol → at most one backfill child; the data job
+  alone decides the verdict (D-1, D-2); additive marketdata RPC for the last closed session (D-4).
+- Approval is not selectable after round 1 (full mode). Product-level forks go to the operator at
+  this gate: users without strategies, system-scope signals, run timing, backfill path, interior
+  vendor holes, new-filings refresh, and the C-16 CHANGE for twelve vendor-default scenarios.
