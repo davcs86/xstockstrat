@@ -225,3 +225,36 @@
 - Still to confirm at the approval gate: the implementation constants as one sign-off item
   (design.md § 12); D-22's rule that a missed session gets no run; the `merge-order.md` rows
   (368 after 367, 369 after 368).
+
+## Session 2026-11-28T12:40Z — sdd-design (approved)
+
+- **OPERATOR DECISION (design gate): "Approve design"** after round 5 and the on-disk verification.
+- **OPERATOR SIGN-OFF (implementation constants): "Sign as fixed invariants"** — D-66.
+- **OPERATOR DECISION (missed session): "Confirm: no catch-up run"** — D-67. Rejected: running
+  missed sessions on recovery (R-28).
+- **OPERATOR DECISION (merge order): "Add both rows"** — `docs/roadmap/features/merge-order.md`
+  gains "368 after 367" and "369 after 368".
+- Phase 0 Recon: wrote recon.md (services: analysis, marketdata, ingest, portfolio, config; key
+  reuse patterns: the `_ensure_prune` shape, `GetDataCoverage` gaps, the 061 seed shape).
+- Phase 1 Grilling: 5 rounds (full). Chosen approach: a run row per session with up to 4 passes of
+  universe job → shards of 500 → one data job per symbol; the data job fetches the session bar and
+  unconfirmed history through marketdata `BackfillBars` and writes holes, coverage and the bar
+  record in one transaction; filings on a per-symbol schedule; a next-morning finality check on a
+  sample of 50. Rejected: ingest in the bar path, a fetch child, an outage breaker, a notify alert,
+  a Python calendar (28 locked alternatives in debate.md).
+- Constitution rules touched: C-03, C-04, C-05, C-07, C-08, C-09, C-10, C-11, C-13, C-14, C-15,
+  C-16, C-18, P-01 to P-06, F-01, F-04, F-06, F-07, F-11. Floor breaches: none in any round.
+- C-16: one signed CHANGE (twelve marketdata scenarios pinned to `vendor`, D-15).
+- Product spec and acceptance scenarios amended as shown to the operator at the gate: FR-1 to
+  FR-14; `@AC-1` to `@AC-66` (`@AC-49` unused). Affected services are now analysis, marketdata and
+  config; ingest and portfolio are read without code change.
+- Status: spec-ready → design-approved.
+
+### Open Threads (from design.md Open Risks)
+
+- Vendor finality is measured on a daily sample, not proven — staging verification step.
+- The Grafana drift rule must be created at launch — docs step and launch checklist.
+- Throughput ceiling on the slowest vendor plan; shared vendor budget — measured in 369's shadow run.
+- `BackfillFundamentals` duration unmeasured — staging verification step.
+- Deploy order: marketdata before analysis, or captured bars are NULL — spec must state it.
+- Missed session, abandoned run, missed finality check — 369's design must tolerate them.

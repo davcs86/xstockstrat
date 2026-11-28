@@ -1,6 +1,6 @@
 # Debate Register: symbol-data-stage
 
-**State**: in-debate
+**State**: approved
 **Mode**: full (round cap lifted by operator override, context.md 2026-11-28)
 **Rounds run**: 5
 
@@ -84,6 +84,8 @@
 | D-63 | 5 (gate) | A detected drift is raised through telemetry: a counter by result, bounded warning logs and the results table, with a Grafana alert rule on the drift counter documented in the service docs. No notify alert is emitted and the job registry gets no notify stub; Consumer Surface stays "None". Operator decision 2026-11-28. | context.md 2026-11-28 | settled |
 | D-64 | 5 (gate) | Finality-check constants are fixed invariants signed by the operator 2026-11-28: sample of 50; trigger at run done and close + 16 hours; the tolerances of D-60; the 7-day `return_bars` cap. | context.md 2026-11-28 | settled |
 | D-65 | 5 (gate) | Requeue rule accepted by the operator 2026-11-28: once a run is done, a hand-requeued job cannot write that session's records (D-62); the next session's run repairs the bars only. Documented beside the job-graph recovery SQL. | context.md 2026-11-28 | settled |
+| D-66 | 5 (approval gate) | The implementation constants listed in design.md § 12 are fixed invariants, signed by the operator as one item 2026-11-28. | context.md 2026-11-28 | settled |
+| D-67 | 5 (approval gate) | A session whose start time passes while analysis is down gets no run later (confirms D-22). Operator decision 2026-11-28. | context.md 2026-11-28 | settled |
 
 ## Rejected Alternatives (locked)
 
@@ -117,6 +119,7 @@
 | R-25 | 5 | Capturing the stage-time bar through a bars read RPC, a new stored-bar RPC or a no-warm flag on `GetBars`. | Every bars and quotes read marks the symbol warm; a new RPC or a second path through the warm logic is more than an additive response field (D-59). | locked |
 | R-26 | 5 (gate) | An untargeted notify alert on drift. | Listed in every signed-in user's alert list (`services/xstockstrat-notify/src/grpc/notifyServiceImpl.ts:254`), which would make the feature user-visible. Operator chose D-63. | locked |
 | R-27 | 5 (gate) | A notify alert targeted at each admin through identity. | Adds an analysis-to-identity connection, a grant and an env var. Operator chose D-63. | locked |
+| R-28 | 5 (approval gate) | Running each missed session on recovery. | 369 would evaluate days-old bars late; the next session's evaluation sees the complete series. Operator chose D-67. | locked |
 
 ## Objections
 

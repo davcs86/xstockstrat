@@ -1,10 +1,10 @@
 # Design: symbol-data-stage
 
 **Created**: 2026-11-28
-**Rounds**: 5 (full; round cap lifted by the operator; termination: pending operator approval)
-**Approved by**: _pending — the operator's approval gate has not been passed_
+**Rounds**: 5 (full; round cap lifted by the operator; termination: approved)
+**Approved by**: user @ 2026-11-28T12:40Z
 **Grounded in**: recon.md
-**Debate register**: debate.md (65 decisions, 27 rejected alternatives, 42 objections all closed, 4 petitions all granted)
+**Debate register**: debate.md (67 decisions, 28 rejected alternatives, 42 objections all closed, 4 petitions all granted)
 
 ---
 
@@ -13,8 +13,8 @@
 Paths are relative to `services/xstockstrat-<name>/` unless they start with `packages/`, `docs/` or
 `scripts/`. Every citation was checked against the tree `origin/main-dev@bc497728`. Decision IDs
 (`D-n`) refer to debate.md. The product-spec and scenario amendments indexed in §20 are written
-to `product-spec.md` and `acceptance.feature` as proposed text; they take effect with the
-operator's approval of this design.
+to `product-spec.md` and `acceptance.feature`; they took effect with the operator's approval of
+this design.
 
 **Consumer surface (C-14):** none. The stage is internal; its records are read by feature 369
 (§17) and operators observe it through telemetry, logs and the tables.
@@ -472,7 +472,7 @@ The finality check adds **no key**.
 - passes up to 3 more at 30-min spacing (D-41);
 - finality check (D-64): sample K = 50; trigger at run done and close + 16 h; price equality 1e-6 relative; volume 1%; adjusted tolerance 0.011 absolute + 1e-4 relative; `return_bars` range cap 7 days.
 
-**Implementation constants, one sign-off item:**
+**Implementation constants, signed by the operator as one item (D-66):**
 - `PASSES`=4, `PASS_SPACING`=30 min, `FETCH_ATTEMPTS_PER_PASS`=2.
 - Ask and pass-check period 60 s; ask timeout 2 s.
 - Call timeouts: coverage 30 s, `BackfillBars` 120 s, `GetHistoricalFundamentals` 10 s, `BackfillFundamentals` 120 s, snapshot page 10 s, universe read budget 300 s.
@@ -819,6 +819,7 @@ None), Proto Contract Changes (decided), Config Key Changes (the delay key), Dat
 - `R-24` Vendor finality as a documented risk with a manual staging comparison only — rejected because: Operator requires an automated check (D-58).
 - `R-25` Capturing the stage-time bar through a bars read RPC, a new stored-bar RPC or a no-warm flag on `GetBars` — rejected because: Every bars and quotes read marks the symbol warm; a new RPC or a second path through the warm logic is more than an additive response field (D-59).
 - `R-26` An untargeted notify alert on drift — rejected because: Listed in every signed-in user's alert list (`services/xstockstrat-notify/src/grpc/notifyServiceImpl.ts:254`), which would make the feature user-visible. Operator chose D-63.
+- `R-28` Running each missed session on recovery — rejected because: 369 would evaluate days-old bars late; the next session's evaluation sees the complete series. Operator chose D-67.
 - `R-27` A notify alert targeted at each admin through identity — rejected because: Adds an analysis-to-identity connection, a grant and an env var. Operator chose D-63.
 
 ## Open Risks
@@ -854,7 +855,7 @@ None), Proto Contract Changes (decided), Config Key Changes (the delay key), Dat
 - `F-01` — honored by: no applied migration is edited; config `030` stays as it is and `062` updates the row.
 - `F-04` — honored by: every path and symbol comes from recon or a verified round; new files are named as new.
 - `F-06` — honored by: no new database pool; handlers use `job.db` on the service pool, the ensure uses the same pool through `bounded_txn`, the job repository keeps its control pool (§2, §19).
-- `F-07` — honored by: tunables are config keys; every other constant is a fixed invariant listed in §12, the product-relevant ones signed by the operator (D-29, D-32, D-41, D-44, D-55, D-64) and the implementation constants presented as one sign-off item at the approval gate.
+- `F-07` — honored by: tunables are config keys; every other constant is a fixed invariant listed in §12, the product-relevant ones signed by the operator (D-29, D-32, D-41, D-44, D-55, D-64) and the implementation constants signed as one item (D-66).
 - `F-11` — honored by: no Floor breach was flagged in any of the five rounds.
 
 ## Business Rules Touched (C-16)
