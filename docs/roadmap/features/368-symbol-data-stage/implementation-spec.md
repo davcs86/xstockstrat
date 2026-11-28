@@ -3,10 +3,42 @@
 **Status**: `pending`
 **Created**: 2026-11-28
 **Feature**: `docs/roadmap/features/368-symbol-data-stage/feature.md`
-**Total Steps**: 30
+**Total Steps**: 40
 **Feature Branch**: `feature/symbol-data-stage`
 
 ---
+
+## Revision 2 (2026-11-28, `/sdd-spec` re-run)
+
+This revision answers the advisory impl-spec review, round 1 (context.md, 2026-11-28T13:40Z). The
+design, the files, the symbols and the scenarios are those of revision 1 (30 steps, commit
+`cfa6a43f`); the steps are re-cut and renumbered. No step had started.
+
+| Review finding | Change |
+|---|---|
+| Ten `service` steps preceded their `test` step with no `**Lands with**` (P-06, C-08) | Every `service`/`test` pair is an atomic unit, and in every pair cut by this revision the `test` step is numbered first (S-13) |
+| Old Steps 22 and 23 too large; old Step 18 mixed four responsibilities (C-18) | Old 18+19 became three pairs (Steps 18-23); old 22+23 became four pairs (Steps 26-33) along two seams that need no database (S-14, S-15) |
+| Old Step 8 `**Files**` omitted the sibling marketdata test files (F-08) | Checked: none of the four can reach `snapshotSource()`; Step 8 states the evidence and a stop rule |
+| Old Step 2 `**Files**` listed directories | Step 2 lists the twelve generated files |
+| `GOWORK=off` sat on a variable assignment | `GOWORK=off` is on every `go` command (Steps 3, 5, 8) |
+| `DataStageEnsure` defaults unstated; four positional arguments | Step 37 states `now=_utc_now` and `monotonic=time.monotonic`; Step 39 relies on them (S-16) |
+| The header-guard test drove only the universe handler | Step 38 also holds the data job and the finality job to a marketdata rule (S-17) |
+| `docs/patterns/inter-service-mtls.md` not updated | Step 40 adds the grant line |
+| Steps 10 and 12 need a database and `pnpm install` | Stated under Step Dependencies (environment) |
+
+Old step number → new step number(s):
+
+| Old | New | Old | New | Old | New |
+|---|---|---|---|---|---|
+| 1, 2 | 1, 2 | 14 (service) | 15 | 23 (test) | 26, 28, 30, 32 |
+| 3 (service) | 4 | 15 (test) | 14 | 24 (service) | 35 |
+| 4 (test) | 3 | 16 (service) | 17 | 25 (test) | 34 |
+| 5 (service) | 6 | 17 (test) | 16 | 26 (service) | 37 |
+| 6 (test) | 5 | 18 (service) | 19, 21, 23 | 27 (test) | 36 |
+| 7, 8, 9 | 7, 8, 9 | 19 (test) | 18, 20, 22 | 28 (service) | 39 |
+| 10, 11, 12 | 10, 11, 12 | 20 (service) | 25 | 29 (test) | 38 |
+| 13 | 13 | 21 (test) | 24 | 30 (docs) | 40 |
+| | | 22 (service) | 27, 29, 31, 33 | | |
 
 ## Execution Summary
 
@@ -15,35 +47,52 @@ The steps follow design.md, which is the authority for behaviour. A step that sa
 step are relative to that step's **Service** directory unless they start with `packages/`, `docs/`,
 `scripts/` or `services/`.
 
-1. **Proto (Steps 1-2, one atomic unit).** The additive marketdata contract: the calendar RPC, the
+1. **Proto (Steps 1-2, one unit).** The additive marketdata contract: the calendar RPC, the
    `return_bars` request field and the `bars` response field.
-2. **Marketdata (Steps 3-9).** The calendar RPC, `BackfillBars` returning bars on request and
-   staying quiet in the ledger for the stage, then the FR-7 default flip (Steps 7-8, one atomic
-   unit) and the docs and durable scenarios that state the default. Marketdata lands first because
-   it deploys first (design § 23 assumption 9).
-3. **Config and reader (Steps 10-12, one atomic unit).** Config `062` (two keys, the changed
-   seeded default), the `SetConfig` bounds, the stored set, the two `JobGraphSettings` accessors and
-   their pins. One commit, because CI's whole-tree wiring check fails on a seeded-unread key.
+2. **Marketdata (Steps 3-9).** The calendar RPC (3-4), `BackfillBars` returning bars on request and
+   staying quiet in the ledger for the stage (5-6), the FR-7 default flip (7-8), then the docs and
+   durable scenarios that state the default (9). Marketdata lands first because it deploys first
+   (design § 23 assumption 9).
+3. **Config and reader (Steps 10-12, one unit).** Config `062` (two keys, the changed seeded
+   default), the `SetConfig` bounds, the stored set, the two `JobGraphSettings` accessors and their
+   pins. One commit, because CI's whole-tree wiring check fails on a seeded-unread key.
 4. **Schema (Step 13).** Analysis `032`: eight tables.
-5. **Analysis seams (Steps 14-17).** The system-read identity and the shared drains, then the
-   telemetry instruments. Both are used by every later handler.
-6. **Job kinds (Steps 18-25).** Universe and shard handlers; the data job's pure rules, then its
-   handler; the finality classifier and job.
-7. **Run control (Steps 26-27).** `DataStageEnsure` and the `ensures` hook on the worker.
-8. **Wiring (Steps 28-29).** `build_registry`, `app/main.py`, the end-to-end tests.
-9. **Docs (Step 30).**
+5. **Analysis seams (Steps 14-17).** The system-read identity and the shared drains (14-15), then
+   the telemetry instruments (16-17). Both are used by every later handler.
+6. **Universe and shard jobs (Steps 18-23).** The stage module and the universe snapshot (18-19),
+   pass-1 retention (20-21), the shard job (22-23).
+7. **Data job (Steps 24-33).** The pure rules (24-25); the bars fetch (26-27) and the fundamentals
+   check (28-29), both against the marketdata stub only; the handler that reads, composes them and
+   writes the records (30-31); then the cases in which the job makes no call or records no verdict:
+   replay, superseded, pass budget, fetch failure (32-33).
+8. **Finality (Steps 34-35).** The classifier and the finality job.
+9. **Run control (Steps 36-37).** `DataStageEnsure` and the `ensures` hook on the worker.
+10. **Wiring (Steps 38-39).** `build_registry`, `app/main.py`, the end-to-end tests.
+11. **Docs (Step 40).**
+
+**Atomic units and red before green (P-06, C-08).** Every `service` step commits together with its
+`test` step (`**Lands with**`). Inside a unit the order is: write the `test` step's cases, run them
+against the tree before the unit and capture the failure of the case marked RED; apply the `service`
+step; run the union of both steps' `**Verification**`. In Steps 3-6 and 14-39 the `test` step has
+the lower number, so an executor that follows step numbers meets the test first. Steps 7+8 and
+10+11+12 keep revision 1's order; they were atomic units already and their RED is captured the same
+way (Step 8 item 1, Step 10's `**TDD**` line).
 
 **Consumer surfaces (C-14).** None. The product spec marks the feature internal: no
 `xstockstrat-ui` segment and no `xstockstrat-agent` tool consumes it, and no notify alert is emitted
 (D-63). No UI or agent step exists; that is a decision, not an omission. The user-facing view is
 deferred to the named follow-up `pipeline-cutover` (program feature 4).
 
-**Tree.** `ccr-d10c1761-fxpr1d@b37b95de` = `origin/main-dev@bc497728` plus docs-only commits.
-`origin/main-dev` is one commit ahead (`df9532c8`, `docs/runbooks/mcp-tools.md` and feature 345's
-`context.md` only). Same deviation from `docs/sdd/tree-freshness.md` as the earlier phases: the
-feature directory exists only on the harness branch, so the tree was not switched to `main-dev`.
-No source file differs from `origin/main-dev` (`git diff --name-only HEAD origin/main-dev` lists
-only `docs/` paths).
+**Tree.** `ccr-d10c1761-fxpr1d@49eeef33` = `origin/main-dev@bc497728` plus docs-only commits.
+`origin/main-dev` is two commits ahead (`df9532c8`, `2d802133`: `xstockstrat-ui`,
+`xstockstrat-agent`, `xstockstrat-identity`, `docs/patterns/frontend-auth.md`,
+`scripts/testdata/oidc-issuer-vectors.json` and docs). Same deviation from
+`docs/sdd/tree-freshness.md` as the earlier phases: the feature directory exists only on the harness
+branch, so the tree was not switched to `main-dev` and `origin/main-dev` was not merged. No file a
+step touches or cites differs: `git diff --stat bc497728 HEAD -- services packages scripts .github
+docs/patterns docs/runbooks` is empty, and `git diff --name-only HEAD...origin/main-dev` lists no
+path under `xstockstrat-analysis`, `xstockstrat-marketdata`, `xstockstrat-config` or
+`packages/proto`.
 
 ## Scenario Coverage (C-15)
 
@@ -51,76 +100,77 @@ only `docs/` paths).
 
 | Scenario | Steps |
 |---|---|
-| `@AC-1` | 19 |
-| `@AC-2` | 27 (two ensures, one database) |
-| `@AC-3` | 19 |
-| `@AC-4` | 19 |
-| `@AC-5` | 19 |
-| `@AC-6` | 23 |
-| `@AC-7` | 23 |
-| `@AC-8` | 21 (gap rule), 23 |
-| `@AC-9` | 21 (session S is never a hole), 23 |
-| `@AC-10` | 23 (pass 4 writes `fetch_failed`, reason `rpc`), 29 (all four passes, every job `succeeded`) |
-| `@AC-11` | 21 (schedule dates), 23 |
-| `@AC-12` | 21 (state and next check), 23 |
+| `@AC-1` | 18 |
+| `@AC-2` | 36 (two ensures, one database) |
+| `@AC-3` | 18 |
+| `@AC-4` | 22 |
+| `@AC-5` | 22 |
+| `@AC-6` | 26 (calls, verdict, captured close), 30 (the coverage row and the bar row) |
+| `@AC-7` | 26 (the history range), 30 |
+| `@AC-8` | 24 (gap rule), 26, 30 |
+| `@AC-9` | 24 (session S is never a hole), 26, 30 |
+| `@AC-10` | 32 (pass 4 writes `fetch_failed`, reason `rpc`), 38 (all four passes, every job `succeeded`) |
+| `@AC-11` | 24 (schedule dates), 28 (which symbol is called), 30 (the stored row) |
+| `@AC-12` | 24 (state and next check), 28, 30 |
 | `@AC-13` | 8 |
 | `@AC-14` | 8 |
-| `@AC-15` | 23 |
-| `@AC-16` | 4 (Saturday answers 2026-11-27), 27 (no run row) |
-| `@AC-17` | 4 (2026-11-26 is not a session), 23 |
-| `@AC-18` | 27 (no further pass, no next run), 29 (created jobs finish) |
-| `@AC-19` | 29 |
-| `@AC-20` | 23 |
+| `@AC-15` | 32 |
+| `@AC-16` | 3 (Saturday answers 2026-11-27), 36 (no run row) |
+| `@AC-17` | 3 (2026-11-26 is not a session), 26, 30 |
+| `@AC-18` | 36 (no further pass, no next run), 38 (created jobs finish) |
+| `@AC-19` | 38 |
+| `@AC-20` | 30 |
 | `@AC-21` | 8 (a stored `vendor` is served from the vendor), 10 (the seed changes `default_value` only) |
-| `@AC-22` | 21, 23 |
-| `@AC-23` | 23 |
-| `@AC-24` | 21, 23 |
-| `@AC-25` | 23 |
-| `@AC-26` | 27 |
-| `@AC-27` | 21, 23 |
-| `@AC-28` | 21, 23 |
-| `@AC-29` | 19 |
-| `@AC-30` | 19 |
-| `@AC-31` | 19 (job succeeds, no shard), 27 (run marked done) |
-| `@AC-32` | 15 |
-| `@AC-33` | 23 |
-| `@AC-34` | 19 |
-| `@AC-35` | 29 |
-| `@AC-36` | 19 |
-| `@AC-37` | 4 |
-| `@AC-38` | 27 (run row frozen), 23 (the data job reads no config key) |
-| `@AC-39` | 27 (no run for the missed session), 23 (history covers 2026-11-25) |
-| `@AC-40` | 19 |
-| `@AC-41` | 19 |
-| `@AC-42` | 23 |
-| `@AC-43` | 4 (close is 16:00 on a half day), 27 |
-| `@AC-44` | 19 |
-| `@AC-45` | 29 |
-| `@AC-46` | 23 (attempt 1 retries, attempt 2 defers, counter), 29 (pass 2 holds only that symbol) |
-| `@AC-47` | 29 |
-| `@AC-48` | 6 |
-| `@AC-50` | 27 |
-| `@AC-51` | 25 |
-| `@AC-52` | 25 |
-| `@AC-53` | 25 |
-| `@AC-54` | 25 |
-| `@AC-55` | 27 |
-| `@AC-56` | 23 (data job), 25 (finality job) |
-| `@AC-57` | 25 |
-| `@AC-58` | 6 |
-| `@AC-59` | 23 |
-| `@AC-60` | 23 |
-| `@AC-61` | 27 |
-| `@AC-62` | 19 |
-| `@AC-63` | 23 |
-| `@AC-64` | 27 |
-| `@AC-65` | 27 |
-| `@AC-66` | 23 |
+| `@AC-22` | 24, 28, 30 |
+| `@AC-23` | 26, 30 |
+| `@AC-24` | 24, 26, 30 |
+| `@AC-25` | 26, 30 |
+| `@AC-26` | 36 |
+| `@AC-27` | 24, 28, 30 |
+| `@AC-28` | 24, 28, 30 |
+| `@AC-29` | 18 |
+| `@AC-30` | 18 (the snapshot rows, the park on a shard), 22 (a data job exists) |
+| `@AC-31` | 18 (job succeeds, no shard), 36 (run marked done) |
+| `@AC-32` | 14 |
+| `@AC-33` | 32 |
+| `@AC-34` | 22 |
+| `@AC-35` | 38 |
+| `@AC-36` | 20 |
+| `@AC-37` | 3 |
+| `@AC-38` | 36 (run row frozen), 32 (the data job reads no config key) |
+| `@AC-39` | 36 (no run for the missed session), 26 (history covers 2026-11-25) |
+| `@AC-40` | 18 |
+| `@AC-41` | 18 |
+| `@AC-42` | 26 (the long run), 30 (the WARN, the counter, `confirmed_gaps`) |
+| `@AC-43` | 3 (close is 16:00 on a half day), 36 |
+| `@AC-44` | 18 |
+| `@AC-45` | 38 |
+| `@AC-46` | 32 (attempt 1 retries, attempt 2 defers, counter), 38 (pass 2 holds only that symbol) |
+| `@AC-47` | 38 |
+| `@AC-48` | 5 |
+| `@AC-50` | 36 |
+| `@AC-51` | 34 |
+| `@AC-52` | 34 |
+| `@AC-53` | 34 |
+| `@AC-54` | 34 |
+| `@AC-55` | 36 |
+| `@AC-56` | 30 (data job; the assertion spans Step 32's cases), 34 (finality job) |
+| `@AC-57` | 34 |
+| `@AC-58` | 5 |
+| `@AC-59` | 32 (the pass-2 job is the shard filter of Step 22 and the `@AC-46` case of Step 38) |
+| `@AC-60` | 32 |
+| `@AC-61` | 36 |
+| `@AC-62` | 18 |
+| `@AC-63` | 32 |
+| `@AC-64` | 36 |
+| `@AC-65` | 36 |
+| `@AC-66` | 30 |
 
 ## Spec-time decisions
 
 Names and seams the design leaves open, and facts found by search that are not in design.md or
-recon.md. Each is this spec's choice and is open to challenge at `/sdd-review impl-spec`.
+recon.md. Each is this spec's choice and is open to challenge at `/sdd-review impl-spec`. S-1 to
+S-12 are revision 1's (step numbers updated; S-7 and S-8 amended); S-13 to S-18 are new.
 
 - **S-1. Kind names and key helpers live in `app/jobs/data_stage.py`.** `UNIVERSE_KIND`,
   `SHARD_KIND`, `SYMBOL_KIND`, `FINALITY_KIND`, `stage_epoch`, `parse_stage_epoch`, `stage_run_id`
@@ -148,19 +198,20 @@ recon.md. Each is this spec's choice and is open to challenge at `/sdd-review im
   `INVALID_ARGUMENT` on the wire. Rejected: forwarding service errors with `forwardConnectErr`,
   which would also change the wire code of the existing non-`1d` timeframe rejection.
 - **S-7. Test doubles.** `StageJob` (the handler-facing surface of `ClaimedJob`, with `db()` over a
-  real pool), `data_stage_pg` (a pool over the 031 and 032 tables), `FakeDataStageRuns` and
-  `FakeJobRepo.list_by_run` land in `tests/conftest.py`, the Python fixture home (C-13).
-- **S-8. Handler tests run on PostgreSQL.** A handler's only database access is `job.db()`, so the
-  handler tests of Steps 19, 23, 25 and 29 carry the `real_pg` marker. Pure rules (Step 21, the
-  finality classifier in Step 25) and the ensure state machine (Step 27) are tested without a
-  database.
+  real pool), `data_stage_pg` (a pool over the 031 and 032 tables), `stage_marketdata_stub` (S-18),
+  `FakeDataStageRuns` and `FakeJobRepo.list_by_run` land in `tests/conftest.py`, the Python fixture
+  home (C-13).
+- **S-8. Which tests need PostgreSQL.** A handler's only database access is `job.db()`, so the
+  handler tests of Steps 18, 20, 22, 30, 32, 34 and 38 carry the `real_pg` marker. Pure rules
+  (Step 24), the bars fetch and the fundamentals check (Steps 26, 28), the finality classifier
+  (Step 34) and the ensure state machine (Step 36) are tested without a database.
 - **S-9. Config docs rows land in Step 10**, as in feature 367 (C-10): the analysis key-table rows
   and the config-governance entry are in the config commit.
 - **S-10. Found by search, not in design.md or recon.md.**
   - `scripts/migration-rerun.py:1114` hard-codes the analysis tip `31` (Step 13).
   - `tests/test_config_read_classification.py:62-66` (`FR3_KEYS`) and
     `tests/test_config_zero_clamps.py:70-74` (`AC6_ROWS`) must each gain the new int key (Step 12).
-  - `FakeJobRepo` (`tests/conftest.py:644`) has no `list_by_run` (Step 27).
+  - `FakeJobRepo` (`tests/conftest.py:644`) has no `list_by_run` (Step 36).
   - `BoundedTxn` exposes `fetch`, `fetchrow`, `fetchval` and `execute` only
     (`app/repositories/read_budget.py:195-207`), so a multi-row insert is one `execute` over
     `unnest` arrays, as `_PARK_INSERT_SQL` does.
@@ -169,9 +220,12 @@ recon.md. Each is this spec's choice and is open to challenge at `/sdd-review im
     that is not on `conn`. It scans every file under `app/jobs/`, so the new module is covered
     without a test change.
   - `docs/roadmap/program-job-graph-analysis-pipeline.md:82` still describes a backfill child
-    (Step 30).
+    (Step 40).
   - `buf` is not installed in this sandbox (Steps 1-2: `docs/runbooks/codegen-toolchain-host-setup.md`).
-- **S-11. Probes run at spec time, then reverted.**
+  - `RecordingStub` (`tests/conftest.py:155-182`) records `(method, request, metadata)` in `calls`
+    and swallows other keywords; a `timeout=` keyword is read from the method's
+    `AsyncMock.await_args_list` (Steps 14, 26, 28).
+- **S-11. Probes run at spec time (revision 1), then reverted.**
   - Flipping the two stored `default_value` cells of `fundamentals.snapshot_source` in
     `scripts/config-wiring-stored.json` leaves `node scripts/check-config-wiring.mjs --final` at
     exit 0. The Go reader's default is a constant, not a literal, so the checker compares nothing.
@@ -183,6 +237,39 @@ recon.md. Each is this spec's choice and is open to challenge at `/sdd-review im
     the package stops at the first panic. Steps 7 and 8 are one unit for this reason.
 - **S-12. Step 10 lists eight files.** The seed, bounds, stored set and docs rows must be one
   commit (C-10), as in feature 367's Step 1.
+- **S-13. The test step is numbered first in a pair.** `/sdd-execute` commits by step number, and a
+  test that lands after its service step has no native RED (ledger fails, 2026-11-04
+  enforce-config-key-wiring: "a test step that covers a service step must precede it, or the pair
+  must be one step"; 2026-11-10 fix-marketdata-dead-symbol-ingest: an order stated only in prose
+  does not take effect). Each pair is also declared an atomic unit, because a test step that names
+  a symbol the next step creates cannot pass its own `**Verification**` alone
+  (`step-constraints.md` §C). Steps 7+8 and 10+11+12 are left in revision 1's order.
+- **S-14. Two seams in the data job that need no database.** `fetch_bars` (design § 6 steps 2 to 7)
+  and `read_fundamentals` / `check_fundamentals` (design § 8) are module-level coroutines of
+  `app/jobs/data_stage.py` that take the marketdata stub and return a value; the handler reads,
+  calls them and writes. `fetch_bars` fills a `BarFetch` object passed by the caller, so a caller
+  that catches an error still holds the outcomes observed so far (the pass-4 `fetch_failed` row
+  stores them, design § 7). This is how old Steps 22 and 23 are cut into four units, and it is the
+  "data job: order and verdict" unit level of design § 22. Names are this spec's choice. One rule
+  design § 8 does not state: when the 160 s bound or an unexpected exception cuts the fundamentals
+  step, no filings row is stored and the next session decides again from the stored row.
+- **S-15. The universe job lands in two units and the shard job in a third.** Steps 18-19 deliver
+  the snapshot (kill switch, marker, reads, write, park); Steps 20-21 add pass-1 retention between
+  the kill switch and the marker check; Steps 22-23 add the shard handler. A constant is added by
+  the step that first uses it.
+- **S-16. `DataStageEnsure` defaults.** `DataStageEnsure(repo, runs, marketdata, settings, *,
+  now=_utc_now, monotonic=time.monotonic)`; `_utc_now()` returns `datetime.now(UTC)`, the shape of
+  `_utc_today` (`app/engine/job_graph.py:242-243`). `app/main.py` passes the four positional
+  arguments only.
+- **S-17. A marketdata rule in the header-guard test.** `_assert_owner_headers`
+  (`tests/test_owner_header_guard.py:90-100`) allows a `system` call exactly one grant from
+  `_SYSTEM_GRANTS`; it is applied to ingest and indicators stubs and stays as it is. A stage
+  `BackfillBars` call carries two `x-internal-caller` values by design (§ 14, § 16:
+  `analysis-system-read` from `SYSTEM_READ_META`, plus `analysis-data-stage`), so Step 38 adds a
+  local assertion for the marketdata stub. The helper has one consumer and stays in that file.
+- **S-18. `stage_marketdata_stub` goes to `tests/conftest.py` in Step 26.** A `RecordingStub`
+  whose four stage RPCs answer from per-test tables has consumers in Steps 26, 28, 30 and 32
+  (C-13: the second consumer forces the fixture home).
 
 ## Open points for the operator
 
@@ -203,8 +290,11 @@ Not decided by this spec. Each has a default that follows design.md as written.
   `Bar`, `BackfillBarsRequest` or `BackfillBarsResponse` (searched: `fields_by_name`, `_MAPPED`,
   `covers_every_proto_field`; the one marketdata hit is `Fundamentals` in
   `services/xstockstrat-indicators/tests/test_fundamental_metrics.py:45`).
-- Step 3 requires Steps 1-2. Step 4 [test] covers Step 3.
-- Step 5 requires Steps 1-2. Step 6 [test] covers Step 5.
+- **Steps 3+4 land together.** Trigger: Step 3 [test] names `GetLastClosedSession` and
+  `marketsession.Close`, which Step 4 [service] creates; the Go test packages do not compile
+  without them. Requires Steps 1-2.
+- **Steps 5+6 land together.** Trigger: Step 5 [test] names `ReturnBars`, `Bars` handling and the
+  quiet grant that Step 6 [service] creates. Requires Steps 1-2.
 - **Steps 7+8 land together.** Trigger: Step 7 changes a default that existing tests in the same Go
   package rely on; the package's tests fail until Step 8 pins them (S-11).
 - Step 9 [docs] requires Step 7.
@@ -212,53 +302,81 @@ Not decided by this spec. Each has a default that follows design.md as written.
   check in the same commit; and Step 11's `int_positive` read turns
   `tests/test_config_read_classification.py:211` (`test_rule2_key_sets_match_classification`) red
   until Step 12 classifies it. One backend surface, two services, as in feature 367's Steps 1-3.
+- **Environment for the Steps 10+11+12 unit.** It needs `pnpm install --frozen-lockfile` at the
+  repo root (`services/xstockstrat-config/node_modules` is absent in this sandbox) and one of the
+  stored-set routes of Step 10 item 8 (a database or a CI artifact). With neither, the unit is
+  blocked (P-03); nothing is hand-edited instead.
 - **Config migration number.** `062` while the highest file on `origin/main-dev` is `061`. Re-check
   at execute (Step 10 item 1) and before the integration PR; a renumber forces a stored-set
   regeneration.
 - **Stored set.** Step 10 regenerates `scripts/config-wiring-stored.json`. Regenerate it again
   after any `origin/main-dev` merge that brings in another config migration (`inputs_sha256`).
-- Step 13 requires nothing from Steps 1-12. Steps 18-29 require Step 13.
-- Step 14 requires nothing earlier. Step 15 [test] covers Step 14.
-- Step 16 requires nothing earlier. Step 17 [test] covers Step 16.
-- Step 18 requires Steps 11, 13, 14 and 16. Step 19 [test] covers Step 18.
-- Step 20 requires Step 18 (same module). Step 21 [test] covers Step 20.
-- Step 22 requires Steps 1-2 (generated `return_bars`, `bars`), 14, 16 and 20. Step 23 [test]
-  covers Step 22.
-- Step 24 requires Steps 1-2, 14, 16 and 18. Step 25 [test] covers Step 24.
-- Step 26 requires Steps 1-2 (generated `GetLastClosedSession`), 11, 13 and 18. Step 27 [test]
-  covers Step 26.
-- Step 28 requires Steps 18, 22, 24 and 26. Step 29 [test] covers Step 28.
-- Step 30 [docs] requires Steps 3, 5, 22, 24, 26 and 28.
+- Step 13 requires nothing from Steps 1-12. Steps 18-39 require Step 13.
+- **Steps 14+15 land together.** Trigger: Step 14 [test] imports `app.engine.universe_reads` and
+  `SYSTEM_READ_META`, which Step 15 [service] creates. Requires nothing earlier.
+- **Steps 16+17 land together.** Trigger: Step 16 [test] calls the eight telemetry helpers that
+  Step 17 [service] creates. Requires nothing earlier.
+- **Steps 18+19 land together.** Trigger: Step 18 [test] imports `app.jobs.data_stage`, which
+  Step 19 [service] creates. Requires Steps 11, 13, 15 and 17.
+- **Steps 20+21 land together.** Trigger: Step 20 [test] patches `RETENTION_SELF_STOP_S` and
+  passes `monotonic=`, which Step 21 [service] creates. Requires Step 19.
+- **Steps 22+23 land together.** Trigger: Step 22 [test] calls `make_shard_handler`, which Step 23
+  [service] creates. Requires Step 19.
+- **Steps 24+25 land together.** Trigger: Step 24 [test] imports the rule functions that Step 25
+  [service] creates. Requires Step 19 (same module).
+- **Steps 26+27 land together.** Trigger: Step 26 [test] calls `fetch_bars` and `BarFetch`, which
+  Step 27 [service] creates. Requires Steps 1-2 (generated `return_bars`, `bars`), 15 and 25.
+- **Steps 28+29 land together.** Trigger: Step 28 [test] calls `read_fundamentals` and
+  `check_fundamentals`, which Step 29 [service] creates. Requires Steps 25 and 26 (the stub
+  fixture).
+- **Steps 30+31 land together.** Trigger: Step 30 [test] calls `make_symbol_handler`, which Step 31
+  [service] creates. Requires Steps 13, 17, 18 (fixtures), 27 and 29.
+- **Steps 32+33 land together.** Trigger: Step 32 [test] asserts the early exits, the
+  `fetch_deferred` counts and the `fetch_failed` row that Step 33 [service] adds to the handler,
+  so it cannot pass its own gate before Step 33. Requires Step 31.
+- **Steps 34+35 land together.** Trigger: Step 34 [test] imports `classify_finality` and
+  `make_finality_handler`, which Step 35 [service] creates. Requires Steps 1-2, 15, 17, 18
+  (fixtures), 19 and 26 (the stub fixture).
+- **Steps 36+37 land together.** Trigger: Step 36 [test] imports `app.engine.data_stage_ensure`
+  and passes `ensures=` to `JobGraphWorker`; Step 37 [service] creates both. Requires Steps 1-2
+  (generated `GetLastClosedSession`), 11, 13, 18 (fixtures) and 19.
+- **Steps 38+39 land together.** Trigger: Step 38 [test] calls `build_registry` with the three
+  stub keywords, which Step 39 [service] adds. Requires Steps 23, 33, 35 and 37.
+- Step 40 [docs] requires Steps 4, 6, 33, 35, 37 and 39.
+- **Every unit above** has adjacent members, at most three of them, and stays on the backend
+  surface.
 - **Deploy order.** Marketdata deploys before analysis. Before marketdata honours `return_bars`,
   captured bars are NULL and those rows are excluded from the finality sample (design § 23
   assumption 9). Before marketdata serves `GetLastClosedSession`, the ensure logs one WARN per
   minute and creates no run.
 - **Open risks carried from design.md, with their owners.**
-  - Vendor finality is measured, not proven: Step 25 (classifier, sample), Step 30 (the operator
+  - Vendor finality is measured, not proven: Step 34 (classifier, sample), Step 40 (the operator
     procedure). The staging verification of design § 9.7 (3 sessions, 0 `drift`, the
     `BackfillFundamentals` duration) is a launch checklist item, not a step.
-  - The Grafana drift rule lives outside the repo: Step 30 ships its definition; creating it is a
+  - The Grafana drift rule lives outside the repo: Step 40 ships its definition; creating it is a
     launch checklist item.
   - The throughput ceiling and the shared vendor budget: measured in feature 369's shadow run. No
     step here.
-  - An unmodelled closure, a missed session, an abandoned run, a missed finality check: Step 30
+  - An unmodelled closure, a missed session, an abandoned run, a missed finality check: Step 40
     documents them; feature 369 must tolerate them (design § 17).
-  - The snapshot bound (25,000 rows guaranteed per attempt): Step 19 tests 100,000 rows.
+  - The snapshot bound (25,000 rows guaranteed per attempt): Step 18 tests 100,000 rows.
 - **Durable-suite promotion (C-16)** runs in the `/sdd-execute` integration PR, not in a step. It
   covers this feature's scenarios and the EXTEND cases in design.md § Business Rules Touched
   (`@AC-11 @AC-15 @feature-367`, `@FR-9 @regression @feature-367`, `@AC-14 @feature-295`). The one
   signed CHANGE (twelve marketdata scenarios, D-15) lands in Step 9, with the tests it describes.
-- **Verification runs recorded at spec time**, on the tree above:
+- **Verification runs recorded at spec time** (revision 2), on the tree above:
   `node scripts/check-config-wiring.mjs --final` and `--doc-check`,
-  `python3 scripts/check-context-map.py`, `python3 scripts/check-otel-produced-signals.py` and
+  `python3 scripts/check-context-map.py`, `python3 scripts/check-otel-produced-signals.py`,
+  `python3 scripts/check-watcher-copies.py` and
   `python3 scripts/check-migration-order.py origin/main-dev` exit 0. In analysis,
   `ruff check . && ruff format --check .` exits 0 and `uv run --extra dev pytest` on
-  `test_job_graph_settings.py`, `test_job_handler_contract.py`, `test_held_position_drains.py` and
-  `test_pipeline_jobs_real_pg.py` passes (94 tests; PostgreSQL 16 binaries are present). In
-  marketdata, `GOWORK=off go test ./internal/service/ ./internal/handler/ ./internal/timeframe/`
-  passes. In `packages/proto`, `GOWORK=off go test ./marketsession/...` passes. **Not run:**
-  `buf` (absent), `pnpm` commands in `xstockstrat-config` (`node_modules` not installed),
-  `golangci-lint`.
+  `test_job_graph_settings.py`, `test_job_handler_contract.py`, `test_held_position_drains.py`,
+  `test_pipeline_jobs_real_pg.py`, `test_owner_header_guard.py` and `test_retention_prune_job.py`
+  passes (127 tests; PostgreSQL 16 binaries are present). In marketdata,
+  `GOWORK=off go test ./internal/service/ ./internal/handler/ ./internal/timeframe/` passes. In
+  `packages/proto`, `GOWORK=off go test ./marketsession/...` passes. **Not run:** `buf` (absent),
+  `pnpm` commands in `xstockstrat-config` (`node_modules` not installed), `golangci-lint` (present
+  at `/usr/local/bin/golangci-lint`, not run at spec time).
 - **`uv run --extra dev`.** Every analysis command below passes `--extra dev`, as feature 367's
   spec recorded for this sandbox.
 
@@ -319,9 +437,18 @@ Then Step 2's gate (the unit commits once).
 **Status**: `pending`
 **Service**: `packages/proto`
 **Files**:
-- `packages/proto/gen/go/marketdata/v1/` — modify (generated)
-- `packages/proto/gen/python/marketdata/v1/` — modify (generated)
-- `packages/proto/gen/ts/marketdata/v1/` — modify (generated, including `gen/ts/dist/`)
+- `packages/proto/gen/go/marketdata/v1/marketdata.pb.go` — modify (generated)
+- `packages/proto/gen/go/marketdata/v1/marketdata_grpc.pb.go` — modify (generated)
+- `packages/proto/gen/go/marketdata/v1/marketdatav1connect/marketdata.connect.go` — modify (generated)
+- `packages/proto/gen/python/marketdata/v1/marketdata_pb2.py` — modify (generated)
+- `packages/proto/gen/python/marketdata/v1/marketdata_pb2_grpc.py` — modify (generated)
+- `packages/proto/gen/ts/marketdata/v1/marketdata.ts` — modify (generated)
+- `packages/proto/gen/ts/marketdata/v1/marketdata_connect.ts` — modify (generated)
+- `packages/proto/gen/ts/marketdata/v1/marketdata_pb.ts` — modify (generated)
+- `packages/proto/gen/ts/dist/marketdata/v1/marketdata.d.ts` — modify (generated)
+- `packages/proto/gen/ts/dist/marketdata/v1/marketdata.js` — modify (generated)
+- `packages/proto/gen/ts/dist/marketdata/v1/marketdata_pb.d.ts` — modify (generated)
+- `packages/proto/gen/ts/dist/marketdata/v1/marketdata_pb.js` — modify (generated)
 
 **Reviewers**: Proto Reviewer — Field number uniqueness per message, no breaking changes without deprecation comment, `buf lint` passes, `buf breaking` passes against dev trunk, BSR publication readiness; `xstockstrat-marketdata` service owner — OHLCV ingestion integrity, TimescaleDB hypertable partitioning, Alpaca feed idempotency; `xstockstrat-analysis` service owner — Backtest reproducibility, strategy scoring determinism, no look-ahead bias
 
@@ -329,6 +456,7 @@ Then Step 2's gate (the unit commits once).
 - Generator: `./scripts/buf-gen.sh` (root `CLAUDE.md` § Generating Proto Stubs); CI job `proto-freshness` fails on a stale `packages/proto/gen/` (`.github/workflows/ci.yml:257-314`).
 - Go implementers survive a new RPC without edits: the marketdata handler embeds `marketdatav1connect.UnimplementedMarketDataServiceHandler` (`services/xstockstrat-marketdata/internal/handler/marketdata_handler.go:22`) and its gRPC adapter embeds `marketdatav1.UnimplementedMarketDataServiceServer` (`:327`). The two hand-written client fakes embed the client interface (`services/xstockstrat-trading/internal/service/trading_sizing_test.go:33`, `services/xstockstrat-portfolio/internal/service/portfolio_service_test.go:20`).
 - `buf` is absent in this sandbox; `docs/runbooks/codegen-toolchain-host-setup.md` provisions the pinned toolchain on a host.
+- The tracked marketdata stubs: `git ls-files packages/proto/gen | grep marketdata/v1` → the twelve files above and `gen/python/marketdata/v1/__init__.py` (0 bytes, not regenerated). A file the generator leaves byte-identical is not staged; a generated file outside this list that changes is reported, not staged (F-08).
 
 **Lands with**: `Step 1`
 
@@ -353,56 +481,7 @@ cd services/xstockstrat-analysis && PYTHONPATH=../../packages/proto/gen/python u
 
 ---
 
-### Step 3 — service: the calendar RPC and the exported close helper
-
-**Status**: `pending`
-**Service**: `xstockstrat-marketdata`
-**Files**:
-- `packages/proto/marketsession/marketsession.go` — modify
-- `services/xstockstrat-marketdata/internal/service/last_closed_session.go` — create
-- `services/xstockstrat-marketdata/internal/handler/marketdata_handler.go` — modify
-
-**Reviewers**: `xstockstrat-marketdata` service owner — OHLCV ingestion integrity, TimescaleDB hypertable partitioning, Alpaca feed idempotency
-
-**Codebase Evidence**:
-- `func closeAt(d time.Time) time.Time` at `packages/proto/marketsession/marketsession.go:41-44`; its only caller is `Reference` at `:71` (`grep -rn "closeAt" packages/proto/marketsession/` → `:41`, `:71`).
-- `func DayStart` at `:33`, `func Open` at `:36`, `func PrevTradingDay` at `:56`, `func Reference(now) (ref, live)` at `:66-72`.
-- The rule to reuse, in `ComputeSessionGaps`: `last, live := marketsession.Reference(now); if live { last = marketsession.PrevTradingDay(last) }` (`internal/timeframe/timeframe.go:108-111`).
-- Marketdata resolves the package through `replace github.com/xstockstrat/contracts => ../../packages/proto` (`go.mod:49`), so the export is available without a version bump.
-- Handler shape for a unary RPC with no validation: `GetHistoricalFundamentals` at `internal/handler/marketdata_handler.go:133-139`; adapter shape: `GetDataCoverage` at `:443-449`.
-- The RPC is ungated: `internalCallerAllowlist` (`internal/service/authz.go:26-29`) names two RPCs and its comment says every other marketdata RPC is ungated.
-- No outbound call is added, so header propagation does not apply.
-
-**TDD**: `red-green required`
-
-**Covers**: —
-
-**Instructions**:
-1. `marketsession.go`: rename `closeAt` to the exported `Close` and update the call in `Reference`
-   (`:71`). Give it a one-line doc comment: the 16:00 America/New_York regular-session close of
-   d's date. Add no other symbol.
-2. `last_closed_session.go`: `func (s *MarketDataService) GetLastClosedSession(_ context.Context,
-   req *marketdatav1.GetLastClosedSessionRequest) (*marketdatav1.GetLastClosedSessionResponse, error)`.
-   - `asOf` is `req.GetAsOf().AsTime()`, or `time.Now()` when `as_of` is unset (S-3).
-   - `ref, live := marketsession.Reference(asOf)`; if `live`, `ref = marketsession.PrevTradingDay(ref)`.
-   - `session_date` is `ref` formatted `2006-01-02` (`ref` is a New York midnight).
-   - `closed_at = marketsession.Close(ref)`; `day_start = marketsession.DayStart(ref)`;
-     `day_end = day_start.AddDate(0, 0, 1).Add(-time.Second)`.
-   - It reads no repository and no config key.
-3. `marketdata_handler.go`: add `GetLastClosedSession` on `MarketDataHandler` (the `:133-139`
-   shape) and on `grpcMarketDataAdapter` (the `:443-449` shape). Add no entry to
-   `internalCallerAllowlist`.
-
-**Verification**: Step 4's commands. On its own this step must keep the build green:
-```bash
-cd packages/proto && GOWORK=off go test ./marketsession/...
-cd ../../services/xstockstrat-marketdata && GOWORK=off go build ./... && GOWORK=off golangci-lint run --modules-download-mode=mod
-for s in xstockstrat-portfolio xstockstrat-trading; do (cd ../$s && GOWORK=off go build ./...); done
-```
-
----
-
-### Step 4 — test: the calendar RPC table
+### Step 3 — test: the calendar RPC table
 
 **Status**: `pending`
 **Service**: `xstockstrat-marketdata`
@@ -419,6 +498,9 @@ for s in xstockstrat-portfolio xstockstrat-trading; do (cd ../$s && GOWORK=off g
 - Thanksgiving 2026 is Thursday 2026-11-26; holidays are computed by rule (`marketsession.go:95`). 2026-11-27 is a Friday and a half day, which the package does not model (`marketsession.go:1-2`).
 - New logic is in excluded packages (`service/`, `handler/`) — no coverage threshold applies to it; the table test is the verification. A `test` step is still required.
 - C-13: the table rows are scenario one-offs with one consumer, so they stay inline.
+- `GetLastClosedSession` (service, handler, adapter) and `marketsession.Close`: **Not found** — created by Step 4, so the test packages compile only inside the unit.
+
+**Lands with**: `Step 4`
 
 **TDD**: `red-green required`
 
@@ -445,70 +527,69 @@ for s in xstockstrat-portfolio xstockstrat-trading; do (cd ../$s && GOWORK=off g
 3. `marketsession_test.go`: one test that `Close` of a January and of a July date is 16:00 New
    York (`21:00Z`, `20:00Z`).
 
-**Verification**:
+**Verification** (the gate of the Steps 3+4 unit):
 ```bash
 cd packages/proto && GOWORK=off go test ./marketsession/... -count=1
 cd ../../services/xstockstrat-marketdata
 GOWORK=off go test ./internal/service/ ./internal/handler/ -run 'LastClosedSession' -count=1 -v
-GOWORK=off COVERPKGS=$(go list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//') && go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}" && go tool cover -func=coverage.out | grep "^total:"   # confirm ≥ 40%
+COVERPKGS=$(GOWORK=off go list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//') && GOWORK=off go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}" && GOWORK=off go tool cover -func=coverage.out | grep "^total:"   # confirm ≥ 40%
 GOWORK=off golangci-lint run --modules-download-mode=mod
 ```
 
 ---
 
-### Step 5 — service: `BackfillBars` returns the written bars on request and is ledger-quiet for the stage
+### Step 4 — service: the calendar RPC and the exported close helper
 
 **Status**: `pending`
 **Service**: `xstockstrat-marketdata`
 **Files**:
-- `services/xstockstrat-marketdata/internal/service/authz.go` — modify
-- `services/xstockstrat-marketdata/internal/service/marketdata_service.go` — modify
+- `packages/proto/marketsession/marketsession.go` — modify
+- `services/xstockstrat-marketdata/internal/service/last_closed_session.go` — create
 - `services/xstockstrat-marketdata/internal/handler/marketdata_handler.go` — modify
 
 **Reviewers**: `xstockstrat-marketdata` service owner — OHLCV ingestion integrity, TimescaleDB hypertable partitioning, Alpaca feed idempotency
 
 **Codebase Evidence**:
-- `func (s *MarketDataService) BackfillBars` at `internal/service/marketdata_service.go:1543-1640`. Ledger events: `marketdata.backfill.started` at `:1578`, `marketdata.backfill.failed` at `:1626`, `marketdata.backfill.completed` at `:1630`. The fetched bars are in memory before the insert: `bars, err := src.GetBars(…)` at `:1593`, `s.barInserter.InsertBars(ctx, bars)` at `:1612`. A written symbol appends nothing to `results`. The response is built at `:1635-1640`.
-- No `markWarm` call sits between `:1543` and `:1640` (design § 9.2).
-- Grant mechanism: `type internalCallerGrant struct{ callerID, rpc, peerSAN string }` (`internal/service/authz.go:22`), `internalCallerAllowlist` (`:26-29`), `hasInternalCallerAuthority(ctx, rpc)` (`:46-65`), which iterates every `x-internal-caller` value. Existing use: `internal/service/delisting_sync.go:28`.
-- RPC-name constants: `rpcSyncWatchlistDelistings`, `rpcAckDelistingAlerts` (`authz.go:14-17`).
-- The service receives the inbound gRPC context: adapter `BackfillBars` (`internal/handler/marketdata_handler.go:355-361`) → handler (`:120-130`) → `h.svc.BackfillBars(ctx, req.Msg)`.
-- Handler validation precedent that yields `INVALID_ARGUMENT` on the wire: `symbols required` (`:121-123`); the service-error wrap at `:124-127` yields `INTERNAL` (S-6).
-- `Bar.symbol` is filled by the Alpaca source: `barFromAlpaca(symbol, b, t, timeframe)` (`internal/alpaca/client.go:459`).
+- `func closeAt(d time.Time) time.Time` at `packages/proto/marketsession/marketsession.go:41-44`; its only caller is `Reference` at `:71` (`grep -rn "closeAt" packages/proto/marketsession/` → `:41`, `:71`).
+- `func DayStart` at `:33`, `func Open` at `:36`, `func PrevTradingDay` at `:56`, `func Reference(now) (ref, live)` at `:66-72`.
+- The rule to reuse, in `ComputeSessionGaps`: `last, live := marketsession.Reference(now); if live { last = marketsession.PrevTradingDay(last) }` (`internal/timeframe/timeframe.go:108-111`).
+- Marketdata resolves the package through `replace github.com/xstockstrat/contracts => ../../packages/proto` (`go.mod:49`), so the export is available without a version bump.
+- Handler shape for a unary RPC with no validation: `GetHistoricalFundamentals` at `internal/handler/marketdata_handler.go:133-139`; adapter shape: `GetDataCoverage` at `:443-449`.
+- The RPC is ungated: `internalCallerAllowlist` (`internal/service/authz.go:26-29`) names two RPCs and its comment says every other marketdata RPC is ungated.
 - No outbound call is added, so header propagation does not apply.
+
+**Lands with**: `Step 3`
 
 **TDD**: `red-green required`
 
 **Covers**: —
 
 **Instructions**:
-1. `authz.go`: add the constant `rpcBackfillBarsLedgerQuiet = "BackfillBars.ledger_quiet"` beside
-   the two RPC constants, and the grant `{callerID: "analysis-data-stage", rpc:
-   rpcBackfillBarsLedgerQuiet, peerSAN: "xstockstrat-analysis"}` (D-48). Update the allowlist
-   comment (two lines at most): this grant suppresses ledger events only; `BackfillBars` itself
-   stays ungated.
-2. `marketdata_service.go`, `BackfillBars`:
-   - compute `quiet := hasInternalCallerAuthority(ctx, rpcBackfillBarsLedgerQuiet)` once, after
-     the timeframe rejection;
-   - skip the three `s.emitEvent` calls (`:1578`, `:1626`, `:1630`) when `quiet`. Metrics
-     (`telemetry.RecordBackfillSymbol`) and logs are unchanged;
-   - when `req.GetReturnBars()`, append each written symbol's `bars` to a slice after its
-     `InsertBars` succeeded, and set `Bars` on the response. When the flag is unset the response is
-     byte-identical to today's (durable `@AC-14 @feature-294`).
-3. `marketdata_handler.go`, `BackfillBars`: after the `symbols required` check, reject with
-   `connect.CodeInvalidArgument` when `return_bars` is set and the range has no start, no end, or
-   spans more than 7 days (a named constant, `returnBarsMaxRange = 7 * 24 * time.Hour`; D-64).
-   Change no other error mapping (S-6).
+1. `marketsession.go`: rename `closeAt` to the exported `Close` and update the call in `Reference`
+   (`:71`). Give it a one-line doc comment: the 16:00 America/New_York regular-session close of
+   d's date. Add no other symbol.
+2. `last_closed_session.go`: `func (s *MarketDataService) GetLastClosedSession(_ context.Context,
+   req *marketdatav1.GetLastClosedSessionRequest) (*marketdatav1.GetLastClosedSessionResponse, error)`.
+   - `asOf` is `req.GetAsOf().AsTime()`, or `time.Now()` when `as_of` is unset (S-3).
+   - `ref, live := marketsession.Reference(asOf)`; if `live`, `ref = marketsession.PrevTradingDay(ref)`.
+   - `session_date` is `ref` formatted `2006-01-02` (`ref` is a New York midnight).
+   - `closed_at = marketsession.Close(ref)`; `day_start = marketsession.DayStart(ref)`;
+     `day_end = day_start.AddDate(0, 0, 1).Add(-time.Second)`.
+   - It reads no repository and no config key.
+3. `marketdata_handler.go`: add `GetLastClosedSession` on `MarketDataHandler` (the `:133-139`
+   shape) and on `grpcMarketDataAdapter` (the `:443-449` shape). Add no entry to
+   `internalCallerAllowlist`.
 
-**Verification**: Step 6's commands. On its own:
+**Verification** (run with Step 3's gate; the unit commits once):
 ```bash
-cd services/xstockstrat-marketdata && GOWORK=off go build ./... && GOWORK=off go test ./internal/service/ ./internal/handler/ -count=1
-GOWORK=off golangci-lint run --modules-download-mode=mod
+cd packages/proto && GOWORK=off go test ./marketsession/...
+cd ../../services/xstockstrat-marketdata && GOWORK=off go build ./... && GOWORK=off golangci-lint run --modules-download-mode=mod
+for s in xstockstrat-portfolio xstockstrat-trading; do (cd ../$s && GOWORK=off go build ./...); done
 ```
 
 ---
 
-### Step 6 — test: `return_bars`, the range cap and ledger suppression
+### Step 5 — test: `return_bars`, the range cap and ledger suppression
 
 **Status**: `pending`
 **Service**: `xstockstrat-marketdata`
@@ -525,6 +606,9 @@ GOWORK=off golangci-lint run --modules-download-mode=mod
 - Backfill metric assertions: `reader := serviceMetricReader(t)` and `backfillSymbolCounts(t, reader)` in `TestBackfillBars_SymbolOutcomeCounts_AC14` (`internal/service/marketdata_service_test.go:5700-5727`), same package.
 - New logic is in excluded packages (`service/`, `handler/`) — no coverage threshold applies to it.
 - C-13: the bar values are scenario one-offs; the ledger double and the peer-context helper already have one home each and are reused, not copied.
+- `rpcBackfillBarsLedgerQuiet` and the handler's range check: **Not found** — created by Step 6. `ReturnBars` and `Bars` exist after Steps 1-2.
+
+**Lands with**: `Step 6`
 
 **TDD**: `red-green required`
 
@@ -550,13 +634,67 @@ GOWORK=off golangci-lint run --modules-download-mode=mod
    - `return_bars` with no range, or a range missing its start or its end → `codes.InvalidArgument`;
    - `return_bars` with a range of exactly 7 days is not rejected by the handler.
 
-**Verification**:
+**Verification** (the gate of the Steps 5+6 unit):
 ```bash
 cd services/xstockstrat-marketdata
 GOWORK=off go test ./internal/service/ ./internal/handler/ -run 'Backfill|ReturnBars|InternalCaller' -count=1 -v
-GOWORK=off COVERPKGS=$(go list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//') && go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}" && go tool cover -func=coverage.out | grep "^total:"   # confirm ≥ 40%
+COVERPKGS=$(GOWORK=off go list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//') && GOWORK=off go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}" && GOWORK=off go tool cover -func=coverage.out | grep "^total:"   # confirm ≥ 40%
 GOWORK=off golangci-lint run --modules-download-mode=mod
 grep -rn "type recordingLedger" --include="*_test.go" .   # C-13: one declaration site
+```
+
+---
+
+### Step 6 — service: `BackfillBars` returns the written bars on request and is ledger-quiet for the stage
+
+**Status**: `pending`
+**Service**: `xstockstrat-marketdata`
+**Files**:
+- `services/xstockstrat-marketdata/internal/service/authz.go` — modify
+- `services/xstockstrat-marketdata/internal/service/marketdata_service.go` — modify
+- `services/xstockstrat-marketdata/internal/handler/marketdata_handler.go` — modify
+
+**Reviewers**: `xstockstrat-marketdata` service owner — OHLCV ingestion integrity, TimescaleDB hypertable partitioning, Alpaca feed idempotency
+
+**Codebase Evidence**:
+- `func (s *MarketDataService) BackfillBars` at `internal/service/marketdata_service.go:1543-1640`. Ledger events: `marketdata.backfill.started` at `:1578`, `marketdata.backfill.failed` at `:1626`, `marketdata.backfill.completed` at `:1630`. The fetched bars are in memory before the insert: `bars, err := src.GetBars(…)` at `:1593`, `s.barInserter.InsertBars(ctx, bars)` at `:1612`. A written symbol appends nothing to `results`. The response is built at `:1635-1640`.
+- No `markWarm` call sits between `:1543` and `:1640` (design § 9.2).
+- Grant mechanism: `type internalCallerGrant struct{ callerID, rpc, peerSAN string }` (`internal/service/authz.go:22`), `internalCallerAllowlist` (`:26-29`), `hasInternalCallerAuthority(ctx, rpc)` (`:46-65`), which iterates every `x-internal-caller` value. Existing use: `internal/service/delisting_sync.go:28`.
+- RPC-name constants: `rpcSyncWatchlistDelistings`, `rpcAckDelistingAlerts` (`authz.go:14-17`).
+- The service receives the inbound gRPC context: adapter `BackfillBars` (`internal/handler/marketdata_handler.go:355-361`) → handler (`:120-130`) → `h.svc.BackfillBars(ctx, req.Msg)`.
+- Handler validation precedent that yields `INVALID_ARGUMENT` on the wire: `symbols required` (`:121-123`); the service-error wrap at `:124-127` yields `INTERNAL` (S-6).
+- `Bar.symbol` is filled by the Alpaca source: `barFromAlpaca(symbol, b, t, timeframe)` (`internal/alpaca/client.go:459`).
+- No outbound call is added, so header propagation does not apply.
+
+**Lands with**: `Step 5`
+
+**TDD**: `red-green required`
+
+**Covers**: —
+
+**Instructions**:
+1. `authz.go`: add the constant `rpcBackfillBarsLedgerQuiet = "BackfillBars.ledger_quiet"` beside
+   the two RPC constants, and the grant `{callerID: "analysis-data-stage", rpc:
+   rpcBackfillBarsLedgerQuiet, peerSAN: "xstockstrat-analysis"}` (D-48). Update the allowlist
+   comment (two lines at most): this grant suppresses ledger events only; `BackfillBars` itself
+   stays ungated.
+2. `marketdata_service.go`, `BackfillBars`:
+   - compute `quiet := hasInternalCallerAuthority(ctx, rpcBackfillBarsLedgerQuiet)` once, after
+     the timeframe rejection;
+   - skip the three `s.emitEvent` calls (`:1578`, `:1626`, `:1630`) when `quiet`. Metrics
+     (`telemetry.RecordBackfillSymbol`) and logs are unchanged;
+   - when `req.GetReturnBars()`, append each written symbol's `bars` to a slice after its
+     `InsertBars` succeeded, and set `Bars` on the response. When the flag is unset the response is
+     byte-identical to today's (durable `@AC-14 @feature-294`).
+3. `marketdata_handler.go`, `BackfillBars`: after the `symbols required` check, reject with
+   `connect.CodeInvalidArgument` when `return_bars` is set and the range has no start, no end, or
+   spans more than 7 days (a named constant, `returnBarsMaxRange = 7 * 24 * time.Hour`; D-64).
+   Change no other error mapping (S-6).
+
+**Verification** (run with Step 5's gate; the unit commits once):
+```bash
+cd services/xstockstrat-marketdata && GOWORK=off go build ./... && GOWORK=off go test ./internal/service/ ./internal/handler/ -count=1
+GOWORK=off golangci-lint run --modules-download-mode=mod
 ```
 
 ---
@@ -613,6 +751,7 @@ grep -rn "type recordingLedger" --include="*_test.go" .   # C-13: one declaratio
 - Spec-time probe (S-11): with Step 7 applied alone, the package panics at `TestFundamentals_ProviderFollowsLiveConfig_AC7`.
 - New logic is in an excluded package (`service/`) — no coverage threshold applies to it.
 - C-13: the pin stays in the two existing builders; no new fixture home.
+- Why the one file is enough (F-08): `snapshotSource()` is called only by `GetFundamentals` (`internal/service/marketdata_service.go:1840`) and `GetFundamentalsMulti` (`:1859`). The four other test files of the package that build a `fakeCfg` (`backfill_outcome_test.go:114`, `bar_hold_test.go:117`, `bars_miss_test.go:122`, `etf_flags_test.go:61`) call neither (`grep -c 'GetFundamentals(\|GetFundamentalsMulti(' <file>` → 0 for each). Outside `internal/service/` no test builds a `fakeCfg` or names `snapshot_source`; the `GetFundamentals` calls in `cmd/server/main_test.go` (`:114`, `:207`, `:315`) are on the vendor source (`*fmp.Client`, `newFundamentalsSource`), not on `MarketDataService`.
 
 **Lands with**: `Step 7`
 
@@ -637,7 +776,9 @@ grep -rn "type recordingLedger" --include="*_test.go" .   # C-13: one declaratio
      that is a vendor-path test, add the same pin to that test's own config (the snapshot at
      `:366-372` gets a `fundamentals.snapshot_source` `StringVal` of `vendor`);
    - repeat until the package is green. Never weaken an assertion and never change a test that
-     pins `edgar`.
+     pins `edgar`;
+   - a failure in any file other than `marketdata_service_test.go` is not expected (see the
+     evidence). If one appears, stop and report it; do not edit a file outside `**Files**`.
 3. Record in the Deviation Log the list of test functions pinned outside `enabledCfg`, so the
    Step 9 scenario edits can be checked against it.
 
@@ -645,7 +786,7 @@ grep -rn "type recordingLedger" --include="*_test.go" .   # C-13: one declaratio
 ```bash
 cd services/xstockstrat-marketdata
 GOWORK=off go test ./internal/service/ -count=1
-GOWORK=off COVERPKGS=$(go list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//') && go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}" && go tool cover -func=coverage.out | grep "^total:"   # confirm ≥ 40%
+COVERPKGS=$(GOWORK=off go list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//') && GOWORK=off go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}" && GOWORK=off go tool cover -func=coverage.out | grep "^total:"   # confirm ≥ 40%
 GOWORK=off golangci-lint run --modules-download-mode=mod
 grep -n "snapshotSourceVendor" internal/service/marketdata_service.go   # the constant and the vendor case only; no default
 ```
@@ -885,7 +1026,7 @@ node scripts/check-config-wiring.mjs --final && node scripts/check-config-wiring
 
 **TDD**: `red-green required`
 
-**Covers**: — (no scenario of its own: the kill-switch scenarios are asserted in Steps 19, 27 and 29; this step pins the read)
+**Covers**: — (no scenario of its own: the kill-switch scenarios are asserted in Steps 18, 36 and 38; this step pins the read)
 
 **Instructions**:
 1. `tests/test_job_graph_settings.py`, using `snapshot_watcher`:
@@ -913,7 +1054,7 @@ uv run --extra dev pytest tests/test_job_graph_settings.py tests/test_config_rea
 uv run --extra dev pytest --cov=app --cov-fail-under=40
 ruff check . && ruff format --check .
 grep -n "snapshot_watcher\|from tests.conftest\|conftest" tests/test_job_graph_settings.py   # C-13: harness imported, not copied
-# config (Step 10)
+# config (Step 10); when node_modules is absent, first: (cd ../.. && pnpm install --frozen-lockfile)
 cd ../xstockstrat-config && pnpm run lint && pnpm run test:coverage && pnpm exec c8 check-coverage --lines 40
 ls migrations/062_*.up.sql migrations/062_*.down.sql
 # read both: the .down restores default_value 'vendor' and deletes exactly the untouched seed rows
@@ -977,7 +1118,63 @@ cd scripts && uv run --extra dev --frozen pytest tests/test_migration_rerun.py -
 
 ---
 
-### Step 14 — service: the system-read identity and the shared universe drains
+### Step 14 — test: the shared drains and the unchanged legacy behaviour
+
+**Status**: `pending`
+**Service**: `xstockstrat-analysis`
+**Files**:
+- `services/xstockstrat-analysis/tests/test_universe_reads.py` — create
+- `services/xstockstrat-analysis/tests/test_identity.py` — modify
+
+**Reviewers**: `xstockstrat-analysis` service owner — Backtest reproducibility, strategy scoring determinism, no look-ahead bias
+
+**Codebase Evidence**:
+- `class RecordingStub` at `tests/conftest.py:155-182`: records `(method, request, metadata)` and accepts extra keywords.
+- Drain-failure metric assertions: `metric_sum(reader, name, **attrs)` at `tests/test_live_loop_telemetry.py:35`, the `metric_reader` fixture at `tests/test_telemetry.py:155`, used as `metric_sum(metric_reader, "analysis.live_loop.drain_failures", source=…)` (`tests/test_live_loop_telemetry.py:129`).
+- Held-drain regression suite to mirror: `tests/test_held_position_drains.py:75-173` (durable `@AC-1 … @AC-10 @feature-356`).
+- Live-loop construction for a drain test: `real_live_loop(…)` at `tests/conftest.py:96`.
+- C-13: page payloads are scenario one-offs with one consumer; `RecordingStub`, `metric_reader` and `metric_sum` are imported, not copied.
+- `app/engine/universe_reads.py` and `app.identity.SYSTEM_READ_META`: **Not found** — created by Step 15.
+
+**Lands with**: `Step 15`
+
+**TDD**: `red-green required`
+
+**Covers**: `AC-32`
+
+**Instructions**:
+1. `tests/test_universe_reads.py`:
+   - `drain_watchlist` and `drain_signals`: every page read returns the normalised union; a stub
+     error on page 2 raises `UniverseReadError` with reason `rpc` and `partial` equal to page 1's
+     symbols (RED: the function does not exist); 51 pages raise reason `page_cap` with the symbols
+     of the first 50 pages; exactly 50 pages with no pending token return normally;
+   - `timeout=10` reaches every stub call as a keyword; with no `timeout` the stub call carries no
+     `timeout` keyword at all (S-5);
+   - a delisted binding is left out and a list with no bindings falls back to `symbols`;
+   - `@AC-32`, through the live-loop wrapper: a user's watchlists span 51 pages →
+     `_drain_watchlist` returns the symbols of the first 50 pages,
+     `analysis.live_loop.drain_failures` does not increase and no WARNING record is written
+     (`caplog`);
+   - through the wrappers, an `rpc` failure returns the partial set, increases
+     `analysis.live_loop.drain_failures` by 1 with source `watchlist` or `signals`, and logs the
+     same WARN text as before the move;
+   - `_drain_positions_paged`: the default call passes no `timeout` keyword; `timeout=10` passes
+     it on every page.
+2. `tests/test_identity.py`: `SYSTEM_READ_META` equals `(("x-user-id", "system"),
+   ("x-internal-caller", "analysis-system-read"))`.
+
+**Verification** (the gate of the Steps 14+15 unit):
+```bash
+cd services/xstockstrat-analysis
+uv run --extra dev pytest tests/test_universe_reads.py tests/test_identity.py tests/test_live_loop_telemetry.py tests/test_held_position_drains.py -q
+uv run --extra dev pytest --cov=app --cov-fail-under=40
+ruff check . && ruff format --check .
+grep -n "from tests.conftest\|from tests.test_live_loop_telemetry\|metric_reader" tests/test_universe_reads.py   # C-13: doubles imported
+```
+
+---
+
+### Step 15 — service: the system-read identity and the shared universe drains
 
 **Status**: `pending`
 **Service**: `xstockstrat-analysis`
@@ -999,6 +1196,8 @@ cd scripts && uv run --extra dev --frozen pytest tests/test_migration_rerun.py -
 - `async def _drain_positions_paged(stub, user_id, metadata) -> list` at `app/handlers/servicer.py:7061-7090`; the stub call at `:7068-7074`; callers `servicer.py:6787` and `live_loop.py:585`.
 - The servicer's own copies stay as they are (`_drain_watchlist_bindings` `servicer.py:6343`, `_drain_active_signals` `:6735`): D-21 moves the live-loop bodies and adds no third copy.
 - Header propagation: the moved calls keep their per-call `metadata=` argument (`docs/patterns/header-propagation.md` § Python services (grpc.aio)); no new call site is added in this step.
+
+**Lands with**: `Step 14`
 
 **TDD**: `red-green required`
 
@@ -1032,7 +1231,7 @@ cd scripts && uv run --extra dev --frozen pytest tests/test_migration_rerun.py -
    `ListPositions` call gains `timeout=timeout` only when it is not `None`. Nothing else in the
    function changes.
 
-**Verification**: Step 15's commands. On its own this step must leave the existing suites green:
+**Verification** (run with Step 14's gate; the unit commits once):
 ```bash
 cd services/xstockstrat-analysis
 uv run --extra dev pytest tests/test_live_loop.py tests/test_live_loop_telemetry.py tests/test_held_position_drains.py tests/test_entry_backfill.py tests/test_owner_header_guard.py tests/test_identity.py -q
@@ -1042,60 +1241,51 @@ grep -rn "_SYSTEM_READ_META" app tests   # no output
 
 ---
 
-### Step 15 — test: the shared drains and the unchanged legacy behaviour
+### Step 16 — test: data-stage telemetry
 
 **Status**: `pending`
 **Service**: `xstockstrat-analysis`
 **Files**:
-- `services/xstockstrat-analysis/tests/test_universe_reads.py` — create
-- `services/xstockstrat-analysis/tests/test_identity.py` — modify
+- `services/xstockstrat-analysis/tests/test_data_stage_telemetry.py` — create
+- `services/xstockstrat-analysis/tests/test_telemetry_allowlist.py` — modify
 
 **Reviewers**: `xstockstrat-analysis` service owner — Backtest reproducibility, strategy scoring determinism, no look-ahead bias
 
 **Codebase Evidence**:
-- `class RecordingStub` at `tests/conftest.py:155-182`: records `(method, request, metadata)` and accepts extra keywords.
-- Drain-failure metric assertions: `metric_sum(reader, name, **attrs)` at `tests/test_live_loop_telemetry.py:35`, the `metric_reader` fixture at `tests/test_telemetry.py:155`, used as `metric_sum(metric_reader, "analysis.live_loop.drain_failures", source=…)` (`tests/test_live_loop_telemetry.py:129`).
-- Held-drain regression suite to mirror: `tests/test_held_position_drains.py:75-173` (durable `@AC-1 … @AC-10 @feature-356`).
-- Live-loop construction for a drain test: `real_live_loop(…)` at `tests/conftest.py:96`.
-- C-13: page payloads are scenario one-offs with one consumer; `RecordingStub`, `metric_reader` and `metric_sum` are imported, not copied.
+- `MIN_INSTRUMENTS` at `tests/test_telemetry_allowlist.py:34-45`; `_drive()` at `:49-63`; `_keys_by_instrument(reader)` at `:66-75`; `test_ac41_every_label_key_is_a_module_constant` at `:78-84`.
+- The `host.provider` check for a named instrument set: `test_ac3_feature_337_new_instruments_carry_host_provider` at `tests/test_pipeline_telemetry.py:229-261`, with `_PIPELINE_INSTRUMENTS` at `:32`.
+- Fixtures: `metric_reader` (`tests/test_telemetry.py:155`), `otel_reset` (`tests/conftest.py:878-879`).
+- C-13: the label values are the closed sets under test and have one consumer.
+
+**Lands with**: `Step 17`
 
 **TDD**: `red-green required`
 
-**Covers**: `AC-32`
+**Covers**: — (no scenario of its own: the per-scenario counts are asserted in Steps 18, 30, 32 and 34; this step extends the durable label-allowlist rule of feature 294 and the `host.provider` rule of feature 337)
 
 **Instructions**:
-1. `tests/test_universe_reads.py`:
-   - `drain_watchlist` and `drain_signals`: every page read returns the normalised union; a stub
-     error on page 2 raises `UniverseReadError` with reason `rpc` and `partial` equal to page 1's
-     symbols (RED: the function does not exist); 51 pages raise reason `page_cap` with the symbols
-     of the first 50 pages; exactly 50 pages with no pending token return normally;
-   - `timeout=10` reaches every stub call as a keyword; with no `timeout` the stub call carries no
-     `timeout` keyword at all (S-5);
-   - a delisted binding is left out and a list with no bindings falls back to `symbols`;
-   - `@AC-32`, through the live-loop wrapper: a user's watchlists span 51 pages →
-     `_drain_watchlist` returns the symbols of the first 50 pages,
-     `analysis.live_loop.drain_failures` does not increase and no WARNING record is written
-     (`caplog`);
-   - through the wrappers, an `rpc` failure returns the partial set, increases
-     `analysis.live_loop.drain_failures` by 1 with source `watchlist` or `signals`, and logs the
-     same WARN text as before the move;
-   - `_drain_positions_paged`: the default call passes no `timeout` keyword; `timeout=10` passes
-     it on every page.
-2. `tests/test_identity.py`: `SYSTEM_READ_META` equals `(("x-user-id", "system"),
-   ("x-internal-caller", "analysis-system-read"))`.
+1. `tests/test_data_stage_telemetry.py`:
+   - each of the eight helpers adds 1 to its instrument with exactly the label keys of Step 17's
+     table (RED: the helper does not exist), for every value of its closed set;
+   - no data point carries a key in `FORBIDDEN_KEYS`, and none carries `symbol`, `user_id` or
+     `run_id`;
+   - every `analysis.data_stage.*` instrument carries `host.provider`, mirroring
+     `tests/test_pipeline_telemetry.py:229-261`.
+2. `tests/test_telemetry_allowlist.py`: add the eight names to `MIN_INSTRUMENTS` and one call of
+   each helper to `_drive()`.
 
-**Verification**:
+**Verification** (the gate of the Steps 16+17 unit):
 ```bash
 cd services/xstockstrat-analysis
-uv run --extra dev pytest tests/test_universe_reads.py tests/test_identity.py tests/test_live_loop_telemetry.py tests/test_held_position_drains.py -q
+uv run --extra dev pytest tests/test_data_stage_telemetry.py tests/test_telemetry_allowlist.py tests/test_pipeline_telemetry.py -q
 uv run --extra dev pytest --cov=app --cov-fail-under=40
 ruff check . && ruff format --check .
-grep -n "from tests.conftest\|from tests.test_live_loop_telemetry\|metric_reader" tests/test_universe_reads.py   # C-13: doubles imported
+grep -n "metric_reader\|otel_reset\|from tests" tests/test_data_stage_telemetry.py   # C-13: fixtures imported
 ```
 
 ---
 
-### Step 16 — service: data-stage telemetry
+### Step 17 — service: data-stage telemetry
 
 **Status**: `pending`
 **Service**: `xstockstrat-analysis`
@@ -1111,6 +1301,8 @@ grep -n "from tests.conftest\|from tests.test_live_loop_telemetry\|metric_reader
 - `tests/test_pipeline_telemetry.py:257-261` compares only instruments named in `_PIPELINE_INSTRUMENTS`, so new `analysis.data_stage.*` names do not turn it red.
 - The instrument table is design.md § 15. No symbol, user or run label (R-4; durable `@AC-41 @feature-294`).
 - No outbound call is added, so header propagation does not apply.
+
+**Lands with**: `Step 16`
 
 **TDD**: `red-green required`
 
@@ -1135,156 +1327,14 @@ grep -n "from tests.conftest\|from tests.test_live_loop_telemetry\|metric_reader
 
 3. No `passes` counter (D-53), no gauge, no new `Loop` member.
 
-**Verification**: Step 17's commands. On its own:
+**Verification** (run with Step 16's gate; the unit commits once):
 ```bash
 cd services/xstockstrat-analysis && uv run --extra dev pytest tests/test_telemetry_allowlist.py tests/test_pipeline_telemetry.py tests/test_telemetry_instruments.py -q && ruff check . && ruff format --check .
 ```
 
 ---
 
-### Step 17 — test: data-stage telemetry
-
-**Status**: `pending`
-**Service**: `xstockstrat-analysis`
-**Files**:
-- `services/xstockstrat-analysis/tests/test_data_stage_telemetry.py` — create
-- `services/xstockstrat-analysis/tests/test_telemetry_allowlist.py` — modify
-
-**Reviewers**: `xstockstrat-analysis` service owner — Backtest reproducibility, strategy scoring determinism, no look-ahead bias
-
-**Codebase Evidence**:
-- `MIN_INSTRUMENTS` at `tests/test_telemetry_allowlist.py:34-45`; `_drive()` at `:49-63`; `_keys_by_instrument(reader)` at `:66-75`; `test_ac41_every_label_key_is_a_module_constant` at `:78-84`.
-- The `host.provider` check for a named instrument set: `test_ac3_feature_337_new_instruments_carry_host_provider` at `tests/test_pipeline_telemetry.py:229-261`, with `_PIPELINE_INSTRUMENTS` at `:32`.
-- Fixtures: `metric_reader` (`tests/test_telemetry.py:155`), `otel_reset` (`tests/conftest.py:878-879`).
-- C-13: the label values are the closed sets under test and have one consumer.
-
-**TDD**: `red-green required`
-
-**Covers**: — (no scenario of its own: the per-scenario counts are asserted in Steps 23 and 25; this step extends the durable label-allowlist rule of feature 294 and the `host.provider` rule of feature 337)
-
-**Instructions**:
-1. `tests/test_data_stage_telemetry.py`:
-   - each of the eight helpers adds 1 to its instrument with exactly the label keys of Step 16's
-     table (RED: the helper does not exist), for every value of its closed set;
-   - no data point carries a key in `FORBIDDEN_KEYS`, and none carries `symbol`, `user_id` or
-     `run_id`;
-   - every `analysis.data_stage.*` instrument carries `host.provider`, mirroring
-     `tests/test_pipeline_telemetry.py:229-261`.
-2. `tests/test_telemetry_allowlist.py`: add the eight names to `MIN_INSTRUMENTS` and one call of
-   each helper to `_drive()`.
-
-**Verification**:
-```bash
-cd services/xstockstrat-analysis
-uv run --extra dev pytest tests/test_data_stage_telemetry.py tests/test_telemetry_allowlist.py tests/test_pipeline_telemetry.py -q
-uv run --extra dev pytest --cov=app --cov-fail-under=40
-ruff check . && ruff format --check .
-grep -n "metric_reader\|otel_reset\|from tests" tests/test_data_stage_telemetry.py   # C-13: fixtures imported
-```
-
----
-
-### Step 18 — service: the universe job and the shard job
-
-**Status**: `pending`
-**Service**: `xstockstrat-analysis`
-**Files**:
-- `services/xstockstrat-analysis/app/jobs/data_stage.py` — create
-
-**Reviewers**: `xstockstrat-analysis` service owner — Backtest reproducibility, strategy scoring determinism, no look-ahead bias
-
-**Codebase Evidence**:
-- `app/jobs/data_stage.py`: **Not found** — created by this step.
-- Handler factory pattern: `def make_handler(settings, *, monotonic=time.monotonic)` returning `async def handler(job)` (`app/jobs/retention_prune.py:17-34`), with a self-stop loop of `job.db(30)` blocks (`:22-31`).
-- Handler-facing job: `ClaimedJob` fields `job_id, kind, subject, epoch, run_id, lane, attempts, wait_round, lease_token` (`app/engine/job_graph.py:290-301`); `job.db(budget)` at `:303-365`, budget at most `HANDLER_BLOCK_CAP_S = 30.0` (`:43`).
-- `attempts` is 1 on the first attempt: the claim sets `attempts = j.attempts + 1` (`app/repositories/pipeline_jobs.py:35`); a park refunds the attempt (`:127`).
-- Outcomes and children: `Child(kind, subject, epoch, lane=None)` (`job_graph.py:74-78`), `Succeeded`, `WaitOn(children)` (`:81-88`), `PermanentJobError` (`:96`). A `WaitOn` with no child is a permanent error (`:172-173`); at most 10,000 children per park (`:23`, `:174-175`). A child with lane `None` inherits the parent's (`pipeline_jobs.py:101-108`).
-- `Lane.WATCHLIST = 10`, `Lane.HELD = 20` (`job_graph.py:56-58`).
-- Owner list source: the live loop reads `analysis.strategies` and takes each row's `user_id` (`app/engine/live_loop.py:374-402`); `is_real_owner` at `app/identity.py:6-8`.
-- Reads: `drain_watchlist`, `drain_signals`, `UniverseReadError` (Step 14); `_drain_positions_paged(stub, user_id, metadata, timeout=None)` and `_normalize_symbol` (`app/handlers/servicer.py:7061`, `:6965`), imported from the servicer as `live_loop.py:41-45` does; `_PositionsPageError` (`servicer.py:408`).
-- Scopes: `ingest_pb2.SIGNAL_SCOPE_SYSTEM`, `ingest_pb2.SIGNAL_SCOPE_OWN` (`live_loop.py:533`, `:537`).
-- Header propagation (C-03): Python per-call `metadata=` (`docs/patterns/header-propagation.md` § Python services (grpc.aio)). A background call with no end user carries the owner or the system identity and a fresh trace id, with no access scope: `_saga_sweep_meta` at `app/handlers/servicer.py:3842-3848`; `owner_metadata(user_id) + [("x-trace-id", pass_trace_id)]` at `app/engine/entry_backfill.py:78`.
-- Contract (`tests/test_job_handler_contract.py`): no `db_pool` name, no `asyncio.timeout` around a `.db(` block, awaits inside a `.db(` block only on `conn` (S-10).
-- `settings.data_stage_enabled()`, `settings.max_attempts()`, `settings.retention_days()` (Step 11; `job_graph.py:223-229`).
-
-**TDD**: `red-green required`
-
-**Covers**: —
-
-**Instructions**:
-1. Module constants and key helpers (S-1), with a one-line module docstring:
-   - kinds `UNIVERSE_KIND = "data_stage.universe"`, `SHARD_KIND = "data_stage.shard"`,
-     `SYMBOL_KIND = "data_stage.symbol"`, `FINALITY_KIND = "data_stage.finality"`;
-     `GLOBAL_SUBJECT = "global"`;
-   - fixed invariants as named constants under one comment line citing design.md § 12 (not config
-     keys, F-07): `PASSES = 4`, `SHARD_SIZE = 500`, `SNAPSHOT_BLOCK_ROWS = 5000`,
-     `READ_BUDGET_S = 300`, `READ_PAGE_TIMEOUT_S = 10`, `RETENTION_BATCH = 5000`,
-     `RETENTION_SELF_STOP_S = 120`, `SESSION_KEEP_MIN_DAYS = 30`, `HOLE_KEEP_DAYS = 730`,
-     `FILINGS_KEEP_DAYS = 365`;
-   - `stage_epoch(session: date, p: int) -> str` (`f"{session.isoformat()}#{p}"`),
-     `parse_stage_epoch(epoch) -> tuple[date, int]` (raises `PermanentJobError` unless the epoch
-     is `YYYY-MM-DD#p` with p in 1..4), `stage_run_id(session, p)` (`data_stage:S#p`) and
-     `finality_run_id(session)` (`data_stage_finality:S`).
-2. `make_universe_handler(settings, *, portfolio, ingest, monotonic=time.monotonic)`, as
-   design.md § 4. The handler, in order:
-   1. `job.wait_round > 0` → `Succeeded()` (S-4).
-   2. Parse the epoch into S and p.
-   3. Kill switch: `settings.data_stage_enabled()` false → INFO `data stage disabled; session S
-      pass p skipped` and `Succeeded()`, with nothing deleted or written (D-17).
-   4. Retention, pass 1 only (D-20, D-35): batches of `RETENTION_BATCH` rows, one `job.db(30)`
-      each, stopping after the first batch that ends `RETENTION_SELF_STOP_S` after the handler
-      began. Session-keyed tables (`symbol_coverage`, `symbol_bar`, `data_stage_finality`,
-      `data_stage_universe`, `data_stage_users`, `data_stage_runs`) below `S − max(30,
-      settings.retention_days())` days; `symbol_bar_hole` where `last_session < S − 730`;
-      `symbol_filings_check` where `next_check_on < S − 365`.
-   5. Marker check, one `job.db(5)`: a `data_stage_users` row for S exists → go to item 8.
-   6. Reads. Owners: `SELECT DISTINCT user_id FROM analysis.strategies` in `job.db(5)`, filtered
-      by `is_real_owner`, sorted. One trace id per attempt (`uuid4().hex`). Under one
-      `asyncio.timeout(READ_BUDGET_S)` that contains no `.db(` block: the system-scope signals
-      (`drain_signals(ingest, [*SYSTEM_READ_META, trace], SIGNAL_SCOPE_SYSTEM,
-      timeout=READ_PAGE_TIMEOUT_S)`), then per owner with `[*owner_metadata(u), trace]`: held
-      (`_drain_positions_paged(…, timeout=READ_PAGE_TIMEOUT_S)`, normalised), the watchlist drain
-      and the own-signals drain (`SIGNAL_SCOPE_OWN`).
-      - `job.attempts < settings.max_attempts()`: the first failed read, or the budget expiring,
-        re-raises before any write (a transient error; D-19, D-49).
-      - Last attempt: a user with any failed source contributes no rows and is recorded
-        `snapshotted=false` with `failed_source` set to the first failure (`held`, `watchlist`,
-        `signals`); a user not fully read when the budget expired gets `budget`; a failed
-        system-scope read gives the `system` user row `snapshotted=false` with `system_signals`
-        and does not mark owners.
-   7. Write (D-33), `SNAPSHOT_BLOCK_ROWS` rows per `job.db(30)` block, each insert one `execute`
-      over `unnest` arrays: block 1 first runs `DELETE FROM analysis.data_stage_universe WHERE
-      session_date = S`; the last block writes every `data_stage_users` row, always including one
-      for `SYSTEM_IDENTITY`. That block is the marker. A user's rows are `(S, user, symbol,
-      held)` for the union of held, watchlist and own-signal symbols; the system-scope symbols are
-      stored once under `SYSTEM_IDENTITY` with `held=false`. After the marker block commits,
-      record `record_data_stage_snapshot_user("ok" | "failed")` once per user row.
-   8. Park: `N = count(DISTINCT symbol)` of the snapshot for S, one `job.db(5)`. `N == 0` →
-      `Succeeded()`. Otherwise `WaitOn` on `Child(SHARD_KIND, str(k), job.epoch)` for k in
-      `0..ceil(N / SHARD_SIZE) − 1`.
-3. `make_shard_handler()`, as design.md § 5:
-   - `job.wait_round > 0` → `Succeeded()`; parse the epoch; `k = int(job.subject)` (a
-     non-integer subject → `PermanentJobError`);
-   - one `job.db(5)`: slice k of the snapshot (`GROUP BY symbol`, `bool_or(held)`, `ORDER BY
-     symbol OFFSET k·500 LIMIT 500`), then drop the symbols that already have a `symbol_coverage`
-     row for S;
-   - an empty filtered slice → `Succeeded()`; a WARN only when the unfiltered slice is empty;
-   - otherwise `WaitOn` on `Child(SYMBOL_KIND, symbol, job.epoch, Lane.HELD if held else
-     Lane.WATCHLIST)`.
-4. Neither handler returns a `Verdict` (R-5). Neither reads a config key other than through
-   `settings`.
-
-**Verification**: Step 19's commands. On its own:
-```bash
-cd services/xstockstrat-analysis
-uv run --extra dev pytest tests/test_job_handler_contract.py tests/test_pipeline_boot.py -q   # the new module honours the contract
-ruff check . && ruff format --check .
-grep -n "metadata=\|owner_metadata\|SYSTEM_READ_META\|x-trace-id" app/jobs/data_stage.py   # every read carries an identity and a trace id
-```
-
----
-
-### Step 19 — test: universe and shard jobs
+### Step 18 — test: the universe snapshot, and the stage fixtures
 
 **Status**: `pending`
 **Service**: `xstockstrat-analysis`
@@ -1297,14 +1347,17 @@ grep -n "metadata=\|owner_metadata\|SYSTEM_READ_META\|x-trace-id" app/jobs/data_
 **Codebase Evidence**:
 - `local_pg` at `tests/conftest.py:439-440`; `pipeline_pool(dsn, size=4)` at `:510-512`; `pipeline_pg` at `:515-537` (runs the owning migration file alone); `_MIGRATIONS_DIR` at `:506`; `insert_pipeline_job` at `:539`.
 - The `real_pg` marker: `pyproject.toml:34`; used as `pytestmark = pytest.mark.real_pg` (`tests/test_pipeline_jobs_real_pg.py:26`).
-- Running a handler through the real worker on PostgreSQL: `_worker(pool, settings, …)`, `_drain(*workers)` and `_run_prune` at `tests/test_retention_prune_job.py:38-59`.
 - `bounded_txn(pool, budget_s, …)` at `app/repositories/read_budget.py:212-258`: what `job.db()` wraps.
 - `RecordingStub` (`tests/conftest.py:155`), `aio_rpc_error(code, details)` (`:146`), `snapshot_watcher` (`:63`).
-- C-13: `data_stage_pg` and `StageJob` have consumers in Steps 19, 23, 25, 27 and 29, so they go to `tests/conftest.py` now (S-7). Portfolio and ingest page payloads are scenario one-offs.
+- `metric_reader` (`tests/test_telemetry.py:155`) and `metric_sum(reader, name, **attrs)` (`tests/test_live_loop_telemetry.py:35`).
+- `app/jobs/data_stage.py`: **Not found** — created by Step 19.
+- C-13: `data_stage_pg` and `StageJob` have consumers in Steps 18, 20, 22, 30, 32, 34, 36 and 38, so they go to `tests/conftest.py` now (S-7). Portfolio and ingest page payloads are scenario one-offs.
+
+**Lands with**: `Step 19`
 
 **TDD**: `red-green required`
 
-**Covers**: `AC-1, AC-3, AC-4, AC-5, AC-29, AC-30, AC-31` (the job half), `AC-34, AC-36, AC-40, AC-41, AC-44, AC-62`
+**Covers**: `AC-1, AC-3, AC-29, AC-30` (the snapshot rows and the park on a shard), `AC-31` (the job half), `AC-40, AC-41, AC-44, AC-62`
 
 **Instructions**:
 1. `tests/conftest.py`:
@@ -1314,15 +1367,15 @@ grep -n "metadata=\|owner_metadata\|SYSTEM_READ_META\|x-trace-id" app/jobs/data_
    - `StageJob`: a small class with the handler-facing fields of `ClaimedJob` (`job_id`, `kind`,
      `subject`, `epoch`, `run_id`, `lane`, `attempts`, `wait_round`) and an async context manager
      `db(budget)` that opens `bounded_txn(pool, budget)`.
-2. `tests/test_data_stage_universe.py` (`real_pg`), calling the handlers directly with `StageJob`
-   and `RecordingStub` portfolio and ingest doubles unless a case says "through the worker":
+2. `tests/test_data_stage_universe.py` (`real_pg`), calling the universe handler directly with
+   `StageJob` and `RecordingStub` portfolio and ingest doubles:
    - `@AC-1`: `u1` owns a strategy, holds `AAPL`, has an active signal on `NVDA` and a watchlist
      with `MSFT` and `AAPL` → the snapshot lists exactly `AAPL`, `MSFT`, `NVDA` for `u1`, and
      `AAPL` is held (RED);
    - `@AC-29`: `u3` holds `AAPL` and owns no strategy → no universe row and no user row for `u3`;
    - `@AC-30`: a system-scope signal on `NVDA` → `NVDA` is stored under `system`, not held, and is
-     in the universe of `u1` and of `u2` (own rows union the `system` rows); the park names a
-     shard;
+     in the universe of `u1` and of `u2` (own rows union the `system` rows); the job returns a
+     `WaitOn` whose children are `data_stage.shard` jobs;
    - `@AC-31`: no strategy owner → the job returns `Succeeded`, no shard child, and the marker row
      for `system` exists;
    - `@AC-44`: the watchlist read fails for `u1` with `attempts=1` → the handler raises, and no
@@ -1341,30 +1394,17 @@ grep -n "metadata=\|owner_metadata\|SYSTEM_READ_META\|x-trace-id" app/jobs/data_
      and leaves the universe rows unchanged (compare row sets);
    - a crashed attempt's partial rows are cleared: rows for S without a marker are replaced by the
      next attempt;
-   - `@AC-36`: `pipeline.retention_days` 7; coverage, bar, universe, user, run and finality rows
-     for 2026-10-20 and for 2026-10-29 → after the pass-1 universe job for 2026-11-27 no
-     2026-10-20 row remains and every 2026-10-29 row remains; a pass-2 job prunes nothing; a hole
-     with `last_session` older than S − 730 and a filings row with `next_check_on` older than
-     S − 365 are deleted;
-   - retention self-stop: with a patched `RETENTION_SELF_STOP_S` of 0 the job still snapshots and
-     parks after one batch;
-   - a malformed epoch raises `PermanentJobError`;
+   - the park: 1,200 distinct snapshot symbols → a `WaitOn` with exactly 3 children, subjects
+     `"0"`, `"1"`, `"2"`, epoch `2026-11-27#1`;
+   - a malformed epoch (`2026-11-27`, `2026-11-27#0`, `2026-11-27#5`) raises `PermanentJobError`;
    - the snapshot write at scale: 100,000 universe rows across users are stored and the marker is
      the last write (design § 22);
-   - `@AC-34`, through the worker with a registry of the universe and shard handlers and a
-     recording symbol handler: a snapshot of 1,200 distinct symbols → exactly 3 shard jobs, each
-     with at most 500 children, and exactly 1,200 `data_stage.symbol` jobs;
-   - `@AC-4`: `u1` and `u2` both watch `MSFT` → exactly 1 `data_stage.symbol` job for `MSFT` with
-     epoch `2026-11-27#1`, and a second run of the same shard creates no second one;
-   - `@AC-5`: `AAPL` held by `u1` and watched by `u2`, `MSFT` only watched → the `AAPL` job has
-     lane 20 and the `MSFT` job lane 10;
-   - a shard skips a symbol that already has a coverage row for S, and a filtered-empty shard
-     returns `Succeeded`;
-   - a woken universe job and a woken shard job (`wait_round=1`) return `Succeeded` without a
-     read.
+   - a woken universe job (`wait_round=1`) returns `Succeeded` without a read;
+   - every ingest and portfolio call carries a per-call `metadata=` with one `x-user-id` and one
+     `x-trace-id`, and one trace id is shared by the calls of an attempt.
    Also assert `analysis.data_stage.snapshot_users` counts `ok` and `failed` once per user row.
 
-**Verification**:
+**Verification** (the gate of the Steps 18+19 unit):
 ```bash
 cd services/xstockstrat-analysis
 uv run --extra dev pytest tests/test_data_stage_universe.py tests/test_job_handler_contract.py -q
@@ -1376,7 +1416,142 @@ grep -n "from tests.conftest" tests/test_data_stage_universe.py
 
 ---
 
-### Step 20 — service: the data job's rules (pure functions)
+### Step 19 — service: the stage module, its key helpers and the universe job
+
+**Status**: `pending`
+**Service**: `xstockstrat-analysis`
+**Files**:
+- `services/xstockstrat-analysis/app/jobs/data_stage.py` — create
+
+**Reviewers**: `xstockstrat-analysis` service owner — Backtest reproducibility, strategy scoring determinism, no look-ahead bias
+
+**Codebase Evidence**:
+- `app/jobs/data_stage.py`: **Not found** — created by this step.
+- Handler factory pattern: `def make_handler(settings, *, monotonic=time.monotonic)` returning `async def handler(job)` (`app/jobs/retention_prune.py:17-34`).
+- Handler-facing job: `ClaimedJob` fields `job_id, kind, subject, epoch, run_id, lane, attempts, wait_round, lease_token` (`app/engine/job_graph.py:290-301`); `job.db(budget)` at `:303-365`, budget at most `HANDLER_BLOCK_CAP_S = 30.0` (`:43`).
+- `attempts` is 1 on the first attempt: the claim sets `attempts = j.attempts + 1` (`app/repositories/pipeline_jobs.py:35`); a park refunds the attempt (`:127`).
+- Outcomes and children: `Child(kind, subject, epoch, lane=None)` (`job_graph.py:74-78`), `Succeeded`, `WaitOn(children)` (`:81-88`), `PermanentJobError` (`:96`). A `WaitOn` with no child is a permanent error (`:172-173`); at most 10,000 children per park (`:23`, `:174-175`). A child with lane `None` inherits the parent's (`pipeline_jobs.py:101-108`).
+- Owner list source: the live loop reads `analysis.strategies` and takes each row's `user_id` (`app/engine/live_loop.py:374-402`); `is_real_owner` at `app/identity.py:6-8`.
+- Reads: `drain_watchlist`, `drain_signals`, `UniverseReadError` (Step 15); `_drain_positions_paged(stub, user_id, metadata, timeout=None)` and `_normalize_symbol` (`app/handlers/servicer.py:7061`, `:6965`), imported from the servicer as `live_loop.py:41-45` does; `_PositionsPageError` (`servicer.py:408`).
+- Scopes: `ingest_pb2.SIGNAL_SCOPE_SYSTEM`, `ingest_pb2.SIGNAL_SCOPE_OWN` (`live_loop.py:533`, `:537`).
+- Header propagation (C-03): Python per-call `metadata=` (`docs/patterns/header-propagation.md` § Python services (grpc.aio)). A background call with no end user carries the owner or the system identity and a fresh trace id, with no access scope: `_saga_sweep_meta` at `app/handlers/servicer.py:3842-3848`; `owner_metadata(user_id) + [("x-trace-id", pass_trace_id)]` at `app/engine/entry_backfill.py:78`.
+- Contract (`tests/test_job_handler_contract.py`): no `db_pool` name, no `asyncio.timeout` around a `.db(` block, awaits inside a `.db(` block only on `conn` (S-10).
+- `settings.data_stage_enabled()` (Step 11), `settings.max_attempts()` (`job_graph.py:223`).
+- Telemetry helper `record_data_stage_snapshot_user` (Step 17).
+
+**Lands with**: `Step 18`
+
+**TDD**: `red-green required`
+
+**Covers**: —
+
+**Instructions**:
+1. Module constants and key helpers (S-1), with a one-line module docstring:
+   - kinds `UNIVERSE_KIND = "data_stage.universe"`, `SHARD_KIND = "data_stage.shard"`,
+     `SYMBOL_KIND = "data_stage.symbol"`, `FINALITY_KIND = "data_stage.finality"`;
+     `GLOBAL_SUBJECT = "global"`;
+   - fixed invariants as named constants under one comment line citing design.md § 12 (not config
+     keys, F-07): `PASSES = 4`, `SHARD_SIZE = 500`, `SNAPSHOT_BLOCK_ROWS = 5000`,
+     `READ_BUDGET_S = 300`, `READ_PAGE_TIMEOUT_S = 10`. Later steps add theirs under the same
+     comment (S-15);
+   - `stage_epoch(session: date, p: int) -> str` (`f"{session.isoformat()}#{p}"`),
+     `parse_stage_epoch(epoch) -> tuple[date, int]` (raises `PermanentJobError` unless the epoch
+     is `YYYY-MM-DD#p` with p in 1..4), `stage_run_id(session, p)` (`data_stage:S#p`) and
+     `finality_run_id(session)` (`data_stage_finality:S`).
+2. `make_universe_handler(settings, *, portfolio, ingest)`, as design.md § 4 without the retention
+   (Step 21). The handler, in order:
+   1. `job.wait_round > 0` → `Succeeded()` (S-4).
+   2. Parse the epoch into S and p.
+   3. Kill switch: `settings.data_stage_enabled()` false → INFO `data stage disabled; session S
+      pass p skipped` and `Succeeded()`, with nothing deleted or written (D-17).
+   4. Marker check, one `job.db(5)`: a `data_stage_users` row for S exists → go to item 7.
+   5. Reads. Owners: `SELECT DISTINCT user_id FROM analysis.strategies` in `job.db(5)`, filtered
+      by `is_real_owner`, sorted. One trace id per attempt (`uuid4().hex`). Under one
+      `asyncio.timeout(READ_BUDGET_S)` that contains no `.db(` block: the system-scope signals
+      (`drain_signals(ingest, [*SYSTEM_READ_META, trace], SIGNAL_SCOPE_SYSTEM,
+      timeout=READ_PAGE_TIMEOUT_S)`), then per owner with `[*owner_metadata(u), trace]`: held
+      (`_drain_positions_paged(…, timeout=READ_PAGE_TIMEOUT_S)`, normalised), the watchlist drain
+      and the own-signals drain (`SIGNAL_SCOPE_OWN`).
+      - `job.attempts < settings.max_attempts()`: the first failed read, or the budget expiring,
+        re-raises before any write (a transient error; D-19, D-49).
+      - Last attempt: a user with any failed source contributes no rows and is recorded
+        `snapshotted=false` with `failed_source` set to the first failure (`held`, `watchlist`,
+        `signals`); a user not fully read when the budget expired gets `budget`; a failed
+        system-scope read gives the `system` user row `snapshotted=false` with `system_signals`
+        and does not mark owners.
+   6. Write (D-33), `SNAPSHOT_BLOCK_ROWS` rows per `job.db(30)` block, each insert one `execute`
+      over `unnest` arrays: block 1 first runs `DELETE FROM analysis.data_stage_universe WHERE
+      session_date = S`; the last block writes every `data_stage_users` row, always including one
+      for `SYSTEM_IDENTITY`. That block is the marker. A user's rows are `(S, user, symbol,
+      held)` for the union of held, watchlist and own-signal symbols; the system-scope symbols are
+      stored once under `SYSTEM_IDENTITY` with `held=false`. After the marker block commits,
+      record `record_data_stage_snapshot_user("ok" | "failed")` once per user row.
+   7. Park: `N = count(DISTINCT symbol)` of the snapshot for S, one `job.db(5)`. `N == 0` →
+      `Succeeded()`. Otherwise `WaitOn` on `Child(SHARD_KIND, str(k), job.epoch)` for k in
+      `0..ceil(N / SHARD_SIZE) − 1`.
+3. The handler returns no `Verdict` (R-5) and reads no config key other than through `settings`.
+
+**Verification** (run with Step 18's gate; the unit commits once):
+```bash
+cd services/xstockstrat-analysis
+uv run --extra dev pytest tests/test_job_handler_contract.py tests/test_pipeline_boot.py -q   # the new module honours the contract
+ruff check . && ruff format --check .
+grep -n "metadata=\|owner_metadata\|SYSTEM_READ_META\|x-trace-id" app/jobs/data_stage.py   # every read carries an identity and a trace id
+```
+
+---
+
+### Step 20 — test: pass-1 retention
+
+**Status**: `pending`
+**Service**: `xstockstrat-analysis`
+**Files**:
+- `services/xstockstrat-analysis/tests/test_data_stage_universe.py` — modify
+
+**Reviewers**: `xstockstrat-analysis` service owner — Backtest reproducibility, strategy scoring determinism, no look-ahead bias
+
+**Codebase Evidence**:
+- Retention settings in a test: `JobGraphSettings(snapshot_watcher(**{"pipeline.retention_days": retention_days}))` (`tests/test_retention_prune_job.py:34-35`).
+- An injected clock for a self-stop test: the `monotonic` keyword of the handler factory, as `make_handler(settings, *, monotonic=time.monotonic)` (`app/jobs/retention_prune.py:17`).
+- The retention rule is design.md § 4 (D-20, D-35): pass 1, round 0 only; horizons `S − max(30, retention_days)`, 730 and 365 days.
+- Dates: S = 2026-11-27; 2026-10-20 is S − 38 d and 2026-10-29 is S − 29 d, so with `retention_days` 7 the horizon is S − 30 d = 2026-10-28.
+- `data_stage_pg`, `StageJob` (Step 18).
+- C-13: the seeded rows are scenario one-offs with one consumer.
+
+**Lands with**: `Step 21`
+
+**TDD**: `red-green required`
+
+**Covers**: `AC-36`
+
+**Instructions**:
+Add to `tests/test_data_stage_universe.py`:
+- `@AC-36`: `pipeline.retention_days` 7; coverage, bar, universe, user, run and finality rows for
+  2026-10-20 and for 2026-10-29 → after the pass-1 universe job for 2026-11-27 no 2026-10-20 row
+  remains and every 2026-10-29 row remains (RED);
+- a pass-2 job prunes nothing;
+- with `pipeline.retention_days` 60, the 2026-10-20 rows remain (the horizon is `max(30,
+  retention_days)`);
+- a hole with `last_session` older than S − 730 and a filings row with `next_check_on` older than
+  S − 365 are deleted; a hole and a filings row inside those horizons remain;
+- the kill switch off → nothing is pruned;
+- self-stop: with a patched `RETENTION_SELF_STOP_S` of 0 and more than one batch of old rows, the
+  job deletes one batch, then still snapshots and parks;
+- batches: with a patched `RETENTION_BATCH` of 2 and five old rows in one table, all five are
+  deleted.
+
+**Verification** (the gate of the Steps 20+21 unit):
+```bash
+cd services/xstockstrat-analysis
+uv run --extra dev pytest tests/test_data_stage_universe.py tests/test_job_handler_contract.py -q
+uv run --extra dev pytest --cov=app --cov-fail-under=40
+ruff check . && ruff format --check .
+grep -n "from tests.conftest" tests/test_data_stage_universe.py   # C-13: doubles imported
+```
+
+---
+
+### Step 21 — service: pass-1 retention in the universe job
 
 **Status**: `pending`
 **Service**: `xstockstrat-analysis`
@@ -1386,61 +1561,146 @@ grep -n "from tests.conftest" tests/test_data_stage_universe.py
 **Reviewers**: `xstockstrat-analysis` service owner — Backtest reproducibility, strategy scoring determinism, no look-ahead bias
 
 **Codebase Evidence**:
-- Coverage response: `GetDataCoverageResponse` with `bars_total = 3`, `earliest = 4`, `latest = 5`, `gaps = 7` (`packages/proto/marketdata/v1/marketdata.proto:186-196`).
-- Gap bounds: `Gap{Start: DayStart(first), End: DayStart(prev).Add(12 * time.Hour)}` — New York midnight of the first missing session and New York noon of the last (`services/xstockstrat-marketdata/internal/timeframe/timeframe.go:102-103`, `:122`). Both fall on the session's own UTC date, so "a gap bound's date is its UTC date" (design § 6).
-- Per-symbol outcomes: `BackfillSymbolOutcome` `EMPTY = 1`, `SKIPPED = 2`, `FAILED = 3` (`packages/proto/common/v1/common.proto:156-162`); `BackfillSymbolResult` lists non-written symbols only (`:164-170`), so a symbol with no entry was written.
-- `HistoricalFundamentalsPeriod.period_end = 4` (`marketdata.proto:279`).
-- The rules are design.md § 6 (steps 4, 6, 7), § 7 (fetch failure) and § 8 (state and schedule); the invariants are § 12 (D-32, D-44, D-66).
-- `crc32`: `zlib.crc32` in the standard library; no dependency change, so `uv.lock` is untouched.
+- The self-stop loop to follow: `started = monotonic()`, then one `job.db(PRUNE_BLOCK_BUDGET_S)` block per batch and `if monotonic() - started >= PRUNE_SELF_STOP_S: return …` (`app/jobs/retention_prune.py:19-31`).
+- A bounded delete in one statement: `_PRUNE_DELETE_SQL` and `prune_batch` (`app/repositories/pipeline_jobs.py:196`, `:215-223`) select a batch of keys, then delete them. `prune_batch` itself works on the job table only and is not reused.
+- `settings.retention_days()` (`app/engine/job_graph.py:227-229`).
+- The universe handler and its item order (Step 19).
+- The tables and their date columns (Step 13; design § 11): `session_date` on `symbol_coverage`, `symbol_bar`, `data_stage_finality`, `data_stage_universe`, `data_stage_users`, `data_stage_runs`; `last_session` on `symbol_bar_hole`; `next_check_on` on `symbol_filings_check`.
+- No outbound call is added, so header propagation does not apply.
+
+**Lands with**: `Step 20`
 
 **TDD**: `red-green required`
 
 **Covers**: —
 
 **Instructions**:
-Add to `app/jobs/data_stage.py`, as functions with no I/O. Names are this spec's choice.
-1. Constants: `WINDOW_DAYS = 730`, `LONG_HOLE_DAYS = 30`, `FETCH_ATTEMPTS_PER_PASS = 2`,
-   `STALE_AFTER_DAYS = 190`, `FILING_DUE_DAYS = 105`, `FILING_RECHECK_DAYS = 7`,
-   `NO_FILINGS_RECHECK_DAYS = 28`.
-2. `coverage_window(session) -> (cov_start, cov_end)`: `cov_end` is S at 16:00Z, `cov_start` is
-   `cov_end − 730 d` (D-8, D-32).
-3. `gap_dates(gap) -> (first, last)`: the UTC dates of a gap's start and end.
-4. `unconfirmed_gaps(gaps, session, stored_runs)`: the pre-S gaps, each clipped to end at or
-   before S − 1 day, that no stored run `(first_session, last_session)` contains (§ 6 step 4,
-   D-26). A gap that covers only S is not returned.
-5. `holes_to_store(gaps, history_start, session)`: each gap of the post-fetch coverage clipped to
-   `[history_start, S − 1 day]`; empty clips dropped (§ 6 step 6, D-37). `is_long_hole(first,
-   last)`: more than 30 days.
-6. `symbol_outcome(response, symbol) -> str`: `written` when the symbol has no result entry, else
-   `empty`, `skipped` or `failed`.
-7. `bar_verdict(final_outcome, latest_date, session, pre_session_gaps, contained_by)`: the table
-   of § 6 step 7. `covered` needs `final_outcome == "written"`, `latest_date == session` and every
-   pre-S gap contained by a stored or newly confirmed run; every other reachable row is
-   `no_vendor_data`. It never returns `fetch_failed`.
-8. `captured_bar(bars, day_start, day_end)`: the single returned bar with `time` in `[day_start,
-   day_end]`, or `None` when there is not exactly one (§ 6 step 2).
-9. Fundamentals (§ 8):
-   - `filings_weekday(symbol)`: `zlib.crc32(symbol.encode()) % 5`, 0 = Monday … 4 = Friday;
-   - `shift(d, w)`: `d + ((w − d.weekday()) mod 7)` days;
-   - `fundamentals_state(newest_period_end, session, read_failed)`: `unavailable` on a read error
-     or with nothing stored; `fresh` when `newest_period_end >= S − 190 d`; else `stale`;
-   - `first_check_on(newest_period_end, session, w)`: `shift(P + 105)`, or `shift(S)` when
-     `P + 105 <= S` or nothing is stored;
-   - `next_check_after_call(newest_period_end, session, w, outcome)`: nothing stored →
-     `shift(S + 28)`; `fresh` and `P + 105 > S` → `shift(P + 105)`; otherwise (overdue, stale,
-     `error`, `disabled`) → `shift(S + 7)`;
-   - `filings_outcome_of(response, symbol)`: `written` for a missing result entry, else `empty`,
-     `skipped` or `failed`.
-10. Change no handler in this step.
+1. Constants under the design § 12 comment: `RETENTION_BATCH = 5000`, `RETENTION_SELF_STOP_S =
+   120`, `SESSION_KEEP_MIN_DAYS = 30`, `HOLE_KEEP_DAYS = 730`, `FILINGS_KEEP_DAYS = 365`.
+2. The factory becomes `make_universe_handler(settings, *, portfolio, ingest,
+   monotonic=time.monotonic)`.
+3. In the handler, between the kill switch (Step 19 item 3) and the marker check (item 4), on
+   pass 1 only (D-20, D-35): delete in batches of `RETENTION_BATCH` rows, one `job.db(30)` per
+   batch, stopping after the first batch that ends `RETENTION_SELF_STOP_S` after the handler
+   began (measured with `monotonic`):
+   - the six session-keyed tables below `S − max(SESSION_KEEP_MIN_DAYS,
+     settings.retention_days())` days;
+   - `symbol_bar_hole` where `last_session < S − HOLE_KEEP_DAYS`;
+   - `symbol_filings_check` where `next_check_on < S − FILINGS_KEEP_DAYS`.
+   The handler then continues with the marker check whether or not retention finished.
+4. Change nothing else in the handler.
 
-**Verification**: Step 21's commands. On its own:
+**Verification** (run with Step 20's gate; the unit commits once):
 ```bash
-cd services/xstockstrat-analysis && uv run --extra dev pytest tests/test_job_handler_contract.py tests/test_data_stage_universe.py -q && ruff check . && ruff format --check .
+cd services/xstockstrat-analysis
+uv run --extra dev pytest tests/test_job_handler_contract.py -q
+ruff check . && ruff format --check .
+grep -n "RETENTION_BATCH\|RETENTION_SELF_STOP_S" app/jobs/data_stage.py
 ```
 
 ---
 
-### Step 21 — test: the data job's rules
+### Step 22 — test: the shard job
+
+**Status**: `pending`
+**Service**: `xstockstrat-analysis`
+**Files**:
+- `services/xstockstrat-analysis/tests/test_data_stage_shard.py` — create
+
+**Reviewers**: `xstockstrat-analysis` service owner — Backtest reproducibility, strategy scoring determinism, no look-ahead bias
+
+**Codebase Evidence**:
+- Running a handler through the real worker on PostgreSQL: `_worker(pool, settings, *, today, registry)`, `_drain(*workers)` and `_run_prune` at `tests/test_retention_prune_job.py:38-59`.
+- A registry for a test: `HandlerRegistry.register(kind, handler, *, child_kinds=())` and `validate()` (`app/engine/job_graph.py:128-130`, `:141-160`).
+- `repo.enqueue(kind, subject, epoch, *, run_id, lane, conn=None)` (`app/repositories/pipeline_jobs.py:275-295`); `repo.list_by_run(run_id)` (`:400-402`).
+- `Lane.WATCHLIST = 10`, `Lane.HELD = 20` (`app/engine/job_graph.py:56-58`).
+- `data_stage_pg`, `StageJob` (Step 18); `make_universe_handler`, `SHARD_KIND`, `SYMBOL_KIND` (Step 19).
+- `make_shard_handler`: **Not found** — created by Step 23.
+- C-13: the snapshot rows are generated in the test; doubles are imported.
+
+**Lands with**: `Step 23`
+
+**TDD**: `red-green required`
+
+**Covers**: `AC-4, AC-5, AC-30` (a data job exists), `AC-34`
+
+**Instructions**:
+`tests/test_data_stage_shard.py` (`real_pg`). Cases call the shard handler directly with a
+`StageJob` unless they say "through the worker"; those use a registry of the universe and shard
+handlers and a recording `data_stage.symbol` handler, with the snapshot and its marker seeded.
+- `@AC-5`: `AAPL` held by `u1` and watched by `u2`, `MSFT` only watched → the shard returns a
+  `WaitOn` whose `AAPL` child has lane 20 and whose `MSFT` child has lane 10 (RED); through the
+  worker the two job rows carry those lanes;
+- `@AC-34`, through the worker: a snapshot of 1,200 distinct symbols → exactly 3 shard jobs, each
+  with at most 500 children, and exactly 1,200 `data_stage.symbol` jobs;
+- `@AC-4`, through the worker: `u1` and `u2` both watch `MSFT` → exactly 1 `data_stage.symbol` job
+  for `MSFT` with epoch `2026-11-27#1`, and a second run of the same shard creates no second one;
+- `@AC-30`, through the worker: `NVDA` is stored only under `system` → a `data_stage.symbol` job
+  exists for `NVDA`;
+- the slice: shard `"1"` of 1,200 symbols holds symbols 501 to 1,000 in symbol order;
+- a shard skips a symbol that already has a coverage row for S, and a filtered-empty shard returns
+  `Succeeded`;
+- an unfiltered-empty slice returns `Succeeded` and logs one WARN;
+- a non-integer subject and a malformed epoch raise `PermanentJobError`;
+- a woken shard job (`wait_round=1`) returns `Succeeded` without a read.
+
+**Verification** (the gate of the Steps 22+23 unit):
+```bash
+cd services/xstockstrat-analysis
+uv run --extra dev pytest tests/test_data_stage_shard.py tests/test_data_stage_universe.py tests/test_job_handler_contract.py -q
+uv run --extra dev pytest --cov=app --cov-fail-under=40
+ruff check . && ruff format --check .
+grep -n "from tests.conftest" tests/test_data_stage_shard.py   # C-13: doubles imported
+```
+
+---
+
+### Step 23 — service: the shard job
+
+**Status**: `pending`
+**Service**: `xstockstrat-analysis`
+**Files**:
+- `services/xstockstrat-analysis/app/jobs/data_stage.py` — modify
+
+**Reviewers**: `xstockstrat-analysis` service owner — Backtest reproducibility, strategy scoring determinism, no look-ahead bias
+
+**Codebase Evidence**:
+- `Child(kind, subject, epoch, lane=None)`, `Succeeded`, `WaitOn(children)`, `PermanentJobError` (`app/engine/job_graph.py:74-96`); at most 10,000 children per park (`:23`, `:174-175`), so 500 fits.
+- `Lane.WATCHLIST = 10`, `Lane.HELD = 20` (`job_graph.py:56-58`).
+- `parse_stage_epoch`, `SHARD_SIZE`, `SYMBOL_KIND` (Step 19).
+- The handler contract forbids a handler from enqueueing; children exist only through a park (`tests/test_job_handler_contract.py:67-68`, R-13).
+- The shard job is design.md § 5.
+- No outbound call is added, so header propagation does not apply.
+
+**Lands with**: `Step 22`
+
+**TDD**: `red-green required`
+
+**Covers**: —
+
+**Instructions**:
+`make_shard_handler()` in `app/jobs/data_stage.py`, as design.md § 5:
+1. `job.wait_round > 0` → `Succeeded()` (S-4); parse the epoch; `k = int(job.subject)` (a
+   non-integer subject → `PermanentJobError`).
+2. One `job.db(5)`: slice k of the snapshot (`GROUP BY symbol`, `bool_or(held)`, `ORDER BY symbol
+   OFFSET k·SHARD_SIZE LIMIT SHARD_SIZE`), then drop the symbols that already have a
+   `symbol_coverage` row for S.
+3. An empty filtered slice → `Succeeded()`; a WARN only when the unfiltered slice is empty.
+4. Otherwise `WaitOn` on `Child(SYMBOL_KIND, symbol, job.epoch, Lane.HELD if held else
+   Lane.WATCHLIST)`.
+5. The handler returns no `Verdict` (R-5) and reads no config key.
+
+**Verification** (run with Step 22's gate; the unit commits once):
+```bash
+cd services/xstockstrat-analysis
+uv run --extra dev pytest tests/test_job_handler_contract.py -q
+ruff check . && ruff format --check .
+grep -n "def make_shard_handler" app/jobs/data_stage.py
+```
+
+---
+
+### Step 24 — test: the data job's rules
 
 **Status**: `pending`
 **Service**: `xstockstrat-analysis`
@@ -1454,6 +1714,9 @@ cd services/xstockstrat-analysis && uv run --extra dev pytest tests/test_job_han
 - Dates used by the scenarios: session 2026-11-27; `S − 190 d` = 2026-05-21; 2026-10-28 + 105 d = 2027-02-10; `S + 7` = 2026-12-04; `S + 28` = 2026-12-25.
 - No database: this file carries no `real_pg` marker (S-8).
 - C-13: every value is a scenario one-off with one consumer.
+- The rule functions and their constants: **Not found** — created by Step 25.
+
+**Lands with**: `Step 25`
 
 **TDD**: `red-green required`
 
@@ -1494,7 +1757,7 @@ Table tests, one function per rule. Each bullet names the scenario value it pins
      2026-12-24 is due;
    - `fresh` and not overdue after a call → `shift(P + 105)`.
 
-**Verification**:
+**Verification** (the gate of the Steps 24+25 unit):
 ```bash
 cd services/xstockstrat-analysis
 uv run --extra dev pytest tests/test_data_stage_rules.py -q
@@ -1505,7 +1768,7 @@ grep -n "conftest\|def .*fixture" tests/test_data_stage_rules.py   # C-13: no fi
 
 ---
 
-### Step 22 — service: the data job
+### Step 25 — service: the data job's rules (pure functions)
 
 **Status**: `pending`
 **Service**: `xstockstrat-analysis`
@@ -1515,96 +1778,193 @@ grep -n "conftest\|def .*fixture" tests/test_data_stage_rules.py   # C-13: no fi
 **Reviewers**: `xstockstrat-analysis` service owner — Backtest reproducibility, strategy scoring determinism, no look-ahead bias
 
 **Codebase Evidence**:
-- Marketdata request shapes already used by analysis: `GetDataCoverage(marketdata_pb2.GetDataCoverageRequest(symbol=…, timeframe=common_pb2.Timeframe.TIMEFRAME_1DAY, range=…), metadata=…)` at `app/handlers/servicer.py:4231-4238`; a per-call `timeout=` keyword on a stub call at `:7038-7045` (`GetHistoricalFundamentals`, which reads `resp.periods` and `resp.pagination.next_page_token`).
-- `BackfillBarsRequest` fields `symbols`, `range`, `timeframe_enum`, `return_bars` (Step 1; `packages/proto/marketdata/v1/marketdata.proto:157-164`); `BackfillBarsResponse.symbol_results`, `.bars`.
-- `GetHistoricalFundamentalsRequest` fields `symbol = 1`, `range_start = 3`, `page = 6` (`marketdata.proto:300-308`); `BackfillFundamentalsRequest.symbols = 1` (`:315-320`).
-- `BackfillFundamentals` answers `FailedPrecondition` when history is disabled (`services/xstockstrat-marketdata/internal/service/marketdata_service.go:2364-2369`), and its handler returns typed errors unwrapped (`internal/handler/marketdata_handler.go:142-148`).
-- `BackfillBars` never marks a symbol warm; every bars or quotes read RPC does (design § 9.2), so the job may call only `BackfillBars`, `GetDataCoverage`, `GetHistoricalFundamentals` and `BackfillFundamentals` (D-23).
-- Quiet-ledger header (Step 5): `x-internal-caller: analysis-data-stage` with the analysis SAN. Appending a grant to existing metadata: `meta = list(metadata) + [("x-internal-caller", _FUNDSIGNAL_CALLER)]` (`app/engine/fundsignal_loop.py:406`).
-- Header propagation (C-03): per-call `metadata=`; `SYSTEM_READ_META` (Step 14) plus a fresh `x-trace-id` per attempt (D-18).
-- gRPC error code access: `_rpc_code(e)` at `app/handlers/servicer.py:7097-7098` (`e.code() if isinstance(e, grpc.RpcError) and hasattr(e, "code") else None`).
-- Worst-case attempt 500 s against `ATTEMPT_DEADLINE_S = 900.0` (`app/engine/job_graph.py:32`; design § 6).
-- Rules (Step 20), telemetry helpers (Step 16), tables (Step 13).
+- Coverage response: `GetDataCoverageResponse` with `bars_total = 3`, `earliest = 4`, `latest = 5`, `gaps = 7` (`packages/proto/marketdata/v1/marketdata.proto:186-196`).
+- Gap bounds: `Gap{Start: DayStart(first), End: DayStart(prev).Add(12 * time.Hour)}` — New York midnight of the first missing session and New York noon of the last (`services/xstockstrat-marketdata/internal/timeframe/timeframe.go:102-103`, `:122`). Both fall on the session's own UTC date, so "a gap bound's date is its UTC date" (design § 6).
+- Per-symbol outcomes: `BackfillSymbolOutcome` `EMPTY = 1`, `SKIPPED = 2`, `FAILED = 3` (`packages/proto/common/v1/common.proto:156-162`); `BackfillSymbolResult` lists non-written symbols only (`:164-170`), so a symbol with no entry was written.
+- `HistoricalFundamentalsPeriod.period_end = 4` (`marketdata.proto:279`).
+- The rules are design.md § 6 (steps 4, 6, 7), § 7 (fetch failure) and § 8 (state and schedule); the invariants are § 12 (D-32, D-44, D-66).
+- `crc32`: `zlib.crc32` in the standard library; no dependency change, so `uv.lock` is untouched.
+
+**Lands with**: `Step 24`
 
 **TDD**: `red-green required`
 
 **Covers**: —
 
 **Instructions**:
-`make_symbol_handler(*, marketdata)` in `app/jobs/data_stage.py`, as design.md § 6, § 7 and § 8.
-The handler reads no config key and returns only `Succeeded` or raises.
-1. Constants under the same design § 12 comment: call timeouts `BACKFILL_TIMEOUT_S = 120`,
-   `COVERAGE_TIMEOUT_S = 30`, `FUNDAMENTALS_READ_TIMEOUT_S = 10`,
-   `FUNDAMENTALS_BACKFILL_TIMEOUT_S = 120`, `FUNDAMENTALS_STEP_BUDGET_S = 160`,
-   `FUNDAMENTALS_PAGE = 50`, `PASS_BUDGET = "30 minutes"`, and
-   `DATA_STAGE_CALLER = "analysis-data-stage"`.
-2. Step 0: parse the epoch; `last = (p == PASSES)`. One `trace = uuid4().hex` per attempt;
-   `meta = [*SYSTEM_READ_META, ("x-trace-id", trace)]`; the `BackfillBars` metadata is `meta`
-   plus `("x-internal-caller", DATA_STAGE_CALLER)`, and no other call carries that value.
-3. Step 1, one `job.db(10)`, in this order:
-   - a `symbol_coverage` row for `(symbol, S)` exists → `Succeeded()` (D-34);
-   - read `pass, done_at, day_start, day_end, (now() − pass_created_at) > interval '30 minutes'
-     AS over_budget` from `data_stage_runs`; no row → `PermanentJobError`;
-   - `pass ≠ p` or `done_at` set → INFO `data stage job superseded`, `Succeeded()`, no call and
-     no write;
-   - `over_budget` → a fetch failure with reason `budget`; no call of any kind is made (D-61);
-   - read the stored hole runs and the filings-check row of the symbol.
-4. Step 2: `BackfillBars([symbol], TIMEFRAME_1DAY, [day_start, day_end], return_bars=True)`,
-   timeout 120 s → `final_outcome`; capture the bar with `captured_bar`.
-5. Step 3: `GetDataCoverage(symbol, TIMEFRAME_1DAY, coverage_window(S))`, timeout 30 s.
-6. Steps 4-5: `U = unconfirmed_gaps(…)`. Only when U is not empty: `BackfillBars([symbol],
-   TIMEFRAME_1DAY, [start of the earliest gap in U, day_start − 1 s])`, timeout 120 s, **without**
-   `return_bars` → `history_outcome`; then a second `GetDataCoverage` with the same range. With U
-   empty the first coverage stands and `history_outcome` is `None`.
-7. Step 6: holes are computed only when `history_outcome` is `written` or `empty`.
-8. Step 7: `bar_verdict(…)`. WARN `data stage: final bar written but not stored` when the final
-   call returned written and the coverage's latest bar is not S.
-9. Fetch failure (design § 6 "Fetch failure", § 7): reason `rpc` for a gRPC error from
-   `BackfillBars` or `GetDataCoverage` with any code except `INVALID_ARGUMENT` (including this
-   call's own deadline); reason `symbol` for a per-symbol `failed` outcome; reason `budget` from
-   item 3. `INVALID_ARGUMENT` raises `PermanentJobError`. Any exception that is not a gRPC error
-   propagates unchanged (transient through the job graph, `dead` after `max_attempts`). An attempt
-   stops at its first fetch failure:
-   - `rpc` or `symbol` with `job.attempts < FETCH_ATTEMPTS_PER_PASS`: raise a transient error
-     (the gRPC error itself, or a `RuntimeError` naming the per-symbol failure);
-   - otherwise, and `budget` on any attempt: on passes 1 to 3, `record_data_stage_fetch_deferred
-     (reason)` and `Succeeded()` with nothing written; on pass 4, write `bar_verdict =
-     'fetch_failed'` with `fail_reason`, through items 11.1 and 11.2 only, storing the outcomes
-     observed so far and NULL where no call was made. For `rpc` and `symbol` the fundamentals
-     state is read (item 10, read only); for `budget` it is `unavailable` and no call is made.
-10. Fundamentals step (§ 8), only on a `covered` or `no_vendor_data` verdict, wrapped in
-    `except Exception` and bounded at 160 s with no `.db(` block inside the timeout:
-    - read `GetHistoricalFundamentals(symbol, range_start = S − 190 d, page_size 50)`, timeout
-      10 s, no `as_of_date`; on an empty page read once more unranged with `page_size` 1; P is the
-      newest `period_end`; the state comes from `fundamentals_state`;
-    - a check is due when the stored `next_check_on <= S`, or there is no row and
-      `first_check_on(…) <= S`;
-    - when due, `BackfillFundamentals([symbol])` with defaults, timeout 120 s: outcome from
-      `filings_outcome_of`; `FAILED_PRECONDITION` → `disabled`; any other error → `error`;
-    - a failure here never fails the job and never changes the bar verdict (D-25). The state
-      describes stored filings as read before the call (D-31).
-11. Write, one `job.db(10)`, in this order (D-52, D-62):
-    1. `SELECT pass, done_at FROM analysis.data_stage_runs WHERE session_date = $1 FOR SHARE`;
-       `pass ≠ p` or `done_at` set → INFO `data stage job superseded`, leave the block with
-       nothing written, `Succeeded()`;
-    2. `INSERT INTO analysis.symbol_coverage … ON CONFLICT DO NOTHING RETURNING 1`; no row back →
-       leave the block and `Succeeded()`. Columns: `run_id = stage_run_id(S, p)`, `pass = p`,
-       `earliest_bar`, `latest_bar` and `bars_in_window` from the final coverage, `confirmed_gaps`
-       (the stored and newly confirmed runs inside the window), both outcomes, the state;
-    3. holes: `DELETE` the stored runs inside the history range (D-37), then upsert each new run
-       on `(symbol, first_session)` keeping `GREATEST(last_session)` and the greater
-       `confirmed_on` (S);
-    4. the filings upsert, whenever no row exists or a call was made: `next_check_on`, and
-       `last_checked_on = S` and `last_outcome` when a call was made;
-    5. when `covered`: `INSERT INTO analysis.symbol_bar … ON CONFLICT DO NOTHING` with the
-       captured values, or five NULLs when nothing was captured.
-12. After the commit, and only when item 11.2 inserted the row: `record_data_stage_symbol`,
-    `record_data_stage_fundamentals`, `record_data_stage_backfill("final", …)` and
-    `("history", …)` when made, `record_data_stage_filings` when a call was committed,
-    `record_data_stage_hole("short" | "long")` per run written, and WARN `data stage: long hole
-    confirmed` per long run.
+Add to `app/jobs/data_stage.py`, as functions with no I/O. Names are this spec's choice.
+1. Constants under the design § 12 comment: `WINDOW_DAYS = 730`, `LONG_HOLE_DAYS = 30`, `FETCH_ATTEMPTS_PER_PASS = 2`,
+   `STALE_AFTER_DAYS = 190`, `FILING_DUE_DAYS = 105`, `FILING_RECHECK_DAYS = 7`,
+   `NO_FILINGS_RECHECK_DAYS = 28`.
+2. `coverage_window(session) -> (cov_start, cov_end)`: `cov_end` is S at 16:00Z, `cov_start` is
+   `cov_end − 730 d` (D-8, D-32).
+3. `gap_dates(gap) -> (first, last)`: the UTC dates of a gap's start and end.
+4. `unconfirmed_gaps(gaps, session, stored_runs)`: the pre-S gaps, each clipped to end at or
+   before S − 1 day, that no stored run `(first_session, last_session)` contains (§ 6 step 4,
+   D-26). A gap that covers only S is not returned.
+5. `holes_to_store(gaps, history_start, session)`: each gap of the post-fetch coverage clipped to
+   `[history_start, S − 1 day]`; empty clips dropped (§ 6 step 6, D-37). `is_long_hole(first,
+   last)`: more than 30 days.
+6. `symbol_outcome(response, symbol) -> str`: `written` when the symbol has no result entry, else
+   `empty`, `skipped` or `failed`.
+7. `bar_verdict(final_outcome, latest_date, session, pre_session_gaps, contained_by)`: the table
+   of § 6 step 7. `covered` needs `final_outcome == "written"`, `latest_date == session` and every
+   pre-S gap contained by a stored or newly confirmed run; every other reachable row is
+   `no_vendor_data`. It never returns `fetch_failed`.
+8. `captured_bar(bars, day_start, day_end)`: the single returned bar with `time` in `[day_start,
+   day_end]`, or `None` when there is not exactly one (§ 6 step 2).
+9. Fundamentals (§ 8):
+   - `filings_weekday(symbol)`: `zlib.crc32(symbol.encode()) % 5`, 0 = Monday … 4 = Friday;
+   - `shift(d, w)`: `d + ((w − d.weekday()) mod 7)` days;
+   - `fundamentals_state(newest_period_end, session, read_failed)`: `unavailable` on a read error
+     or with nothing stored; `fresh` when `newest_period_end >= S − 190 d`; else `stale`;
+   - `first_check_on(newest_period_end, session, w)`: `shift(P + 105)`, or `shift(S)` when
+     `P + 105 <= S` or nothing is stored;
+   - `next_check_after_call(newest_period_end, session, w, outcome)`: nothing stored →
+     `shift(S + 28)`; `fresh` and `P + 105 > S` → `shift(P + 105)`; otherwise (overdue, stale,
+     `error`, `disabled`) → `shift(S + 7)`;
+   - `filings_outcome_of(response, symbol)`: `written` for a missing result entry, else `empty`,
+     `skipped` or `failed`.
+10. Change no handler in this step.
 
-**Verification**: Step 23's commands. On its own:
+**Verification** (run with Step 24's gate; the unit commits once):
+```bash
+cd services/xstockstrat-analysis && uv run --extra dev pytest tests/test_job_handler_contract.py tests/test_data_stage_universe.py -q && ruff check . && ruff format --check .
+```
+
+---
+
+### Step 26 — test: the bars fetch
+
+**Status**: `pending`
+**Service**: `xstockstrat-analysis`
+**Files**:
+- `services/xstockstrat-analysis/tests/conftest.py` — modify
+- `services/xstockstrat-analysis/tests/test_data_stage_fetch.py` — create
+
+**Reviewers**: `xstockstrat-analysis` service owner — Backtest reproducibility, strategy scoring determinism, no look-ahead bias
+
+**Codebase Evidence**:
+- `RecordingStub(responses)` at `tests/conftest.py:155-182`: `responses` maps a method name to a value, an exception or a function of the request; `calls` holds `(method, request, metadata)`; `.of(method)` filters; other keywords (`timeout=`) are read from the method's `AsyncMock.await_args_list` (S-10).
+- `aio_rpc_error(code, details)` at `tests/conftest.py:146`.
+- Generated messages for building responses: `marketdata_pb2.BackfillBarsResponse`, `marketdata_pb2.GetDataCoverageResponse`, `marketdata_pb2.Bar`, `common_pb2.TimeRange`, `common_pb2.BackfillSymbolResult` (imported as in `tests/test_job_graph_settings.py:8`, `from gen.… import …`).
+- The day bounds of the session (`@AC-37`): `day_start` `2026-11-27T05:00:00Z`, `day_end` `2026-11-28T04:59:59Z`.
+- `fetch_bars`, `BarFetch`, `SymbolFetchFailed`: **Not found** — created by Step 27.
+- No database: this file carries no `real_pg` marker (S-8, S-14).
+- C-13: `stage_marketdata_stub` has consumers in Steps 26, 28, 30 and 32, so it goes to `tests/conftest.py` now (S-18). Bar and coverage values are scenario one-offs.
+
+**Lands with**: `Step 27`
+
+**TDD**: `red-green required`
+
+**Covers**: `AC-6` (calls, verdict, captured close), `AC-7, AC-8, AC-9, AC-17, AC-23, AC-24, AC-25` (calls and verdict), `AC-39` (the history half), `AC-42` (the long run)
+
+**Instructions**:
+1. `tests/conftest.py`: `stage_marketdata_stub(*, bars=None, coverage=None, fundamentals=None,
+   filings=None)`: a `RecordingStub` whose `BackfillBars`, `GetDataCoverage`,
+   `GetHistoricalFundamentals` and `BackfillFundamentals` answer from the given per-test values
+   (a response, an exception, or a function of the request). It adds nothing else to
+   `RecordingStub`.
+2. `tests/test_data_stage_fetch.py`. Each case builds a stub, calls `fetch_bars` for one symbol and
+   session 2026-11-27 with the day bounds above, a metadata list and the stored hole runs, and
+   reads the `BarFetch` it filled:
+   - `@AC-6`: complete history and a vendor bar with close 190.00 → `final_outcome` is `written`,
+     no history call, exactly 1 `GetDataCoverage` call, the verdict is `covered`, and the captured
+     bar has close 190.00 (RED);
+   - `@AC-7` and `@AC-39`: latest bar 2026-11-24 → a history call whose range covers 2026-11-25
+     and ends one second before `day_start`, without `return_bars`; the verdict comes from the
+     second coverage and is `covered`;
+   - `@AC-8`: an interior hole on 2026-11-23 → a history call covering 2026-11-23; `covered`;
+   - `@AC-9`: no bars, final and history both `EMPTY` → `no_vendor_data`, nothing captured, and no
+     hole run contains 2026-11-27;
+   - `@AC-23`: the final fetch `SKIPPED` → `no_vendor_data`, nothing captured;
+   - `@AC-24`: a stored run `(2026-11-12, 2026-11-12)` → no history call; `covered`;
+   - `@AC-25`: the coverage shows a bar on 2026-11-27 but the final fetch is `EMPTY` →
+     `no_vendor_data`, nothing captured;
+   - `@AC-17`: coverage with no gap around the holiday 2026-11-26 → `covered`, no history call;
+   - `@AC-42`: the vendor has nothing from 2026-09-01 to 2026-10-30 (history `EMPTY`) → one hole
+     run `(2026-09-01, 2026-10-30)` and it is long;
+   - a history outcome of `SKIPPED` yields no hole run and the verdict `no_vendor_data`;
+   - the final call returned written and the coverage's latest bar is not S → `no_vendor_data`
+     and one WARN `data stage: final bar written but not stored`;
+   - two returned bars inside the day bounds → nothing captured, and the verdict is unchanged;
+   - the call order is final fetch, coverage, history, coverage; the final call alone sets
+     `return_bars`; the timeouts are 120 s on `BackfillBars` and 30 s on `GetDataCoverage`;
+   - every `BackfillBars` call carries the given metadata plus `x-internal-caller:
+     analysis-data-stage`; no `GetDataCoverage` call carries `analysis-data-stage`;
+   - errors: a gRPC error from any of the calls propagates unchanged; a per-symbol `FAILED`
+     outcome raises `SymbolFetchFailed`. In both cases the `BarFetch` holds the outcomes observed
+     before the failure (`final_outcome` `written` and `history_outcome` `None` when the history
+     call failed; both `None` when the final call failed).
+
+**Verification** (the gate of the Steps 26+27 unit):
+```bash
+cd services/xstockstrat-analysis
+uv run --extra dev pytest tests/test_data_stage_fetch.py tests/test_job_handler_contract.py -q
+uv run --extra dev pytest --cov=app --cov-fail-under=40
+ruff check . && ruff format --check .
+grep -n "def stage_marketdata_stub" tests/conftest.py   # C-13: one home
+grep -n "from tests.conftest" tests/test_data_stage_fetch.py
+```
+
+---
+
+### Step 27 — service: the bars fetch
+
+**Status**: `pending`
+**Service**: `xstockstrat-analysis`
+**Files**:
+- `services/xstockstrat-analysis/app/jobs/data_stage.py` — modify
+
+**Reviewers**: `xstockstrat-analysis` service owner — Backtest reproducibility, strategy scoring determinism, no look-ahead bias
+
+**Codebase Evidence**:
+- Marketdata request shape already used by analysis: `GetDataCoverage(marketdata_pb2.GetDataCoverageRequest(symbol=…, timeframe=common_pb2.Timeframe.TIMEFRAME_1DAY, range=…), metadata=…)` at `app/handlers/servicer.py:4231-4238`; a per-call `timeout=` keyword on a stub call at `:7038-7045`.
+- `BackfillBarsRequest` fields `symbols`, `range`, `timeframe_enum`, `return_bars` (Step 1; `packages/proto/marketdata/v1/marketdata.proto:157-164`); `BackfillBarsResponse.symbol_results`, `.bars`.
+- `BackfillBars` never marks a symbol warm; every bars or quotes read RPC does (design § 9.2), so the stage may call only `BackfillBars`, `GetDataCoverage`, `GetHistoricalFundamentals` and `BackfillFundamentals` (D-23).
+- Quiet-ledger header (Step 6): `x-internal-caller: analysis-data-stage` with the analysis SAN. Appending a grant to existing metadata: `meta = list(metadata) + [("x-internal-caller", _FUNDSIGNAL_CALLER)]` (`app/engine/fundsignal_loop.py:406`).
+- Header propagation (C-03): per-call `metadata=`; the caller passes `SYSTEM_READ_META` (Step 15) plus a fresh `x-trace-id` (D-18), and this coroutine forwards it on every call.
+- The rules it composes (Step 25): `coverage_window`, `unconfirmed_gaps`, `holes_to_store`, `is_long_hole`, `symbol_outcome`, `bar_verdict`, `captured_bar`.
+- The steps are design.md § 6, steps 2 to 7.
+
+**Lands with**: `Step 26`
+
+**TDD**: `red-green required`
+
+**Covers**: —
+
+**Instructions**:
+Add to `app/jobs/data_stage.py` (S-14). Names are this spec's choice.
+1. Constants under the design § 12 comment: `BACKFILL_TIMEOUT_S = 120`, `COVERAGE_TIMEOUT_S = 30`,
+   and `DATA_STAGE_CALLER = "analysis-data-stage"`.
+2. `class SymbolFetchFailed(RuntimeError)`: a per-symbol `failed` outcome, naming the symbol and
+   the call (`final` or `history`).
+3. `BarFetch`: a dataclass whose fields all default to `None` — `final_outcome`,
+   `history_outcome`, `captured` (the bar or `None`), `coverage` (the last coverage response),
+   `history_start` (the date the history call began at), `holes` (the runs to store) and
+   `verdict`.
+4. `async def fetch_bars(marketdata, meta, symbol, session, day_start, day_end, stored_runs,
+   out)`, filling `out` as each call returns:
+   - design step 2: `BackfillBars([symbol], TIMEFRAME_1DAY, [day_start, day_end],
+     return_bars=True)`, timeout `BACKFILL_TIMEOUT_S`, metadata `meta` plus
+     `("x-internal-caller", DATA_STAGE_CALLER)` → `final_outcome` (`symbol_outcome`); a `failed`
+     outcome raises `SymbolFetchFailed`; `captured = captured_bar(response.bars, day_start,
+     day_end)`;
+   - step 3: `GetDataCoverage(symbol, TIMEFRAME_1DAY, coverage_window(session))`, timeout
+     `COVERAGE_TIMEOUT_S`, metadata `meta`;
+   - steps 4-5: `U = unconfirmed_gaps(…)`. Only when U is not empty: `BackfillBars([symbol],
+     TIMEFRAME_1DAY, [start of the earliest gap in U, day_start − 1 s])`, the same timeout and
+     metadata as the final call, **without** `return_bars` → `history_outcome` (a `failed` outcome
+     raises `SymbolFetchFailed`); then a second `GetDataCoverage` with the same range. With U
+     empty the first coverage stands and `history_outcome` stays `None`;
+   - step 6: `holes` is `holes_to_store(…)` only when `history_outcome` is `written` or `empty`,
+     else empty;
+   - step 7: `verdict = bar_verdict(…)`; WARN `data stage: final bar written but not stored` when
+     the final call returned written and the coverage's latest bar is not `session`.
+5. The coroutine opens no `.db(` block, reads no config key, catches no error, and issues no call
+   other than `BackfillBars` and `GetDataCoverage`.
+
+**Verification** (run with Step 26's gate; the unit commits once):
 ```bash
 cd services/xstockstrat-analysis
 uv run --extra dev pytest tests/test_job_handler_contract.py tests/test_data_stage_rules.py -q
@@ -1615,7 +1975,134 @@ grep -n "GetBars\|BatchGetBars\|GetLatestQuote\|GetLatestPrice\|GetFundamentals(
 
 ---
 
-### Step 23 — test: the data job
+### Step 28 — test: the fundamentals check
+
+**Status**: `pending`
+**Service**: `xstockstrat-analysis`
+**Files**:
+- `services/xstockstrat-analysis/tests/test_data_stage_fetch.py` — modify
+
+**Reviewers**: `xstockstrat-analysis` service owner — Backtest reproducibility, strategy scoring determinism, no look-ahead bias
+
+**Codebase Evidence**:
+- `stage_marketdata_stub` (Step 26, `tests/conftest.py`); `aio_rpc_error` (`tests/conftest.py:146`).
+- Generated messages: `marketdata_pb2.GetHistoricalFundamentalsResponse` with `periods` and `pagination.next_page_token` (read at `app/handlers/servicer.py:7038-7047`), `HistoricalFundamentalsPeriod.period_end = 4` (`packages/proto/marketdata/v1/marketdata.proto:279`), `BackfillFundamentalsResponse.symbol_results = 3` (`:322-326`).
+- Dates used by the scenarios: session 2026-11-27; `S − 190 d` = 2026-05-21; 2026-10-28 + 105 d = 2027-02-10; `S + 7` = 2026-12-04; `S + 28` = 2026-12-25.
+- `read_fundamentals`, `check_fundamentals`: **Not found** — created by Step 29.
+- C-13: period values are scenario one-offs; the stub fixture is imported.
+
+**Lands with**: `Step 29`
+
+**TDD**: `red-green required`
+
+**Covers**: `AC-11` (which symbol is called, the next check), `AC-12, AC-22` (state, outcome, next check), `AC-27, AC-28` (no call before the next check)
+
+**Instructions**:
+Add to `tests/test_data_stage_fetch.py`. A stored filings-check row is passed as a plain mapping
+(`next_check_on`, `last_checked_on`, `last_outcome`) or `None`.
+1. `read_fundamentals`:
+   - the request is `GetHistoricalFundamentals(symbol, range_start = S − 190 d, page_size 50)`
+     with a 10 s timeout and no `as_of_date`; an empty page is followed by one unranged read with
+     `page_size` 1;
+   - P = 2026-08-10 → state `fresh`; P = 2026-05-11 (found by the second read) → `stale`; nothing
+     stored → `unavailable` and P is `None`; a gRPC error → `unavailable`, and no exception.
+2. `check_fundamentals`:
+   - `@AC-11`: a stored row with `next_check_on` 2026-11-27 → `BackfillFundamentals` is called for
+     that symbol (RED); no row and P = 2026-10-28 → no call, and the returned `next_check_on` is
+     on or after 2027-02-10 and within 6 days of it;
+   - `@AC-12`: P = 2026-08-10, the check due, `BackfillFundamentals` fails `UNAVAILABLE` → no
+     exception, state `fresh`, outcome `error`, `next_check_on` between 2026-12-04 and 2026-12-10;
+   - `@AC-22`: `FAILED_PRECONDITION`, P = 2026-05-11 → state `stale`, outcome `disabled`,
+     `next_check_on` between 2026-12-04 and 2026-12-10;
+   - `@AC-27`: a due row and P overdue; the call on 2026-11-27 finds no new filing → a next check
+     on or after 2026-12-04; fed back as the stored row, the sessions 2026-11-30 to 2026-12-03
+     make no `BackfillFundamentals` call;
+   - `@AC-28`: a due row and nothing stored; the call on 2026-11-27 → state `unavailable` and a
+     next check on or after 2026-12-25; fed back, no session until 2026-12-24 makes a call and
+     each reads `unavailable`;
+   - outcomes: a response with no result entry → `written`; `EMPTY`, `SKIPPED`, `FAILED` map to
+     their names;
+   - the state is the one read before the call: a `written` outcome does not change it (D-31);
+   - a row that is not due → no call, and no `next_check_on` is returned (nothing to store);
+   - the bound: with a patched `FUNDAMENTALS_STEP_BUDGET_S` of 0.2 s and a stalling stub the
+     coroutine returns without raising;
+   - any exception inside the step (a stub that raises `ValueError`) is swallowed;
+   - both calls carry the given metadata and neither carries `analysis-data-stage`; the
+     `BackfillFundamentals` request names the symbol only (defaults).
+
+**Verification** (the gate of the Steps 28+29 unit):
+```bash
+cd services/xstockstrat-analysis
+uv run --extra dev pytest tests/test_data_stage_fetch.py tests/test_job_handler_contract.py -q
+uv run --extra dev pytest --cov=app --cov-fail-under=40
+ruff check . && ruff format --check .
+grep -n "from tests.conftest" tests/test_data_stage_fetch.py   # C-13: doubles imported
+```
+
+---
+
+### Step 29 — service: the fundamentals check
+
+**Status**: `pending`
+**Service**: `xstockstrat-analysis`
+**Files**:
+- `services/xstockstrat-analysis/app/jobs/data_stage.py` — modify
+
+**Reviewers**: `xstockstrat-analysis` service owner — Backtest reproducibility, strategy scoring determinism, no look-ahead bias
+
+**Codebase Evidence**:
+- `GetHistoricalFundamentalsRequest` fields `symbol = 1`, `as_of_date = 2`, `range_start = 3`, `page = 6` (`packages/proto/marketdata/v1/marketdata.proto:300-308`); the paged read with a `timeout=` keyword at `app/handlers/servicer.py:7038-7045` (reads `resp.periods`).
+- `BackfillFundamentalsRequest.symbols = 1` (`marketdata.proto:315-320`); `BackfillFundamentalsResponse.symbol_results = 3` (`:322-326`).
+- `BackfillFundamentals` answers `FailedPrecondition` when history is disabled (`services/xstockstrat-marketdata/internal/service/marketdata_service.go:2364-2369`), and its handler returns typed errors unwrapped (`internal/handler/marketdata_handler.go:142-148`).
+- gRPC error code access: `_rpc_code(e)` at `app/handlers/servicer.py:7097-7098`.
+- Header propagation (C-03): per-call `metadata=`; the caller's metadata is forwarded on both calls. Neither call carries the `analysis-data-stage` caller (design § 14).
+- The rules it composes (Step 25): `fundamentals_state`, `filings_weekday`, `first_check_on`, `next_check_after_call`, `filings_outcome_of`.
+- The step is design.md § 8 (D-12, D-25, D-31, D-40, D-44, D-54).
+
+**Lands with**: `Step 28`
+
+**TDD**: `red-green required`
+
+**Covers**: —
+
+**Instructions**:
+Add to `app/jobs/data_stage.py` (S-14). Names are this spec's choice.
+1. Constants under the design § 12 comment: `FUNDAMENTALS_READ_TIMEOUT_S = 10`,
+   `FUNDAMENTALS_BACKFILL_TIMEOUT_S = 120`, `FUNDAMENTALS_STEP_BUDGET_S = 160`,
+   `FUNDAMENTALS_PAGE = 50`.
+2. `async def read_fundamentals(marketdata, meta, symbol, session) -> tuple[str, date | None]`:
+   `GetHistoricalFundamentals(symbol, range_start = S − 190 d, page_size FUNDAMENTALS_PAGE)`,
+   timeout 10 s, no `as_of_date`; on an empty page one more read, unranged, with `page_size` 1; P
+   is the newest `period_end`; the state comes from `fundamentals_state`. Any exception gives
+   `("unavailable", None)`.
+3. `async def check_fundamentals(marketdata, meta, symbol, session, row)` → a small result
+   (`state`, `outcome`, `next_check_on`), wrapped in `except Exception` and bounded by
+   `asyncio.timeout(FUNDAMENTALS_STEP_BUDGET_S)`:
+   - `state, P = await read_fundamentals(…)`;
+   - a check is due when the stored `next_check_on <= S`, or there is no row and
+     `first_check_on(…) <= S`;
+   - when due, `BackfillFundamentals([symbol])` with defaults, timeout 120 s: the outcome comes
+     from `filings_outcome_of`; `FAILED_PRECONDITION` → `disabled`; any other error → `error`;
+     `next_check_on = next_check_after_call(…)`;
+   - when not due and there is no row, `next_check_on = first_check_on(…)` and `outcome` is
+     `None`; when not due and a row exists, both are `None`;
+   - a failure here never raises (D-25). When the budget or an unexpected exception cuts the
+     step, the result keeps the state read so far (else `unavailable`) and carries no outcome and
+     no `next_check_on` (S-14).
+4. The coroutine opens no `.db(` block and reads no config key.
+
+**Verification** (run with Step 28's gate; the unit commits once):
+```bash
+cd services/xstockstrat-analysis
+uv run --extra dev pytest tests/test_job_handler_contract.py tests/test_data_stage_rules.py -q
+ruff check . && ruff format --check .
+grep -n "metadata=" app/jobs/data_stage.py   # every stub call passes metadata
+grep -n "GetFundamentals(\|GetFundamentalsMulti" app/jobs/data_stage.py   # no output
+```
+
+---
+
+### Step 30 — test: the data job's records
 
 **Status**: `pending`
 **Service**: `xstockstrat-analysis`
@@ -1625,99 +2112,76 @@ grep -n "GetBars\|BatchGetBars\|GetLatestQuote\|GetLatestPrice\|GetFundamentals(
 **Reviewers**: `xstockstrat-analysis` service owner — Backtest reproducibility, strategy scoring determinism, no look-ahead bias
 
 **Codebase Evidence**:
-- `data_stage_pg`, `StageJob` (Step 19, `tests/conftest.py`); `RecordingStub` with a per-method response function and `.of(method)` (`tests/conftest.py:155-182`); `aio_rpc_error(code, details)` (`:146`).
+- `data_stage_pg`, `StageJob` (Step 18, `tests/conftest.py`); `stage_marketdata_stub` (Step 26); `aio_rpc_error` (`tests/conftest.py:146`).
 - `metric_reader` (`tests/test_telemetry.py:155`) and `metric_sum` (`tests/test_live_loop_telemetry.py:35`).
 - A second pool on the same database for a concurrent writer: `pipeline_pool(local_pg)` (`tests/test_pipeline_jobs_real_pg.py:113-114`).
-- Shifting a timestamp column in a test: `shift_pipeline_job(pool, job_id, **columns_to_seconds)` (`tests/conftest.py:571`); the run row is shifted the same way with a direct `UPDATE … SET pass_created_at = now() − interval '31 minutes'`.
-- C-13: marketdata responses are scenario one-offs built from the generated messages; the doubles are imported from `tests/conftest.py`.
+- The run row is seeded with a direct `INSERT` into `analysis.data_stage_runs` (Step 13) carrying the day bounds of `@AC-37`.
+- `make_symbol_handler`: **Not found** — created by Step 31.
+- C-13: marketdata responses are scenario one-offs built from the generated messages; the doubles are imported from `tests/conftest.py`. The run-row seed helper has one consumer (this file) and stays local.
+
+**Lands with**: `Step 31`
 
 **TDD**: `red-green required`
 
-**Covers**: `AC-6, AC-7, AC-8, AC-9, AC-10` (the pass-4 record), `AC-11, AC-12, AC-15, AC-17, AC-20, AC-22, AC-23, AC-24, AC-25, AC-27, AC-28, AC-33, AC-38` (the job half), `AC-39` (the history half), `AC-42, AC-46` (the attempt half), `AC-56` (the data job), `AC-59, AC-60, AC-63, AC-66`
+**Covers**: `AC-6, AC-7, AC-8, AC-9, AC-17, AC-23, AC-24, AC-25` (the stored rows), `AC-11, AC-12, AC-22, AC-27, AC-28` (the stored filings row and state), `AC-20, AC-42, AC-56` (the data job), `AC-66`
 
 **Instructions**:
-`tests/test_data_stage_symbol.py` (`real_pg`). A local helper seeds the run row for 2026-11-27
-(pass, `pass_created_at`, the day bounds of `@AC-37`) and builds a `RecordingStub` whose
-`BackfillBars`, `GetDataCoverage`, `GetHistoricalFundamentals` and `BackfillFundamentals` answer
-from per-test tables. Each case calls the handler with a `StageJob` for `data_stage.symbol`.
-1. Bars path:
-   - `@AC-6`: complete history and a vendor bar with close 190.00 → the final fetch returned
-     written, no history call, exactly 1 `GetDataCoverage` call, the coverage row is `covered`,
-     and exactly 1 bar row has captured close 190.00 (RED);
-   - `@AC-7`: latest bar 2026-11-24 → a history call whose range covers 2026-11-25 and ends one
-     second before `day_start`, without `return_bars`; `covered`; 1 bar row;
-   - `@AC-8`: an interior hole on 2026-11-23 → a history call covering 2026-11-23; `covered`;
-   - `@AC-9`: no bars, final and history both `EMPTY` → `no_vendor_data`, no bar row, and no hole
-     row whose range contains 2026-11-27;
-   - `@AC-23`: the final fetch `SKIPPED` → `no_vendor_data`, no bar row;
-   - `@AC-24`: a stored hole 2026-11-12 → no history call; `covered`;
-   - `@AC-25`: a stored same-day bar but the final fetch `EMPTY` → `no_vendor_data`, no bar row;
-   - `@AC-17`: coverage with no gap around the holiday 2026-11-26 → `covered`, no history call;
+`tests/test_data_stage_symbol.py` (`real_pg`). A local helper seeds the run row for a session
+(pass, `pass_created_at`, the day bounds). Each case calls the handler with a `StageJob` for
+`data_stage.symbol` and a `stage_marketdata_stub`.
+1. Bar records:
+   - `@AC-6`: complete history and a vendor bar with close 190.00 → the coverage row is `covered`
+     with `run_id` `data_stage:2026-11-27#1`, `pass` 1, `final_outcome` `written`, a NULL
+     `history_outcome` and `latest_bar` 2026-11-27, and exactly 1 bar row has captured close
+     190.00 (RED);
+   - `@AC-7`: latest bar 2026-11-24 → `covered`, `history_outcome` `written`, 1 bar row;
+   - `@AC-8`, `@AC-17`, `@AC-24`: the stored `bar_verdict` is `covered` for each scenario's
+     inputs;
+   - `@AC-9`: final and history `EMPTY` → `no_vendor_data`, no bar row, and no hole row whose
+     range contains 2026-11-27;
+   - `@AC-23` and `@AC-25`: `no_vendor_data`, no bar row;
+   - nothing captured on a `covered` verdict → a bar row with five NULL values;
    - `@AC-42`: the vendor has nothing from 2026-09-01 to 2026-10-30 → a WARN `data stage: long
-     hole confirmed`, `analysis.data_stage.holes_confirmed{kind="long"}` +1, and
-     `confirmed_gaps = 1` on the coverage row;
-   - a history outcome of `SKIPPED` confirms no hole and the verdict is `no_vendor_data`;
+     hole confirmed`, `analysis.data_stage.holes_confirmed{kind="long"}` +1, a hole row
+     `(2026-09-01, 2026-10-30)` with `confirmed_on` 2026-11-27, and `confirmed_gaps = 1` on the
+     coverage row;
    - the hole replace (D-37): stored runs inside the history range are deleted and the new runs
-     stored; a run outside the range is kept;
-   - the call order is final fetch, coverage, history, coverage, and the final call alone sets
-     `return_bars`;
-   - every `BackfillBars` call carries `x-internal-caller: analysis-data-stage`, `x-user-id:
-     system` and an `x-trace-id`; no other call carries `analysis-data-stage`.
-2. Replays and races:
-   - `@AC-15`: with a `covered` row present, a second job makes no `BackfillBars` call and both
-     rows are unchanged;
-   - `@AC-33`: with a committed `no_vendor_data` row, a re-run makes no `BackfillBars` call and 1
-     coverage row exists;
+     stored; a run outside the range is kept; an upsert on an existing `first_session` keeps the
+     greater `last_session`.
+2. The write block:
    - `@AC-66`: two jobs for one symbol reach the write together (the first holds its block open on
      a second pool) → exactly 1 coverage row, and the hole and filings rows are those of the job
      whose coverage row was stored;
-   - `@AC-63`: the run is done and the symbol has no coverage row → the job succeeds with no
-     marketdata call and writes no coverage and no bar row;
-   - a job whose pass is behind the run row's is superseded the same way;
    - the supersede under the lock (D-62): the run row is marked done after the job's first block
-     and before its write block → nothing is written;
-   - a missing run row, and an `INVALID_ARGUMENT` from `BackfillBars`, raise `PermanentJobError`.
-3. Fetch failures and the pass budget:
-   - `@AC-46`: `UNAVAILABLE` on attempt 1 raises (the worker retries); on attempt 2 the job
-     returns `Succeeded`, writes no coverage row, and
-     `analysis.data_stage.fetch_deferred{reason="rpc"}` increases by 1;
-   - a per-symbol `FAILED` outcome defers with reason `symbol`; an `UNAVAILABLE` from
-     `GetDataCoverage` is an `rpc` fetch failure;
-   - `@AC-10`: on pass 4, attempt 2, `UNAVAILABLE` → a coverage row `fetch_failed` with reason
-     `rpc`, no bar row, no hole row, and the fundamentals state read from stored filings;
-   - `@AC-59`: `pass_created_at` 31 minutes in the past on pass 1 → no marketdata call, no
-     coverage row, `fetch_deferred{reason="budget"}` +1, on attempt 1 as well;
-   - `@AC-60`: the same on pass 4 → `fetch_failed` with reason `budget` and fundamentals state
-     `unavailable`, with no marketdata call;
-   - `@AC-38`: the handler factory takes no settings object and the module reads no config key in
-     the data job (a changed `pipeline.data_stage_delay_minutes` cannot defer or fail it).
-4. Fundamentals:
+     and before its write block → nothing is written and the job returns `Succeeded`; the same
+     when the run row advanced to the next pass;
+   - a missing run row and a malformed epoch raise `PermanentJobError`.
+3. Fundamentals, as stored:
    - `@AC-11`: `AAPL`'s check is due and `MSFT` has no row with P = 2026-10-28 →
-     `BackfillFundamentals` is called for `AAPL` only, and `MSFT` gets a row whose
-     `next_check_on` is on or after 2027-02-10;
+     `BackfillFundamentals` is called for `AAPL` only, `AAPL`'s row has `last_checked_on`
+     2026-11-27, and `MSFT` gets a row whose `next_check_on` is on or after 2027-02-10;
    - `@AC-12`: P = 2026-08-10, the check due, `BackfillFundamentals` fails `UNAVAILABLE` → the job
      succeeds, the row is `covered` with state `fresh`, `next_check_on` is between 2026-12-04 and
      2026-12-10, and 1 bar row exists;
    - `@AC-22`: `FAILED_PRECONDITION`, P = 2026-05-11 → state `stale`, `last_outcome='disabled'`,
      `next_check_on` between 2026-12-04 and 2026-12-10;
-   - `@AC-27`: a check made on 2026-11-27 with no new filing → jobs for 2026-11-30 to 2026-12-03
-     make no `BackfillFundamentals` call;
-   - `@AC-28`: nothing stored and a check made on 2026-11-27 → no call until 2026-12-24 and every
-     coverage row has state `unavailable`;
-   - a `GetHistoricalFundamentals` error gives state `unavailable` and the job still succeeds; no
-     filings call is made on a `fetch_failed` verdict.
-5. Telemetry and the RPC allowlist:
+   - `@AC-27`: a due check made on 2026-11-27 with no new filing → jobs for the sessions
+     2026-11-30 to 2026-12-03 (each with its own run row) make no `BackfillFundamentals` call;
+   - `@AC-28`: nothing stored and a due check made on 2026-11-27 → no call until 2026-12-24 and
+     every coverage row has state `unavailable`;
+   - a filings row that is not due is left untouched.
+4. Telemetry and the RPC allowlist:
    - `@AC-20`: four data jobs, 3 ending `covered` and 1 `no_vendor_data`, 2 of them with a history
      fetch → the coverage rows count 3 and 1, and telemetry reports
-     `analysis.data_stage.symbols` 3 `covered` and 1 `no_vendor_data` and 2
-     `analysis.data_stage.backfills{kind="history"}`;
-   - a replay counts nothing twice;
+     `analysis.data_stage.symbols` 3 `covered` and 1 `no_vendor_data`, 2
+     `analysis.data_stage.backfills{kind="history"}` and 4 `{kind="final"}`;
+   - `analysis.data_stage.fundamentals` counts one state per coverage row, and
+     `analysis.data_stage.filings` one outcome per call made;
    - `@AC-56`: across every case of this file the marketdata stub was called only with
-     `BackfillBars`, `GetDataCoverage`, `GetHistoricalFundamentals` and `BackfillFundamentals`.
-6. `@AC-39` (the history half): the latest bar is 2026-11-24 after a missed session → the history
-   call of the 2026-11-27 job covers 2026-11-25.
+     `BackfillBars`, `GetDataCoverage`, `GetHistoricalFundamentals` and `BackfillFundamentals`
+     (an autouse check over the stubs built in the file, so Step 32's cases fall under it).
 
-**Verification**:
+**Verification** (the gate of the Steps 30+31 unit):
 ```bash
 cd services/xstockstrat-analysis
 uv run --extra dev pytest tests/test_data_stage_symbol.py tests/test_job_handler_contract.py -q
@@ -1728,7 +2192,7 @@ grep -n "from tests.conftest" tests/test_data_stage_symbol.py   # C-13: doubles 
 
 ---
 
-### Step 24 — service: the finality classifier and the finality job
+### Step 31 — service: the data job handler
 
 **Status**: `pending`
 **Service**: `xstockstrat-analysis`
@@ -1738,56 +2202,193 @@ grep -n "from tests.conftest" tests/test_data_stage_symbol.py   # C-13: doubles 
 **Reviewers**: `xstockstrat-analysis` service owner — Backtest reproducibility, strategy scoring determinism, no look-ahead bias
 
 **Codebase Evidence**:
-- Captured columns: `analysis.symbol_bar (open, high, low, close, volume)`, all set or all NULL (Step 13; design § 11).
-- The sample query and the result table are design.md § 9.4; the classifier is § 9.5 (D-60); the job is § 9.6 (D-59, D-63).
-- Both values reach analysis through the same path with no rounding in marketdata (`services/xstockstrat-marketdata/internal/alpaca/client.go:450-459`).
-- The re-fetch is the data job's final call (Step 22 item 4) with a 30 s timeout and the quiet caller.
-- Worst case 20 + 300 + 20 = 340 s against `ATTEMPT_DEADLINE_S = 900.0` (`app/engine/job_graph.py:32`).
-- No notify stub reaches the job registry (D-63; `app/jobs/__init__.py:7`).
-- Header propagation (C-03): per-call `metadata=` with `SYSTEM_READ_META`, a fresh `x-trace-id` and the `analysis-data-stage` caller.
+- `fetch_bars`, `BarFetch` (Step 27); `check_fundamentals` (Step 29); `parse_stage_epoch`, `stage_run_id` (Step 19); `is_long_hole` (Step 25); telemetry helpers (Step 17); tables (Step 13).
+- `SYSTEM_READ_META` (Step 15, `app/identity.py`); one fresh `x-trace-id` per attempt (D-18), as `("x-trace-id", uuid.uuid4().hex)` at `app/handlers/servicer.py:3847`.
+- `job.db(budget)` and its 2 × budget worst case (`app/engine/job_graph.py:303-365`; design § 19); worst-case attempt 500 s against `ATTEMPT_DEADLINE_S = 900.0` (`job_graph.py:32`; design § 6).
+- The handler contract: awaits inside a `.db(` block only on `conn`, and no `asyncio.timeout` around a `.db(` block (`tests/test_job_handler_contract.py`, S-10). The two fetch coroutines therefore run outside every block.
+- The columns and CHECKs of `symbol_coverage`, `symbol_bar`, `symbol_bar_hole` and `symbol_filings_check` are design.md § 11 (Step 13).
+- The handler is design.md § 6 (steps 0, 1, 8, 9).
+
+**Lands with**: `Step 30`
 
 **TDD**: `red-green required`
 
 **Covers**: —
 
 **Instructions**:
-1. Constants under the design § 12 comment (D-64, D-66): `FINALITY_SAMPLE = 50`,
-   `FINALITY_CALL_TIMEOUT_S = 30`, `FINALITY_BUDGET_S = 300`, `PRICE_REL_TOL = 1e-6`,
-   `VOLUME_REL_TOL = 0.01`, `ADJUSTED_ABS_TOL = 0.011`, `ADJUSTED_REL_TOL = 1e-4`.
-2. `classify_finality(captured, refetched) -> str`, a pure function implementing the table of
-   design § 9.5 in this order: `unavailable` when there is no re-fetched bar; the zero-value rule
-   (a captured price of 0 → `match` on exact equality, else `drift`; captured volume 0 requires
-   re-fetched volume 0); `match`; `adjusted` (conditions i, ii and iii); otherwise `drift`.
-3. `make_finality_handler(*, marketdata)`, as design § 9.6:
-   - the epoch is the session date (`date.fromisoformat`; a malformed epoch →
-     `PermanentJobError`);
-   - one `job.db(10)`: finality rows for S exist → `Succeeded()`; read the run row's `day_start`
-     and `day_end` (no row → `PermanentJobError`); select the sample with the query of § 9.4
-     (`WHERE session_date = $1 AND close IS NOT NULL ORDER BY md5(symbol || $1::text) LIMIT 50`);
-     an empty sample → INFO and `Succeeded()`;
-   - re-fetch each sampled symbol in sequence under one `asyncio.timeout(FINALITY_BUDGET_S)` that
-     contains no `.db(` block: `BackfillBars([symbol], TIMEFRAME_1DAY, [day_start, day_end],
-     return_bars=True)`, timeout 30 s. Any error, a non-written outcome, or a symbol not reached
-     before the budget expired is that symbol's `unavailable`. No error is re-raised;
-   - classify, then one `job.db(10)`: `INSERT INTO analysis.data_stage_finality … ON CONFLICT DO
-     NOTHING` with the re-fetched values (five NULLs for `unavailable`);
-   - after the commit, per inserted row: `record_data_stage_finality(result)`; WARN `data stage
-     finality drift` per drifted symbol with the symbol and both value sets; WARN `data stage
-     finality unavailable` when every row is `unavailable`.
-4. The job writes no coverage row, no bar row and no hole row, emits no notify alert, and calls
-   only `BackfillBars`.
+`make_symbol_handler(*, marketdata)` in `app/jobs/data_stage.py`. The handler reads no config key
+and returns only `Succeeded` or raises.
+1. Design step 0: parse the epoch into S and p. One `trace = uuid4().hex` per attempt;
+   `meta = [*SYSTEM_READ_META, ("x-trace-id", trace)]`.
+2. Design step 1, one `job.db(10)`: read `pass, done_at, day_start, day_end` from
+   `data_stage_runs` for S (no row → `PermanentJobError`), the stored hole runs of the symbol and
+   its filings-check row. The early exits of this block are Step 33's.
+3. `await fetch_bars(marketdata, meta, job.subject, S, day_start, day_end, stored_runs, out)`.
+   In this step an error from it propagates unchanged (Step 33 adds the fetch-failure rule).
+4. Design step 8: `check_fundamentals(marketdata, meta, symbol, S, filings_row)`.
+5. Design step 9, the write, one `job.db(10)`, in this order (D-52, D-62):
+   1. `SELECT pass, done_at FROM analysis.data_stage_runs WHERE session_date = $1 FOR SHARE`;
+      `pass ≠ p` or `done_at` set → INFO `data stage job superseded`, leave the block with
+      nothing written, `Succeeded()`;
+   2. `INSERT INTO analysis.symbol_coverage … ON CONFLICT DO NOTHING RETURNING 1`; no row back →
+      leave the block and `Succeeded()`. Columns: `run_id = stage_run_id(S, p)`, `pass = p`,
+      `earliest_bar`, `latest_bar` and `bars_in_window` from the final coverage, `confirmed_gaps`
+      (the stored and newly confirmed runs inside the window), both outcomes, the state;
+   3. holes: `DELETE` the stored runs inside the history range (D-37), then upsert each new run
+      on `(symbol, first_session)` keeping `GREATEST(last_session)` and the greater
+      `confirmed_on` (S);
+   4. the filings upsert, whenever `check_fundamentals` returned a `next_check_on`: that date,
+      and `last_checked_on = S` and `last_outcome` when a call was made;
+   5. when `covered`: `INSERT INTO analysis.symbol_bar … ON CONFLICT DO NOTHING` with the
+      captured values, or five NULLs when nothing was captured.
+6. After the commit, and only when item 5.2 inserted the row: `record_data_stage_symbol`,
+   `record_data_stage_fundamentals`, `record_data_stage_backfill("final", …)` and
+   `("history", …)` when made, `record_data_stage_filings` when a call was committed,
+   `record_data_stage_hole("short" | "long")` per run written, and WARN `data stage: long hole
+   confirmed` per long run.
 
-**Verification**: Step 25's commands. On its own:
+**Verification** (run with Step 30's gate; the unit commits once):
 ```bash
 cd services/xstockstrat-analysis
-uv run --extra dev pytest tests/test_job_handler_contract.py tests/test_data_stage_symbol.py -q
+uv run --extra dev pytest tests/test_job_handler_contract.py tests/test_data_stage_fetch.py -q
 ruff check . && ruff format --check .
-grep -n "notify\|EmitAlert" app/jobs/data_stage.py   # no output
+grep -n "def make_symbol_handler" app/jobs/data_stage.py
+grep -n "FOR SHARE" app/jobs/data_stage.py   # the locked re-read of the run row (D-62)
 ```
 
 ---
 
-### Step 25 — test: the finality classifier and job
+### Step 32 — test: replays, superseded jobs, the pass budget and fetch failures
+
+**Status**: `pending`
+**Service**: `xstockstrat-analysis`
+**Files**:
+- `services/xstockstrat-analysis/tests/test_data_stage_symbol.py` — modify
+
+**Reviewers**: `xstockstrat-analysis` service owner — Backtest reproducibility, strategy scoring determinism, no look-ahead bias
+
+**Codebase Evidence**:
+- Shifting a timestamp column in a test: `shift_pipeline_job(pool, job_id, **columns_to_seconds)` (`tests/conftest.py:571`); the run row is shifted the same way with a direct `UPDATE … SET pass_created_at = now() − interval '31 minutes'`.
+- `aio_rpc_error(code, details)` (`tests/conftest.py:146`); `metric_sum` (`tests/test_live_loop_telemetry.py:35`).
+- The file, its run-row seed helper and its `@AC-56` check (Step 30).
+- The rules under test are design.md § 6 (step 1 and "Fetch failure") and § 7.
+- C-13: the responses are scenario one-offs; the doubles are imported.
+
+**Lands with**: `Step 33`
+
+**TDD**: `red-green required`
+
+**Covers**: `AC-10` (the pass-4 record), `AC-15, AC-33, AC-38` (the job half), `AC-46` (the attempt half), `AC-59, AC-60, AC-63`
+
+**Instructions**:
+Add to `tests/test_data_stage_symbol.py`:
+1. Replays and superseded jobs:
+   - `@AC-15`: with a `covered` row present, a second job makes no `BackfillBars` call (RED) and
+     the coverage row and the bar row are unchanged;
+   - `@AC-33`: with a committed `no_vendor_data` row, a re-run makes no `BackfillBars` call and 1
+     coverage row exists;
+   - `@AC-63`: the run is done and the symbol has no coverage row → the job succeeds with no
+     marketdata call, logs INFO `data stage job superseded`, and writes no coverage and no bar
+     row;
+   - a job whose pass is behind the run row's is superseded the same way;
+   - a replay counts nothing twice in telemetry.
+2. Fetch failures:
+   - `@AC-46`: `UNAVAILABLE` on attempt 1 raises (the worker retries); on attempt 2 the job
+     returns `Succeeded`, writes no coverage row, and
+     `analysis.data_stage.fetch_deferred{reason="rpc"}` increases by 1;
+   - a per-symbol `FAILED` outcome behaves the same with reason `symbol`; an `UNAVAILABLE` from
+     `GetDataCoverage`, and a `DEADLINE_EXCEEDED`, are `rpc` fetch failures;
+   - `@AC-10`: on pass 4, attempt 2, `UNAVAILABLE` → a coverage row `fetch_failed` with reason
+     `rpc`, no bar row, no hole row, the fundamentals state read from stored filings, no
+     `BackfillFundamentals` call, and `analysis.data_stage.symbols{verdict="fetch_failed"}` +1;
+   - the pass-4 row stores the outcomes observed so far: `final_outcome` `written` and a NULL
+     `history_outcome` when the history call failed; both NULL when the final call failed;
+   - an `INVALID_ARGUMENT` from `BackfillBars` raises `PermanentJobError`; a non-gRPC exception
+     propagates unchanged on every attempt.
+3. The pass budget:
+   - `@AC-59`: `pass_created_at` 31 minutes in the past on pass 1 → no marketdata call, no
+     coverage row, `fetch_deferred{reason="budget"}` +1, on attempt 1 as well;
+   - `@AC-60`: the same on pass 4 → `fetch_failed` with reason `budget` and fundamentals state
+     `unavailable`, with no marketdata call;
+   - `pass_created_at` 29 minutes in the past → the job fetches as usual;
+   - `@AC-38`: the handler factory takes no settings object, and with
+     `pipeline.data_stage_delay_minutes` changed to 120 after the run row was created a job of
+     that run is neither deferred nor failed.
+
+**Verification** (the gate of the Steps 32+33 unit):
+```bash
+cd services/xstockstrat-analysis
+uv run --extra dev pytest tests/test_data_stage_symbol.py tests/test_job_handler_contract.py -q
+uv run --extra dev pytest --cov=app --cov-fail-under=40
+ruff check . && ruff format --check .
+grep -n "from tests.conftest" tests/test_data_stage_symbol.py   # C-13: doubles imported
+```
+
+---
+
+### Step 33 — service: the data job's early exits, pass budget and fetch-failure rule
+
+**Status**: `pending`
+**Service**: `xstockstrat-analysis`
+**Files**:
+- `services/xstockstrat-analysis/app/jobs/data_stage.py` — modify
+
+**Reviewers**: `xstockstrat-analysis` service owner — Backtest reproducibility, strategy scoring determinism, no look-ahead bias
+
+**Codebase Evidence**:
+- The handler and its first block (Step 31); `fetch_bars`, `BarFetch`, `SymbolFetchFailed` (Step 27); `read_fundamentals` (Step 29); `FETCH_ATTEMPTS_PER_PASS`, `PASSES` (Steps 25, 19); `record_data_stage_fetch_deferred` (Step 17).
+- gRPC error code access: `_rpc_code(e)` at `app/handlers/servicer.py:7097-7098` (`e.code() if isinstance(e, grpc.RpcError) and hasattr(e, "code") else None`).
+- `attempts` is 1 on the first attempt (`app/repositories/pipeline_jobs.py:35`); an exception that is not a `PermanentJobError` is retried by the job graph and ends `dead` after `max_attempts` (durable `@AC-5 @AC-7 @feature-367`).
+- The CHECKs the `fetch_failed` row must satisfy: `fail_reason` set, `final_outcome`, `bars_in_window` and `confirmed_gaps` may be NULL (design § 11; Step 13).
+- No new outbound call: the handler reuses `fetch_bars` and `read_fundamentals`, which forward the per-call metadata (C-03).
+- The rules are design.md § 6 (step 1, "Fetch failure", "Real defects") and § 7 (D-34, D-41, D-42, D-46, D-47, D-55, D-61).
+
+**Lands with**: `Step 32`
+
+**TDD**: `red-green required`
+
+**Covers**: —
+
+**Instructions**:
+In `make_symbol_handler` (`app/jobs/data_stage.py`):
+1. Constant under the design § 12 comment: `PASS_BUDGET = "30 minutes"` (the SQL interval).
+2. The first block (Step 31 item 2) gains, in this order:
+   - a `symbol_coverage` row for `(symbol, S)` exists → `Succeeded()` (D-34), before anything
+     else is read;
+   - the run-row read also returns `(now() − pass_created_at) > PASS_BUDGET AS over_budget`
+     (the interval is the constant, cast in SQL);
+   - `pass ≠ p` or `done_at` set → INFO `data stage job superseded`, `Succeeded()`, no call and
+     no write;
+   - `over_budget` → a fetch failure with reason `budget`; no call of any kind is made (D-61).
+     The decision reads the database clock only.
+3. Fetch failure (design § 6 "Fetch failure", § 7): reason `rpc` for a gRPC error raised by
+   `fetch_bars` with any code except `INVALID_ARGUMENT` (including this call's own deadline);
+   reason `symbol` for `SymbolFetchFailed`; reason `budget` from item 2. `INVALID_ARGUMENT`
+   raises `PermanentJobError`. Any exception that is not a gRPC error or `SymbolFetchFailed`
+   propagates unchanged. An attempt stops at its first fetch failure:
+   - `rpc` or `symbol` with `job.attempts < FETCH_ATTEMPTS_PER_PASS`: re-raise (a transient
+     error: the gRPC error itself, or the `SymbolFetchFailed`);
+   - otherwise, and `budget` on any attempt: on passes 1 to 3,
+     `record_data_stage_fetch_deferred(reason)` and `Succeeded()` with nothing written; on pass
+     `PASSES`, write `bar_verdict = 'fetch_failed'` with `fail_reason`, through Step 31 items 5.1
+     and 5.2 only, storing the outcomes the `BarFetch` holds and NULL where no call was made, then
+     `record_data_stage_symbol("fetch_failed")` and `record_data_stage_fundamentals(state)`. For
+     `rpc` and `symbol` the state comes from `read_fundamentals` (no filings call, D-47); for
+     `budget` it is `unavailable` and no call is made.
+4. No filings call, no hole row and no bar row on a `fetch_failed` verdict.
+
+**Verification** (run with Step 32's gate; the unit commits once):
+```bash
+cd services/xstockstrat-analysis
+uv run --extra dev pytest tests/test_job_handler_contract.py tests/test_data_stage_fetch.py -q
+ruff check . && ruff format --check .
+grep -n "metadata=" app/jobs/data_stage.py   # every stub call passes metadata
+grep -n "GetBars\|BatchGetBars\|GetLatestQuote\|GetLatestPrice\|GetFundamentals(\|GetFundamentalsMulti" app/jobs/data_stage.py   # no output
+```
+
+---
+
+### Step 34 — test: the finality classifier and job
 
 **Status**: `pending`
 **Service**: `xstockstrat-analysis`
@@ -1797,9 +2398,12 @@ grep -n "notify\|EmitAlert" app/jobs/data_stage.py   # no output
 **Reviewers**: `xstockstrat-analysis` service owner — Backtest reproducibility, strategy scoring determinism, no look-ahead bias
 
 **Codebase Evidence**:
-- `data_stage_pg`, `StageJob`, `RecordingStub`, `aio_rpc_error` (`tests/conftest.py`); `metric_reader`, `metric_sum` (Step 23's sources).
+- `data_stage_pg`, `StageJob` (Step 18), `stage_marketdata_stub` (Step 26), `RecordingStub`, `aio_rpc_error` (`tests/conftest.py`); `metric_reader` (`tests/test_telemetry.py:155`), `metric_sum` (`tests/test_live_loop_telemetry.py:35`).
+- `classify_finality` and `make_finality_handler`: **Not found** — created by Step 35.
 - The classifier cases are design § 22: a match; a close-only change with volume +2% → drift; a 2:1 split → adjusted; a 3.00 stock × 0.995 cent-rounded with unchanged volume → adjusted; unavailable.
 - C-13: bar values are the scenario's own; doubles are imported.
+
+**Lands with**: `Step 35`
 
 **TDD**: `red-green required`
 
@@ -1837,7 +2441,7 @@ grep -n "notify\|EmitAlert" app/jobs/data_stage.py   # no output
    - `@AC-56`: the stub was called only with `BackfillBars`, each call with `return_bars`, the
      day bounds of the run row and `x-internal-caller: analysis-data-stage`.
 
-**Verification**:
+**Verification** (the gate of the Steps 34+35 unit):
 ```bash
 cd services/xstockstrat-analysis
 uv run --extra dev pytest tests/test_data_stage_finality.py tests/test_job_handler_contract.py -q
@@ -1848,93 +2452,68 @@ grep -n "from tests.conftest" tests/test_data_stage_finality.py   # C-13: double
 
 ---
 
-### Step 26 — service: `DataStageEnsure` and the worker's `ensures` hook
+### Step 35 — service: the finality classifier and the finality job
 
 **Status**: `pending`
 **Service**: `xstockstrat-analysis`
 **Files**:
-- `services/xstockstrat-analysis/app/engine/data_stage_ensure.py` — create
-- `services/xstockstrat-analysis/app/engine/job_graph.py` — modify
+- `services/xstockstrat-analysis/app/jobs/data_stage.py` — modify
 
 **Reviewers**: `xstockstrat-analysis` service owner — Backtest reproducibility, strategy scoring determinism, no look-ahead bias
 
 **Codebase Evidence**:
-- `app/engine/data_stage_ensure.py`: **Not found** — created by this step.
-- `JobGraphWorker.__init__(self, repo, service_pool, settings, registry, *, monotonic, utc_today, rand)` at `app/engine/job_graph.py:370-397`.
-- `maintenance_tick` at `:715-728`: `if enabled(): await self._guarded("ensure", self._ensure_prune)` at `:724-725`; `_guarded(step, fn)` at `:730-735` logs and swallows an `Exception`; `_ensure_prune` at `:753-764` (the per-day marker shape to follow).
-- `repo.enqueue(kind, subject, epoch, *, run_id, lane, conn=None)` → `(job_id, created)`, `ON CONFLICT (kind, subject, epoch) DO NOTHING` (`app/repositories/pipeline_jobs.py:275-295`); `repo.list_by_run(run_id)` returns rows with `state` (`:165-168`, `:400-402`); `FINISHED_STATES` at `:17`.
-- `bounded_txn(pool, budget_s, …)` at `app/repositories/read_budget.py:212-258`; it is already imported by `job_graph.py:17`. The ensure uses the service pool through it and opens no pool of its own (F-06).
-- Settings: `data_stage_enabled()`, `data_stage_delay_minutes()` (Step 11).
-- `GetLastClosedSession` (Steps 1-3); kinds and key helpers (Step 18, S-1).
-- Header propagation (C-03): the one new outbound call carries `SYSTEM_READ_META` and a fresh `x-trace-id` per ask (D-18), as a per-call `metadata=` argument.
-- The state machine is design.md § 2 (steps 1-8) and § 9.3; its rules are D-22, D-45, D-51, D-53.
+- Captured columns: `analysis.symbol_bar (open, high, low, close, volume)`, all set or all NULL (Step 13; design § 11).
+- The sample query and the result table are design.md § 9.4; the classifier is § 9.5 (D-60); the job is § 9.6 (D-59, D-63).
+- Both values reach analysis through the same path with no rounding in marketdata (`services/xstockstrat-marketdata/internal/alpaca/client.go:450-459`).
+- The re-fetch is the request of the data job's final call (Step 27 item 4, design step 2) with a 30 s timeout and the quiet caller; `DATA_STAGE_CALLER`, `symbol_outcome` and `captured_bar` are reused (Steps 27, 25).
+- Worst case 20 + 300 + 20 = 340 s against `ATTEMPT_DEADLINE_S = 900.0` (`app/engine/job_graph.py:32`).
+- No notify stub reaches the job registry (D-63; `app/jobs/__init__.py:7`).
+- Header propagation (C-03): per-call `metadata=` with `SYSTEM_READ_META`, a fresh `x-trace-id` and the `analysis-data-stage` caller.
+
+**Lands with**: `Step 34`
 
 **TDD**: `red-green required`
 
 **Covers**: —
 
 **Instructions**:
-1. `job_graph.py`: `JobGraphWorker.__init__` gains the keyword-only `ensures=()` and stores it. In
-   `maintenance_tick`, directly after the `_ensure_prune` line (`:725`), for each entry:
-   `if enabled(): await self._guarded("ensure", fn)`. Nothing else in the file changes
-   (design § 18 item 1).
-2. `data_stage_ensure.py`, a one-line module docstring, then:
-   - constants under one comment citing design § 12: `ASK_PERIOD_S = 60`, `ASK_TIMEOUT_S = 2`,
-     `PASS_CHECK_PERIOD_S = 60`, `ENSURE_DB_BUDGET_S = 5`, and the SQL intervals `30 minutes`
-     (spacing) and `16 hours` (finality);
-   - `class DataStageRuns` (S-2), constructed with the service pool, each method one
-     `bounded_txn(pool, ENSURE_DB_BUDGET_S)`:
-     - `insert(session, closed_at, day_start, day_end, delay)` → the run row or `None`: the
-       `INSERT … SELECT … WHERE now() >= $2 + make_interval(mins => $5) ON CONFLICT (session_date)
-       DO NOTHING` of design § 2 step 2, then a read of the row;
-     - `read(session)` → the row or `None`;
-     - `pending(session)` → bool: the marker is absent, or some snapshot symbol of S has no
-       `symbol_coverage` row (§ 2 step 6);
-     - `mark_done(session, p)` → bool: `UPDATE … SET done_at = now() WHERE session_date = $1 AND
-       pass = $2 AND done_at IS NULL`;
-     - `advance(session, p)` → bool: the compare-and-set of § 2 step 8, including `now() >=
-       pass_created_at + interval '30 minutes'`;
-     - `finality_due(session)` → bool: `now() >= closed_at + interval '16 hours'`;
-   - `class DataStageEnsure(repo, runs, marketdata, settings, *, now, monotonic)` with one public
-     coroutine `tick()` implementing § 2 steps 1 to 8 in order:
-     1. ask at most once per 60 s (`GetLastClosedSession(as_of=now())`, timeout 2 s); on an error
-        one WARN and keep the cache; with no cache return. A new session date clears the run
-        cache and the per-run marks;
-     2. with no cached run row: return when the switch is off or local `now < closed_at + delay`;
-        otherwise `runs.insert(…)` with `settings.data_stage_delay_minutes()`; no row → return;
-     3. `done_at` set → the finality step, then return;
-     4. the switch on and `(S, p)` not marked → `repo.enqueue(UNIVERSE_KIND, GLOBAL_SUBJECT,
-        stage_epoch(S, p), run_id=stage_run_id(S, p), lane=Lane.HELD)`, then mark;
-     5. the pass check at most once per 60 s, starting on the tick of the enqueue:
-        `repo.list_by_run(stage_run_id(S, p))`; zero rows → clear the mark and return; any row not
-        in `FINISHED_STATES` → return;
-     6. `runs.pending(S)`;
-     7. nothing pending, or `p == PASSES` → `runs.mark_done(S, p)` whatever the switch says; on
-        success INFO `data stage run done`; on no match re-read the run row;
-     8. pending and `p < PASSES` → return when the switch is off; otherwise `runs.advance(S, p)`;
-        on success INFO `data stage pass started` (session, pass); on no match re-read the run row.
-   - the finality step (§ 9.3): when the switch is on, the process flag for S is clear, a local
-     prefilter passes and `runs.finality_due(S)` is true → `repo.enqueue(FINALITY_KIND,
-     GLOBAL_SUBJECT, S.isoformat(), run_id=finality_run_id(S), lane=Lane.WATCHLIST)`, then set the
-     flag.
-3. Every cache (the calendar answer, the run row, the enqueued marks, the finality flag, the last
-   check times) is process state the database can rebuild; no cache is consulted to decide a gate
-   that the database decides (D-45).
-4. `tick()` raises nothing the worker must handle beyond what `_guarded` logs; it creates no task
-   and no pool.
+1. Constants under the design § 12 comment (D-64, D-66): `FINALITY_SAMPLE = 50`,
+   `FINALITY_CALL_TIMEOUT_S = 30`, `FINALITY_BUDGET_S = 300`, `PRICE_REL_TOL = 1e-6`,
+   `VOLUME_REL_TOL = 0.01`, `ADJUSTED_ABS_TOL = 0.011`, `ADJUSTED_REL_TOL = 1e-4`.
+2. `classify_finality(captured, refetched) -> str`, a pure function implementing the table of
+   design § 9.5 in this order: `unavailable` when there is no re-fetched bar; the zero-value rule
+   (a captured price of 0 → `match` on exact equality, else `drift`; captured volume 0 requires
+   re-fetched volume 0); `match`; `adjusted` (conditions i, ii and iii); otherwise `drift`.
+3. `make_finality_handler(*, marketdata)`, as design § 9.6:
+   - the epoch is the session date (`date.fromisoformat`; a malformed epoch →
+     `PermanentJobError`);
+   - one `job.db(10)`: finality rows for S exist → `Succeeded()`; read the run row's `day_start`
+     and `day_end` (no row → `PermanentJobError`); select the sample with the query of § 9.4
+     (`WHERE session_date = $1 AND close IS NOT NULL ORDER BY md5(symbol || $1::text) LIMIT 50`);
+     an empty sample → INFO and `Succeeded()`;
+   - re-fetch each sampled symbol in sequence under one `asyncio.timeout(FINALITY_BUDGET_S)` that
+     contains no `.db(` block: `BackfillBars([symbol], TIMEFRAME_1DAY, [day_start, day_end],
+     return_bars=True)`, timeout 30 s. Any error, a non-written outcome, or a symbol not reached
+     before the budget expired is that symbol's `unavailable`. No error is re-raised;
+   - classify, then one `job.db(10)`: `INSERT INTO analysis.data_stage_finality … ON CONFLICT DO
+     NOTHING` with the re-fetched values (five NULLs for `unavailable`);
+   - after the commit, per inserted row: `record_data_stage_finality(result)`; WARN `data stage
+     finality drift` per drifted symbol with the symbol and both value sets; WARN `data stage
+     finality unavailable` when every row is `unavailable`.
+4. The job writes no coverage row, no bar row and no hole row, emits no notify alert, and calls
+   only `BackfillBars`.
 
-**Verification**: Step 27's commands. On its own:
+**Verification** (run with Step 34's gate; the unit commits once):
 ```bash
 cd services/xstockstrat-analysis
-uv run --extra dev pytest tests/test_job_graph_worker.py tests/test_retention_prune_job.py tests/test_pipeline_boot.py -q   # ensures=() changes nothing
+uv run --extra dev pytest tests/test_job_handler_contract.py tests/test_data_stage_symbol.py -q
 ruff check . && ruff format --check .
-grep -n "create_pool\|asyncpg" app/engine/data_stage_ensure.py   # no output (F-06)
-grep -n "metadata=" app/engine/data_stage_ensure.py
+grep -n "notify\|EmitAlert" app/jobs/data_stage.py   # no output
 ```
 
 ---
 
-### Step 27 — test: the ensure
+### Step 36 — test: the ensure
 
 **Status**: `pending`
 **Service**: `xstockstrat-analysis`
@@ -1948,9 +2527,12 @@ grep -n "metadata=" app/engine/data_stage_ensure.py
 **Codebase Evidence**:
 - `class VirtualTime` at `tests/conftest.py:608`, the `virtual_time` fixture at `:633-634` (`await advance(seconds)`); `class FakeJobRepo` at `:644`, with `enqueue` at `:849-859` and `jobs`, `calls`, `fail` (`:652-662`). It has no `list_by_run` (S-10).
 - Worker helper for tick tests: `_worker(vt, repo, settings, handler, …)` at `tests/test_job_graph_worker.py:87`; the daily-ensure tests at `:515-563` (`test_daily_prune_is_ensured_once_per_day_and_again_by_a_new_worker`, `test_daily_ensure_marker_is_not_set_when_the_ensure_fails`); `test_ac16_disabled_worker_does_not_enqueue_the_daily_prune` at `:155`.
-- `data_stage_pg` (Step 19); `PipelineJobsRepository(pool)` on a test pool (`tests/test_retention_prune_job.py:40`).
+- `data_stage_pg` (Step 18); `PipelineJobsRepository(pool)` on a test pool (`tests/test_retention_prune_job.py:40`).
 - Ledger (insights, pipeline-job-graph): inject `monotonic` and test timer code on the virtual clock; mutation-check such tests.
-- C-13: `FakeDataStageRuns` has consumers in Steps 27 and 29, so it goes to `tests/conftest.py` (S-7).
+- C-13: `FakeDataStageRuns` has consumers in Steps 36 and 38, so it goes to `tests/conftest.py` (S-7).
+- `app/engine/data_stage_ensure.py` and the worker's `ensures=` keyword: **Not found** — created by Step 37.
+
+**Lands with**: `Step 37`
 
 **TDD**: `red-green required`
 
@@ -1973,6 +2555,8 @@ grep -n "metadata=" app/engine/data_stage_ensure.py
      still holds `closed_at` 16:00 and delay 30, and the ensure keeps enqueuing and advancing;
    - `@AC-39`: the ensure first ticks at 17:00 on 2026-11-27 after a down period → a run row for
      2026-11-27 and none for 2026-11-25;
+   - the defaults: `DataStageEnsure(repo, runs, marketdata, settings)` constructs with the four
+     positional arguments alone (S-16);
    - the ask: at most one `GetLastClosedSession` per 60 s; a failing ask logs one WARN per minute
      and keeps the cached answer; with no cached answer nothing is created;
    - the enqueue: one universe job per `(S, p)` with epoch `S#p`, run id `data_stage:S#p` and lane
@@ -2012,7 +2596,7 @@ grep -n "metadata=" app/engine/data_stage_ensure.py
    after the prune ensure; it does not run with `pipeline.worker_enabled` false; a raising entry is
    logged and does not stop the next entry or the tick.
 
-**Verification**:
+**Verification** (the gate of the Steps 36+37 unit):
 ```bash
 cd services/xstockstrat-analysis
 uv run --extra dev pytest tests/test_data_stage_ensure.py tests/test_job_graph_worker.py -q
@@ -2023,59 +2607,99 @@ grep -n "class FakeDataStageRuns\|async def list_by_run" tests/conftest.py   # C
 
 ---
 
-### Step 28 — service: registry and startup wiring
+### Step 37 — service: `DataStageEnsure` and the worker's `ensures` hook
 
 **Status**: `pending`
 **Service**: `xstockstrat-analysis`
 **Files**:
-- `services/xstockstrat-analysis/app/jobs/__init__.py` — modify
-- `services/xstockstrat-analysis/app/main.py` — modify
+- `services/xstockstrat-analysis/app/engine/data_stage_ensure.py` — create
+- `services/xstockstrat-analysis/app/engine/job_graph.py` — modify
 
 **Reviewers**: `xstockstrat-analysis` service owner — Backtest reproducibility, strategy scoring determinism, no look-ahead bias
 
 **Codebase Evidence**:
-- `def build_registry(settings) -> HandlerRegistry` at `app/jobs/__init__.py:7-11`; called with one argument by `app/main.py:253` and by `tests/test_retention_prune_job.py:43`.
-- `HandlerRegistry.register(kind, handler, *, child_kinds=())` (`app/engine/job_graph.py:128-130`); `validate()` raises on an unregistered child kind (`:141-160`); the worker claims only registered kinds.
-- The pipeline block of `app/main.py:243-259`: `PipelineJobsRepository(control_pool)` is constructed inline at `:250`; three `spawn(` calls at `:256-258`.
-- Stubs on the servicer: `servicer._marketdata`, `servicer._ingest`, `servicer._portfolio`, passed to the live loop at `app/main.py:165-171` (`app/handlers/servicer.py:565-576`).
-- `tests/test_supervision.py:143-148` pins the number of `spawn(` calls in `app/main.py`; this step adds none.
-- `tests/test_pipeline_boot.py:50-58` lists the job-graph files that must not mention the durable scheduler.
-- No new environment variable and no new port: `MARKETDATA_ENDPOINT`, `INGEST_ENDPOINT` and `PORTFOLIO_ENDPOINT` are already read (`app/main.py:31-36`); `docker-compose.yml`, `.do/app.dev.yaml` and `.do/app.yaml` need no change.
-- No new pool (F-06): the ensure receives the existing `db_pool` (`app/main.py:51-55`, `_create_pools`).
+- `app/engine/data_stage_ensure.py`: **Not found** — created by this step.
+- `JobGraphWorker.__init__(self, repo, service_pool, settings, registry, *, monotonic, utc_today, rand)` at `app/engine/job_graph.py:370-397`.
+- `maintenance_tick` at `:715-728`: `if enabled(): await self._guarded("ensure", self._ensure_prune)` at `:724-725`; `_guarded(step, fn)` at `:730-735` logs and swallows an `Exception`; `_ensure_prune` at `:753-764` (the per-day marker shape to follow).
+- `repo.enqueue(kind, subject, epoch, *, run_id, lane, conn=None)` → `(job_id, created)`, `ON CONFLICT (kind, subject, epoch) DO NOTHING` (`app/repositories/pipeline_jobs.py:275-295`); `repo.list_by_run(run_id)` returns rows with `state` (`:165-168`, `:400-402`); `FINISHED_STATES` at `:17`.
+- `bounded_txn(pool, budget_s, …)` at `app/repositories/read_budget.py:212-258`; it is already imported by `job_graph.py:17`. The ensure uses the service pool through it and opens no pool of its own (F-06).
+- Settings: `data_stage_enabled()`, `data_stage_delay_minutes()` (Step 11).
+- `GetLastClosedSession` (Steps 1-4); kinds and key helpers (Step 19, S-1).
+- Header propagation (C-03): the one new outbound call carries `SYSTEM_READ_META` and a fresh `x-trace-id` per ask (D-18), as a per-call `metadata=` argument.
+- The state machine is design.md § 2 (steps 1-8) and § 9.3; its rules are D-22, D-45, D-51, D-53.
+- Default-clock shape to follow: `def _utc_today() -> date: return datetime.now(UTC).date()` (`app/engine/job_graph.py:242-243`), injected as `utc_today=_utc_today` beside `monotonic=time.monotonic` (`:377-378`).
+
+**Lands with**: `Step 36`
 
 **TDD**: `red-green required`
 
 **Covers**: —
 
 **Instructions**:
-1. `app/jobs/__init__.py`: `build_registry(settings, *, marketdata=None, portfolio=None,
-   ingest=None)`. The prune kind is registered as today. When all three stubs are given, register:
-   `UNIVERSE_KIND` with `child_kinds=(SHARD_KIND,)`, `SHARD_KIND` with `child_kinds=(SYMBOL_KIND,)`,
-   `SYMBOL_KIND` and `FINALITY_KIND` with none. With a stub missing, register none of the four
-   (design § 18 item 3). `registry.validate()` stays the last call.
-2. `app/main.py`, inside the existing pipeline block:
-   - construct the repository once: `pipeline_repo = PipelineJobsRepository(control_pool)`, shared
-     by the worker and the ensure (design § 18 item 4);
-   - `data_stage_ensure = DataStageEnsure(pipeline_repo, DataStageRuns(db_pool),
-     servicer._marketdata, pipeline_settings)`;
-   - `build_registry(pipeline_settings, marketdata=servicer._marketdata,
-     portfolio=servicer._portfolio, ingest=servicer._ingest)`;
-   - `JobGraphWorker(pipeline_repo, db_pool, pipeline_settings, registry,
-     ensures=(data_stage_ensure.tick,))`.
-   Add no `spawn(` call, no pool, no channel and no environment variable.
+1. `job_graph.py`: `JobGraphWorker.__init__` gains the keyword-only `ensures=()` and stores it. In
+   `maintenance_tick`, directly after the `_ensure_prune` line (`:725`), for each entry:
+   `if enabled(): await self._guarded("ensure", fn)`. Nothing else in the file changes
+   (design § 18 item 1).
+2. `data_stage_ensure.py`, a one-line module docstring, then:
+   - constants under one comment citing design § 12: `ASK_PERIOD_S = 60`, `ASK_TIMEOUT_S = 2`,
+     `PASS_CHECK_PERIOD_S = 60`, `ENSURE_DB_BUDGET_S = 5`, and the SQL intervals `30 minutes`
+     (spacing) and `16 hours` (finality);
+   - `class DataStageRuns` (S-2), constructed with the service pool, each method one
+     `bounded_txn(pool, ENSURE_DB_BUDGET_S)`:
+     - `insert(session, closed_at, day_start, day_end, delay)` → the run row or `None`: the
+       `INSERT … SELECT … WHERE now() >= $2 + make_interval(mins => $5) ON CONFLICT (session_date)
+       DO NOTHING` of design § 2 step 2, then a read of the row;
+     - `read(session)` → the row or `None`;
+     - `pending(session)` → bool: the marker is absent, or some snapshot symbol of S has no
+       `symbol_coverage` row (§ 2 step 6);
+     - `mark_done(session, p)` → bool: `UPDATE … SET done_at = now() WHERE session_date = $1 AND
+       pass = $2 AND done_at IS NULL`;
+     - `advance(session, p)` → bool: the compare-and-set of § 2 step 8, including `now() >=
+       pass_created_at + interval '30 minutes'`;
+     - `finality_due(session)` → bool: `now() >= closed_at + interval '16 hours'`;
+   - `class DataStageEnsure(repo, runs, marketdata, settings, *, now=_utc_now,
+     monotonic=time.monotonic)` (S-16). The module-level `_utc_now()` returns
+     `datetime.now(UTC)`. `now` is the wall clock for the ask's `as_of` and the local
+     prefilters; `monotonic` times the 60 s periods. It has one public coroutine `tick()`
+     implementing § 2 steps 1 to 8 in order:
+     1. ask at most once per 60 s (`GetLastClosedSession(as_of=now())`, timeout 2 s); on an error
+        one WARN and keep the cache; with no cache return. A new session date clears the run
+        cache and the per-run marks;
+     2. with no cached run row: return when the switch is off or local `now < closed_at + delay`;
+        otherwise `runs.insert(…)` with `settings.data_stage_delay_minutes()`; no row → return;
+     3. `done_at` set → the finality step, then return;
+     4. the switch on and `(S, p)` not marked → `repo.enqueue(UNIVERSE_KIND, GLOBAL_SUBJECT,
+        stage_epoch(S, p), run_id=stage_run_id(S, p), lane=Lane.HELD)`, then mark;
+     5. the pass check at most once per 60 s, starting on the tick of the enqueue:
+        `repo.list_by_run(stage_run_id(S, p))`; zero rows → clear the mark and return; any row not
+        in `FINISHED_STATES` → return;
+     6. `runs.pending(S)`;
+     7. nothing pending, or `p == PASSES` → `runs.mark_done(S, p)` whatever the switch says; on
+        success INFO `data stage run done`; on no match re-read the run row;
+     8. pending and `p < PASSES` → return when the switch is off; otherwise `runs.advance(S, p)`;
+        on success INFO `data stage pass started` (session, pass); on no match re-read the run row.
+   - the finality step (§ 9.3): when the switch is on, the process flag for S is clear, a local
+     prefilter passes and `runs.finality_due(S)` is true → `repo.enqueue(FINALITY_KIND,
+     GLOBAL_SUBJECT, S.isoformat(), run_id=finality_run_id(S), lane=Lane.WATCHLIST)`, then set the
+     flag.
+3. Every cache (the calendar answer, the run row, the enqueued marks, the finality flag, the last
+   check times) is process state the database can rebuild; no cache is consulted to decide a gate
+   that the database decides (D-45).
+4. `tick()` raises nothing the worker must handle beyond what `_guarded` logs; it creates no task
+   and no pool.
 
-**Verification**: Step 29's commands. On its own:
+**Verification** (run with Step 36's gate; the unit commits once):
 ```bash
 cd services/xstockstrat-analysis
-uv run --extra dev pytest tests/test_pipeline_boot.py tests/test_supervision.py tests/test_retention_prune_job.py tests/test_job_handler_contract.py -q
+uv run --extra dev pytest tests/test_job_graph_worker.py tests/test_retention_prune_job.py tests/test_pipeline_boot.py -q   # ensures=() changes nothing
 ruff check . && ruff format --check .
-grep -c "spawn(" app/main.py   # unchanged from before this step
-grep -n "DataStageEnsure\|ensures=" app/main.py
+grep -n "create_pool\|asyncpg" app/engine/data_stage_ensure.py   # no output (F-06)
+grep -n "metadata=" app/engine/data_stage_ensure.py
 ```
 
 ---
 
-### Step 29 — test: boot wiring, the end-to-end run and the unchanged responses
+### Step 38 — test: boot wiring, the end-to-end run and the unchanged responses
 
 **Status**: `pending`
 **Service**: `xstockstrat-analysis`
@@ -2091,9 +2715,14 @@ grep -n "DataStageEnsure\|ensures=" app/main.py
 - Boot-wiring assertions by source inspection: `tests/test_pipeline_boot.py:45-47` (`inspect.getsource(app_main.serve)`), the disjointness list at `:50-58`.
 - Header guard: `_assert_owner_headers(*stubs)` at `tests/test_owner_header_guard.py:90-100` (one non-empty `x-user-id`; `system` only with one grant in `_SYSTEM_GRANTS`, `:36`); the path tests from `:150`.
 - A servicer for RPC-level assertions: `make_servicer()` (`tests/test_analysis_servicer.py:46`, imported at `tests/test_owner_header_guard.py:30`).
-- `data_stage_pg`, `StageJob`, `FakeDataStageRuns` (Steps 19, 27); `RecordingStub`.
+- `data_stage_pg`, `StageJob`, `FakeDataStageRuns` (Steps 18, 36); `stage_marketdata_stub` (Step 26); `RecordingStub`.
+- `tests/test_owner_header_guard.py` has no database test today (`grep -n "real_pg\|local_pg\|pipeline_pg" tests/test_owner_header_guard.py` → no output); a handler path test needs `job.db()`, so the new path tests carry `@pytest.mark.real_pg` one by one.
+- A stage `BackfillBars` call carries two `x-internal-caller` values (design § 14, § 16); `_assert_owner_headers` allows `system` exactly one (`:90-100`), and is applied to ingest and indicators stubs only (S-17).
+- `build_registry` with stub keywords: **Not found** — added by Step 39.
 - The pass spacing and the pass budget are decided by the database clock, so a test moves a run between passes by shifting `pass_created_at` back, never by waiting.
 - C-13: the 2,000-symbol universe is generated in the test; doubles are imported.
+
+**Lands with**: `Step 39`
 
 **TDD**: `red-green required`
 
@@ -2108,10 +2737,23 @@ grep -n "DataStageEnsure\|ensures=" app/main.py
      `ensures=`;
    - add `app/engine/data_stage_ensure.py` to the disjointness list (`:50-58`; `app/jobs/*.py` is
      already globbed).
-2. `tests/test_owner_header_guard.py`: one path test driving the universe handler with
-   `RecordingStub` ingest and portfolio doubles: every ingest call carries exactly one non-empty
-   `x-user-id`; the system-scope read carries `system` with the single grant
-   `analysis-system-read`; an owner read carries no grant; every call carries an `x-trace-id`.
+2. `tests/test_owner_header_guard.py` (the three handler path tests marked `real_pg`). These
+   guards do not depend on Step 39 and pass before it; the unit's RED is item 1:
+   - one path test driving the universe handler with `RecordingStub` ingest and portfolio
+     doubles, checked with `_assert_owner_headers`: every call carries exactly one non-empty
+     `x-user-id`; the system-scope read carries `system` with the single grant
+     `analysis-system-read`; an owner read carries no grant; every call carries an
+     `x-trace-id`;
+   - one path test driving the data job (a covered symbol with a history fetch and a due
+     filings check) and one driving the finality job, each with a `stage_marketdata_stub`,
+     checked with a local `_assert_stage_marketdata_headers(stub)` (S-17): the stub recorded
+     at least one call; every call carries exactly one `x-user-id` equal to `system`, exactly
+     one non-empty `x-trace-id` and no `x-access-scope`; a `BackfillBars` call carries exactly
+     the two `x-internal-caller` values `analysis-system-read` and `analysis-data-stage`;
+     every other call carries exactly `analysis-system-read`;
+   - one test driving `DataStageEnsure.tick` with `FakeJobRepo`, `FakeDataStageRuns` and a
+     marketdata `RecordingStub` (no database, no marker): the `GetLastClosedSession` call
+     passes the same local assertion.
 3. `tests/test_data_stage_e2e.py` (`real_pg`), a real `JobGraphWorker` with the full stage
    registry, the real `DataStageEnsure` and `DataStageRuns`, and scripted `RecordingStub` doubles:
    - the healthy run: 2,000 symbols over 5 shards, one pass → 2,000 coverage rows, the run done,
@@ -2139,18 +2781,74 @@ grep -n "DataStageEnsure\|ensures=" app/main.py
      `analysis.strategies` (a scan of the SQL literals in `app/jobs/data_stage.py` and
      `app/engine/data_stage_ensure.py`).
 
-**Verification**:
+**Verification** (the gate of the Steps 38+39 unit):
 ```bash
 cd services/xstockstrat-analysis
 uv run --extra dev pytest tests/test_data_stage_e2e.py tests/test_pipeline_boot.py tests/test_owner_header_guard.py tests/test_supervision.py -q
 uv run --extra dev pytest --cov=app --cov-fail-under=40
 ruff check . && ruff format --check .
 grep -n "from tests.conftest" tests/test_data_stage_e2e.py   # C-13: doubles imported
+grep -c "_assert_stage_marketdata_headers" tests/test_owner_header_guard.py   # 4: the helper and its three callers
 ```
 
 ---
 
-### Step 30 — docs: the data-stage page, the requeue note, the service docs and the program plan
+### Step 39 — service: registry and startup wiring
+
+**Status**: `pending`
+**Service**: `xstockstrat-analysis`
+**Files**:
+- `services/xstockstrat-analysis/app/jobs/__init__.py` — modify
+- `services/xstockstrat-analysis/app/main.py` — modify
+
+**Reviewers**: `xstockstrat-analysis` service owner — Backtest reproducibility, strategy scoring determinism, no look-ahead bias
+
+**Codebase Evidence**:
+- `def build_registry(settings) -> HandlerRegistry` at `app/jobs/__init__.py:7-11`; called with one argument by `app/main.py:253` and by `tests/test_retention_prune_job.py:43`.
+- `HandlerRegistry.register(kind, handler, *, child_kinds=())` (`app/engine/job_graph.py:128-130`); `validate()` raises on an unregistered child kind (`:141-160`); the worker claims only registered kinds.
+- The pipeline block of `app/main.py:243-259`: `PipelineJobsRepository(control_pool)` is constructed inline at `:250`; three `spawn(` calls at `:256-258`.
+- Stubs on the servicer: `servicer._marketdata`, `servicer._ingest`, `servicer._portfolio`, passed to the live loop at `app/main.py:165-171` (`app/handlers/servicer.py:565-576`).
+- `tests/test_supervision.py:143-148` pins the number of `spawn(` calls in `app/main.py`; this step adds none.
+- `tests/test_pipeline_boot.py:50-58` lists the job-graph files that must not mention the durable scheduler.
+- No new environment variable and no new port: `MARKETDATA_ENDPOINT`, `INGEST_ENDPOINT` and `PORTFOLIO_ENDPOINT` are already read (`app/main.py:31-36`); `docker-compose.yml`, `.do/app.dev.yaml` and `.do/app.yaml` need no change.
+- No new pool (F-06): the ensure receives the existing `db_pool` (`app/main.py:51-55`, `_create_pools`).
+
+**Lands with**: `Step 38`
+
+**TDD**: `red-green required`
+
+**Covers**: —
+
+**Instructions**:
+1. `app/jobs/__init__.py`: `build_registry(settings, *, marketdata=None, portfolio=None,
+   ingest=None)`. The prune kind is registered as today. When all three stubs are given, register:
+   `UNIVERSE_KIND` with `child_kinds=(SHARD_KIND,)`, `SHARD_KIND` with `child_kinds=(SYMBOL_KIND,)`,
+   `SYMBOL_KIND` and `FINALITY_KIND` with none. With a stub missing, register none of the four
+   (design § 18 item 3). `registry.validate()` stays the last call.
+2. `app/main.py`, inside the existing pipeline block:
+   - construct the repository once: `pipeline_repo = PipelineJobsRepository(control_pool)`, shared
+     by the worker and the ensure (design § 18 item 4);
+   - `data_stage_ensure = DataStageEnsure(pipeline_repo, DataStageRuns(db_pool),
+     servicer._marketdata, pipeline_settings)` — four positional arguments; `now` and
+     `monotonic` keep their defaults (S-16);
+   - `build_registry(pipeline_settings, marketdata=servicer._marketdata,
+     portfolio=servicer._portfolio, ingest=servicer._ingest)`;
+   - `JobGraphWorker(pipeline_repo, db_pool, pipeline_settings, registry,
+     ensures=(data_stage_ensure.tick,))`.
+   Add no `spawn(` call, no pool, no channel and no environment variable.
+
+**Verification** (run with Step 38's gate; the unit commits once):
+```bash
+cd services/xstockstrat-analysis
+uv run --extra dev pytest tests/test_pipeline_boot.py tests/test_supervision.py tests/test_retention_prune_job.py tests/test_job_handler_contract.py -q
+ruff check . && ruff format --check .
+grep -c "spawn(" app/main.py   # unchanged from before this step
+grep -n "DataStageEnsure\|ensures=" app/main.py
+```
+
+---
+
+### Step 40 — docs: the data-stage page, the requeue note, the service docs and the program plan
 
 **Status**: `pending`
 **Service**: `docs/`, `services/xstockstrat-analysis/` and `services/xstockstrat-marketdata/` (documentation only)
@@ -2160,6 +2858,7 @@ grep -n "from tests.conftest" tests/test_data_stage_e2e.py   # C-13: doubles imp
 - `services/xstockstrat-analysis/CLAUDE.md` — modify
 - `services/xstockstrat-marketdata/CLAUDE.md` — modify
 - `docs/roadmap/program-job-graph-analysis-pipeline.md` — modify (line 82 only)
+- `docs/patterns/inter-service-mtls.md` — modify (one bullet)
 
 **Reviewers**: none
 
@@ -2171,6 +2870,7 @@ grep -n "from tests.conftest" tests/test_data_stage_e2e.py   # C-13: doubles imp
 - `scripts/check-context-map.py` validates doc cross-references in `CLAUDE.md` files and passes on the current tree; `scripts/check-otel-produced-signals.py` scans `docs/` and `packages/otel` for named alert assets and passes on the current tree. The drift rule is not provisioned in `packages/otel` (D-63), so no registry row is added.
 - `node scripts/check-config-wiring.mjs --doc-check` scans every `services/*/CLAUDE.md`.
 - The config rows and the config-governance entry landed in Step 10; the default docs in Step 9.
+- `docs/patterns/inter-service-mtls.md:78-80`: the bullet for marketdata's SAN-bound grants (`SyncWatchlistDelistings` / `AckDelistingAlerts` ← `xstockstrat-portfolio`, `internalCallerAllowlist` in `services/xstockstrat-marketdata/internal/service/authz.go`). The list names every such grant, so Step 6's new entry belongs there (C-10).
 
 **TDD**: `N/A (docs)`
 
@@ -2219,6 +2919,12 @@ grep -n "from tests.conftest" tests/test_data_stage_e2e.py   # C-13: doubles imp
    the approved design: one run per closed session with up to four passes; one data job per symbol
    that fetches through marketdata `BackfillBars` itself (no backfill child); three bar verdicts;
    the bar record; the next-morning finality check (feature 368). Change no other row.
+6. `docs/patterns/inter-service-mtls.md`: one bullet directly after the marketdata bullet
+   (`:78-80`): marketdata `BackfillBars` ledger suppression (`BackfillBars.ledger_quiet`) ←
+   `xstockstrat-analysis` (feature 368, the same `internalCallerAllowlist`). The
+   `x-internal-caller: analysis-data-stage` header is still required as well; the grant only
+   suppresses the three backfill ledger events, and `BackfillBars` itself stays ungated. Change
+   no other bullet.
 
 **Verification**:
 ```bash
@@ -2227,6 +2933,7 @@ node scripts/check-config-wiring.mjs --doc-check
 ls services/xstockstrat-analysis/docs/data-stage.md
 grep -n "data-stage.md" services/xstockstrat-analysis/CLAUDE.md services/xstockstrat-analysis/docs/pipeline-jobs.md
 grep -n "analysis-data-stage" services/xstockstrat-marketdata/CLAUDE.md
+grep -n "BackfillBars.ledger_quiet" docs/patterns/inter-service-mtls.md   # 1 line
 grep -c "backfill child" docs/roadmap/program-job-graph-analysis-pipeline.md   # 0
 ```
 

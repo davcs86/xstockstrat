@@ -314,21 +314,21 @@
 - Unresolved ✗ / ⚠ carried into execution:
   - Steps 3, 5, 14, 16, 18, 20, 22, 24, 26, 28: each service step precedes its test step with no
     `**Lands with**`, so the test's RED cannot be captured (P-06, C-08; ledger 2026-11-04
-    enforce-config-key-wiring) — [ ] unaddressed
+    enforce-config-key-wiring) — [x] addressed by `/sdd-spec` revision 2
   - Step 22 (data job, 12 instruction items) and Step 23 (about 40 cases) are too large for one
-    unit; Step 18 combines universe job, shard job, retention and the snapshot writer (C-18) — [ ] unaddressed
+    unit; Step 18 combines universe job, shard job, retention and the snapshot writer (C-18) — [x] addressed by `/sdd-spec` revision 2
   - Step 8: Files omit the sibling marketdata test files that use `enabledCfg` / `fakeCfg`
-    (`backfill_outcome_test.go`, `bar_hold_test.go`, `bars_miss_test.go`, `etf_flags_test.go`) (F-08) — [ ] unaddressed
-  - Step 2: Files lists directories, not files — [ ] unaddressed
-  - Steps 4, 6, 8: `GOWORK=off` is set on a variable assignment and not on the `go` commands — [ ] unaddressed
+    (`backfill_outcome_test.go`, `bar_hold_test.go`, `bars_miss_test.go`, `etf_flags_test.go`) (F-08) — [x] addressed by `/sdd-spec` revision 2
+  - Step 2: Files lists directories, not files — [x] addressed by `/sdd-spec` revision 2
+  - Steps 4, 6, 8: `GOWORK=off` is set on a variable assignment and not on the `go` commands — [x] addressed by `/sdd-spec` revision 2
   - Step 26: defaults of `now` / `monotonic` on `DataStageEnsure` unstated; Step 28 passes four
-    positional arguments — [ ] unaddressed
+    positional arguments — [x] addressed by `/sdd-spec` revision 2
   - Step 29: the header-guard test drives only the universe handler; the data job's marketdata
-    calls carry two internal-caller values and are not held to the guard — [ ] unaddressed
+    calls carry two internal-caller values and are not held to the guard — [x] addressed by `/sdd-spec` revision 2
   - Step 30: `docs/patterns/inter-service-mtls.md` (marketdata grant list) not updated for the
-    `BackfillBars.ledger_quiet` grant (C-10) — [ ] unaddressed
+    `BackfillBars.ledger_quiet` grant (C-10) — [x] addressed by `/sdd-spec` revision 2
   - Steps 10, 12: need a database (stored-set regeneration) and `pnpm install`; blocked per P-03
-    if neither is available at execute — [ ] unaddressed (environment, not a spec defect)
+    if neither is available at execute — [ ] open (environment, not a spec defect; stated in revision 2 § Step Dependencies)
 - Overlap findings: no FAIL-level collision. Analysis `032`, config `062`, `BackfillBarsRequest` 6
   and `BackfillBarsResponse` 5 are free. Shared files to sequence at merge:
   `scripts/config-wiring-stored.json` and `docs/patterns/config-governance.md` (330, 345, 322);
@@ -339,3 +339,65 @@
 - Open points from `/sdd-spec` for the operator: O-1 (the stored description of
   `fundamentals.snapshot_source` still says "fail-safe to vendor"); O-2 (`feature/symbol-data-stage`
   is created by `/sdd-execute`).
+
+## Session 2026-11-28T10:11Z — sdd-spec (re-run, revision 2)
+
+- Regenerated implementation-spec.md with 40 steps (revision 1 had 30). Status stays
+  implementation-ready. Timestamp is the system clock at write time. No step had started.
+- Why: `/sdd-spec symbol-data-stage` was invoked again with a spec already present. Author
+  inference, not an operator statement: the re-run is meant to answer the advisory impl-spec
+  review of round 1 (the entry above). Design, files, symbols and scenarios are unchanged; the
+  steps are re-cut. The checkboxes of the review entry were ticked for what revision 2 addresses.
+- Tree: ccr-d10c1761-fxpr1d@49eeef33 = origin/main-dev@bc497728 plus docs-only commits.
+  `origin/main-dev` is two commits ahead (`df9532c8`, `2d802133`: ui, agent, identity, docs); it
+  was not merged. Same deviation from `docs/sdd/tree-freshness.md` as the earlier phases. No source
+  file differs from the tree recon and revision 1 were grounded on
+  (`git diff --stat bc497728 HEAD -- services packages scripts .github docs/patterns docs/runbooks`
+  is empty).
+- Discovery was done inline; recon.md and revision 1's evidence were reused and only the review
+  findings were re-searched.
+- What changed (implementation-spec.md § Revision 2 has the old → new step map):
+  - Every `service`/`test` pair is an atomic unit (`**Lands with**`), 18 units in all. In Steps
+    3-6 and 14-39 the `test` step has the lower number. Steps 7+8 and 10+11+12 keep their order.
+  - Old Steps 18+19 → three pairs: universe snapshot (18-19), pass-1 retention (20-21), shard job
+    (22-23).
+  - Old Steps 22+23 → four pairs: bars fetch (26-27), fundamentals check (28-29), the handler and
+    its records (30-31), replay / superseded / pass budget / fetch failure (32-33).
+  - Step 2 lists the twelve generated files. `GOWORK=off` is on every `go` command (Steps 3, 5, 8).
+  - Step 37 states `DataStageEnsure(…, *, now=_utc_now, monotonic=time.monotonic)`; Step 39 passes
+    four positional arguments.
+  - Step 38 holds the data job, the finality job and the ensure's ask to a marketdata header rule.
+  - Step 40 adds the `BackfillBars.ledger_quiet` line to `docs/patterns/inter-service-mtls.md`.
+- Key codebase findings (this session):
+  - `snapshotSource()` has two callers, `GetFundamentals` and `GetFundamentalsMulti`
+    (`internal/service/marketdata_service.go:1840`, `:1859`). The four sibling test files the
+    review named (`backfill_outcome_test.go`, `bar_hold_test.go`, `bars_miss_test.go`,
+    `etf_flags_test.go`) call neither, and `cmd/server/main_test.go` calls `GetFundamentals` on
+    the vendor source only. Step 8 keeps one file in `**Files**` and gains a stop rule.
+  - `_assert_owner_headers` (`tests/test_owner_header_guard.py:90-100`) allows a `system` call
+    exactly one `x-internal-caller`; a stage `BackfillBars` call carries two by design (§ 14,
+    § 16). Step 38 uses a local assertion for the marketdata stub and leaves the helper as it is.
+  - `tests/test_owner_header_guard.py` has no database test today; the three handler path tests
+    added by Step 38 carry `real_pg`.
+  - `RecordingStub` does not record a `timeout=` keyword in `calls`; tests read it from the
+    method's `AsyncMock.await_args_list`.
+  - `golangci-lint` and `pnpm` are installed in this sandbox; `buf` is not, and
+    `services/xstockstrat-config/node_modules` is absent.
+- Spec-time decisions added (S-13 to S-18), each open to challenge at `/sdd-review impl-spec`:
+  the test step is numbered first in a pair; `fetch_bars` and `read_fundamentals` /
+  `check_fundamentals` are module-level coroutines that need no database, and `fetch_bars` fills a
+  `BarFetch` so a failed attempt keeps the outcomes observed so far; a constant is added by the
+  step that first uses it; `stage_marketdata_stub` lives in `tests/conftest.py`.
+- One rule design § 8 does not state, chosen here (S-14): when the 160 s bound or an unexpected
+  exception cuts the fundamentals step, no filings row is stored and the next session decides
+  again.
+- Verification runs of this session (all exit 0): `check-config-wiring.mjs --final` and
+  `--doc-check`, `check-context-map.py`, `check-otel-produced-signals.py`,
+  `check-watcher-copies.py`, `check-migration-order.py origin/main-dev`; analysis `ruff` and 127
+  tests in six files; marketdata `go test` on `internal/service`, `internal/handler`,
+  `internal/timeframe`; `packages/proto` `go test ./marketsession/...`.
+- Still open for the operator: O-1 (the stored description of `fundamentals.snapshot_source`),
+  O-2 (`feature/symbol-data-stage` is created by `/sdd-execute`), and the environment needs of the
+  Steps 10+11+12 unit (a database or CI artifact for the stored set, `pnpm install`).
+- Feature 369 `strategy-eval-projection` cites this spec's seam, not its step numbers; if any
+  369 artifact names a 368 step number, use the old → new map.
