@@ -90,3 +90,15 @@
   - Reading a year of bars for the whole universe marks it warm in marketdata (368 D-23, D-57).
   - The fundamentals guard and the blend-strategy universe restriction vs "every active strategy on
     every universe symbol" (FR-2).
+
+## Session 2026-11-28T14:45Z — sdd-design, pre-debate gate
+
+- **OPERATOR DECISION (read scope): "Readiness now, opportunities at cutover"** — D-1. Narrows FR-8
+  to the two readiness RPCs. Rejected: both read paths here (R-1); no read path here (R-2).
+- **OPERATOR DECISION (bar reads): "Add a non-warming bars read"** — D-2. Marketdata becomes an
+  affected service with an additive proto change. Rejected: accept the warm set growing (R-3).
+- **OPERATOR DECISION (parity source): "Observe only, no live-loop change"** — D-3. Rejected: a
+  decision log in the live loop (R-4).
+- Standing choice from 368 applies by analogy (author reading, to be confirmed at the first gate):
+  run rounds while they make progress, each with a different lens, and return at the approval gate
+  or when a round needs a product decision.
