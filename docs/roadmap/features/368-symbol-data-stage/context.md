@@ -258,3 +258,51 @@
 - `BackfillFundamentals` duration unmeasured — staging verification step.
 - Deploy order: marketdata before analysis, or captured bars are NULL — spec must state it.
 - Missed session, abandoned run, missed finality check — 369's design must tolerate them.
+
+## Session 2026-11-28T09:30Z — sdd-spec
+
+- Generated implementation-spec.md with 30 steps. Status → implementation-ready. Timestamp is the
+  system clock at write time.
+- Tree: ccr-d10c1761-fxpr1d@b37b95de = origin/main-dev@bc497728 plus docs-only commits.
+  `origin/main-dev` is one docs-only commit ahead (`df9532c8`); it was not merged. Same deviation
+  from `docs/sdd/tree-freshness.md` as the earlier phases (the feature directory exists only on the
+  harness branch). No source file differs from `origin/main-dev`.
+- Discovery was done inline (no `codebase-discovery` subagents): recon.md's map was reused and only
+  what it did not cover was searched.
+- Step order: proto (1-2), marketdata (3-9), config and reader (10-12), analysis `032` (13), seams
+  (14-17), job kinds (18-25), ensure (26-27), wiring (28-29), docs (30). Three atomic units:
+  Steps 1+2, Steps 7+8, Steps 10+11+12.
+- Key codebase findings:
+  - Next numbers: config `062` (`061_analysis_pipeline_keys` is the latest), analysis `032`
+    (`031_pipeline_job_graph` is the latest).
+  - `scripts/migration-rerun.py:1114` hard-codes the analysis tip `31`; Step 13 changes it.
+  - `tests/test_config_read_classification.py:62-66` (`FR3_KEYS`) and
+    `tests/test_config_zero_clamps.py:70-74` (`AC6_ROWS`) must gain
+    `pipeline.data_stage_delay_minutes` (Step 12).
+  - The marketdata `BackfillBars` handler wraps every service error as `Internal`
+    (`internal/handler/marketdata_handler.go:124-127`), so the `return_bars` 7-day cap is checked in
+    the handler beside `symbols required` (spec decision S-6).
+  - Probe, reverted: flipping `snapshotSource()`'s default alone panics the `internal/service` test
+    package at `TestFundamentals_ProviderFollowsLiveConfig_AC7`; the code flip and the test pins are
+    one unit. The shared builder to pin is `enabledCfg` (`marketdata_service_test.go:340`, 32 call
+    sites).
+  - Probe, reverted: flipping only the stored `default_value` of `fundamentals.snapshot_source` in
+    `scripts/config-wiring-stored.json` keeps `check-config-wiring.mjs --final` at exit 0, so the
+    code default (Step 7) and the seeded default (Step 10) may land in separate commits.
+  - `FakeJobRepo` has no `list_by_run`; `BoundedTxn` has no `executemany`; the handler contract
+    forbids `db_pool` names and an `asyncio.timeout` around a `.db(` block in `app/jobs/`.
+  - No descriptor-parity guard covers `Bar`, `BackfillBarsRequest` or `BackfillBarsResponse`.
+  - `buf` is not installed in this sandbox; `xstockstrat-config` has no `node_modules`.
+- Spec-time decisions (implementation-spec.md § Spec-time decisions, S-1 to S-12), each open to
+  challenge at `/sdd-review impl-spec`: kind names and key helpers live in
+  `app/jobs/data_stage.py`; a `DataStageRuns` class holds the run-row statements so the ensure can
+  be tested on a virtual clock; `GetLastClosedSession` with no `as_of` uses the server time; a woken
+  universe or shard job returns `Succeeded`; `timeout` is passed to a stub only when set.
+- Open points for the operator (not decided):
+  - O-1: the stored description of `fundamentals.snapshot_source` will still say "fail-safe to
+    vendor" after the code default changes. Default in the spec: leave it (design § 13 changes
+    `default_value` only).
+  - O-2: `feature/symbol-data-stage` does not exist on `origin` yet; the proto verification
+    compares against it.
+- Launch checklist items that are not steps: the 3-session staging verification (design § 9.7) and
+  creating the Grafana drift rule.

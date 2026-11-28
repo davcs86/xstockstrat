@@ -13,6 +13,7 @@
 | 2026-11-28 | `idea` → `draft` | /sdd-story | Product spec generated. Feature 2 of 9 in `docs/roadmap/program-job-graph-analysis-pipeline.md` |
 | 2026-11-28 | `draft` → `spec-ready` | /sdd-review | Product spec approved (round 1 failed on criteria 6 and 8/9; round 2 passed with advisory warnings, fixed in the spec). Overlap clean |
 | 2026-11-28 | `spec-ready` → `design-approved` | /sdd-design | Design debated (5 rounds, full; round cap lifted by the operator) and approved; recon.md + debate.md + design.md written. Product spec and scenarios amended during the debate with operator sign-off (FR-13, FR-14 and `@AC-24` to `@AC-66` added) |
+| 2026-11-28 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 30 steps |
 
 ---
 
@@ -23,7 +24,7 @@
 - [Recon](recon.md) — grounded codebase dossier
 - [Debate Register](debate.md) — 67 decisions, 28 rejected alternatives, 42 objections
 - [Design](design.md) — approved architecture
-- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec symbol-data-stage`_
+- [Implementation Spec](implementation-spec.md) — 30 numbered steps with codebase evidence
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
@@ -38,9 +39,8 @@ program feature 3 evaluates from. EDGAR becomes the default fundamentals source.
 
 ## Reviewers
 
-_(Auto-populated from docs/runbooks/reviewer-registry.md based on affected services and
-change types. Override as needed for this feature. Snapshot finalized at /sdd-spec time —
-re-run /sdd-spec if the registry changes.)_
+_(Snapshot finalized by `/sdd-spec` on 2026-11-28 from `docs/runbooks/reviewer-registry.md` and the
+`**Reviewers**` lines of the implementation spec's 30 steps. Stable unless `/sdd-spec` re-runs.)_
 
 | Role | Review Focus |
 |---|---|
@@ -48,8 +48,8 @@ re-run /sdd-spec if the registry changes.)_
 | `xstockstrat-marketdata` service owner | OHLCV ingestion integrity, TimescaleDB hypertable partitioning, Alpaca feed idempotency |
 | `xstockstrat-config` service owner | Config key naming (`<service>.<category>.<key>`), environment (`production`/`staging`) / global-per-user scoping, secret encryption + redaction, WatchConfig stream stability |
 | DBA | Migration NNN numbering (no gaps, no conflicts), up+down pair present, hypertable partitioning strategy, index correctness, run-order compliance with `scripts/db-migrate.sh` |
-| Proto Reviewer | Field number uniqueness per message, no breaking changes without deprecation comment, `buf lint` passes, `buf breaking` passes against dev trunk |
+| Proto Reviewer | Field number uniqueness per message, no breaking changes without deprecation comment, `buf lint` passes, `buf breaking` passes against dev trunk, BSR publication readiness |
 
 ## Next Action
 
-`/sdd-spec symbol-data-stage` — generate implementation spec from the approved design
+`/sdd-review symbol-data-stage impl-spec` — validate implementation spec, then `/sdd-execute symbol-data-stage`
