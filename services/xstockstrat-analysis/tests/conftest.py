@@ -15,6 +15,7 @@ import subprocess
 import sys
 import tempfile
 import types
+import uuid
 from unittest.mock import AsyncMock, MagicMock
 
 import asyncpg
@@ -578,6 +579,300 @@ async def shift_pipeline_job(pool, job_id, **columns_to_seconds):
         job_id,
         *columns_to_seconds.values(),
     )
+
+
+async def seed_blocked_parents(pool, n):
+    """Insert ``n`` waiting parents, each with a dead child (lower id) and a failed child."""
+    await pool.execute(
+        """
+INSERT INTO analysis.pipeline_jobs
+       (kind, subject, epoch, run_id, lane, state, next_attempt_at, finished_at, error_class)
+SELECT 'probe', 'dead-' || g, 'e', 'r', 10, 'dead', now(), now(), 'transient'
+  FROM generate_series(1, $1::int) g;
+INSERT INTO analysis.pipeline_jobs
+       (kind, subject, epoch, run_id, lane, state, next_attempt_at, finished_at, error_class)
+SELECT 'probe', 'failed-' || g, 'e', 'r', 10, 'failed', now(), now(), 'permanent'
+  FROM generate_series(1, $1::int) g;
+INSERT INTO analysis.pipeline_jobs (kind, subject, epoch, run_id, lane, state, next_attempt_at)
+SELECT 'probe', 'parent-' || g, 'e', 'r', 10, 'waiting', now() FROM generate_series(1, $1::int) g;
+INSERT INTO analysis.pipeline_job_deps (parent_id, child_id)
+SELECT p.job_id, c.job_id
+  FROM analysis.pipeline_jobs p
+  JOIN analysis.pipeline_jobs c
+    ON c.subject IN ('dead-' || substr(p.subject, 8), 'failed-' || substr(p.subject, 8))
+ WHERE p.subject LIKE 'parent-%';
+""".replace("$1::int", str(int(n)))
+    )
+
+
+class VirtualTime:
+    """Feature 367: the running loop's clock, moved only by ``advance`` (never by real time)."""
+
+    def __init__(self, loop):
+        self._loop = loop
+        self.now = loop.time()
+
+    async def _drain(self):
+        for _ in range(60):
+            await asyncio.sleep(0)
+
+    async def advance(self, seconds: float) -> None:
+        """Run every timer due within ``seconds`` in order, then stop the clock at the target."""
+        target = self.now + seconds
+        while True:
+            await self._drain()
+            due = [h.when() for h in self._loop._scheduled if not h.cancelled()]
+            nxt = min(due, default=None)
+            if nxt is None or nxt > target:
+                break
+            self.now = max(self.now, nxt)
+        self.now = target
+        await self._drain()
+
+
+@pytest.fixture
+async def virtual_time():
+    loop = asyncio.get_running_loop()
+    vt = VirtualTime(loop)
+    loop.time = lambda: vt.now
+    try:
+        yield vt
+    finally:
+        del loop.time
+
+
+class FakeJobRepo:
+    """Feature 367: an in-memory ``PipelineJobsRepository`` on the virtual clock.
+
+    ``calls`` records every method called; ``fail[method]`` is a list of exceptions raised by the
+    next calls; ``delay[method]`` is virtual seconds each call takes while it holds the lane;
+    ``omit_renewals`` makes a committed heartbeat renew nothing.
+    """
+
+    def __init__(self, clock):
+        self._clock = clock
+        self._lane = asyncio.Lock()
+        self.jobs: dict[int, dict] = {}
+        self.edges: set[tuple[int, int]] = set()
+        self.calls: list[str] = []
+        self.fail: dict[str, list] = {}
+        self.delay: dict[str, float] = {}
+        self.lane_queue_max = 0
+        self.omit_renewals = False
+        self._next_id = 1
+
+    def add(self, *, kind="probe", subject="AAPL", epoch="2026-11-27", lane=10, **fields):
+        job_id = self._next_id
+        self._next_id += 1
+        self.jobs[job_id] = {
+            "job_id": job_id,
+            "kind": kind,
+            "subject": subject,
+            "epoch": epoch,
+            "run_id": "run-2026-11-27",
+            "lane": lane,
+            "state": "ready",
+            "attempts": 0,
+            "wait_round": 0,
+            "next_at": self._clock(),
+            "lease_token": None,
+            "expires": None,
+            "verdict": None,
+            **fields,
+        }
+        return job_id
+
+    async def _enter(self, name):
+        self.calls.append(name)
+        if self.delay.get(name):
+            await asyncio.sleep(self.delay[name])
+        pending = self.fail.get(name)
+        if pending:
+            raise pending.pop(0)
+
+    def lane(self):
+        repo = self
+
+        class _Lane:
+            async def __aenter__(self):
+                repo.lane_queue_max = max(repo.lane_queue_max, len(repo._lane._waiters or ()) + 1)
+                await repo._lane.acquire()
+
+            async def __aexit__(self, *exc):
+                repo._lane.release()
+
+        return _Lane()
+
+    async def _laned(self, name, lane_held):
+        if lane_held:
+            await self._enter(name)
+            return None
+        await self._lane.acquire()
+        try:
+            await self._enter(name)
+        except BaseException:
+            self._lane.release()
+            raise
+        return self._lane
+
+    def _row(self, j):
+        keys = ("job_id", "kind", "subject", "epoch", "run_id", "lane", "attempts", "wait_round")
+        return {**{k: j[k] for k in keys}, "lease_token": j["lease_token"]}
+
+    async def claim(self, kinds, limit, lease_seconds, *, conn=None, lane_held=False):
+        held = await self._laned("claim", lane_held)
+        try:
+            now = self._clock()
+            ready = sorted(
+                (
+                    j
+                    for j in self.jobs.values()
+                    if j["state"] == "ready" and j["next_at"] <= now and j["kind"] in kinds
+                ),
+                key=lambda j: (-j["lane"], j["next_at"], j["job_id"]),
+            )[:limit]
+            for j in ready:
+                j.update(
+                    state="running",
+                    attempts=j["attempts"] + 1,
+                    lease_token=uuid.uuid4(),
+                    expires=now + lease_seconds,
+                )
+            return [self._row(j) for j in ready], now
+        finally:
+            held and held.release()
+
+    async def reap(self, max_attempts, *, conn=None):
+        held = await self._laned("reap", False)
+        try:
+            now, requeued, dead = self._clock(), 0, 0
+            for j in self.jobs.values():
+                if j["state"] == "running" and j["expires"] < now:
+                    if j["attempts"] >= max_attempts:
+                        j.update(state="dead", last_error="lease_expired")
+                        dead += 1
+                    else:
+                        j.update(state="ready", next_at=now)
+                        requeued += 1
+                    j.update(lease_token=None, expires=None)
+            return requeued, dead
+        finally:
+            held.release()
+
+    async def heartbeat(self, pairs, lease_seconds):
+        await self._enter("heartbeat")
+        now, renewed = self._clock(), set()
+        for job_id, token in [] if self.omit_renewals else pairs:
+            j = self.jobs.get(job_id)
+            if j and j["state"] == "running" and j["lease_token"] == token:
+                j["expires"] = now + lease_seconds
+                renewed.add((job_id, token))
+        return renewed, now
+
+    async def report(
+        self,
+        job_id,
+        lease_token,
+        outcome,
+        *,
+        max_attempts,
+        retry_delay_s=0,
+        verdict=None,
+        error=None,
+        lane_held=False,
+    ):
+        held = await self._laned("report", lane_held)
+        try:
+            j = self.jobs.get(job_id)
+            if not j or j["state"] != "running" or j["lease_token"] != lease_token:
+                return None
+            if outcome == "transient":
+                state = "dead" if j["attempts"] >= max_attempts else "ready"
+            else:
+                state = {"succeeded": "succeeded", "permanent": "failed", "verdict": "blocked"}[
+                    outcome
+                ]
+            j.update(
+                state=state,
+                lease_token=None,
+                expires=None,
+                verdict=verdict,
+                last_error=error,
+                next_at=self._clock() + retry_delay_s,
+            )
+            return state
+        finally:
+            held and held.release()
+
+    async def park(self, job_id, lease_token, children, *, lane_held=False):
+        held = await self._laned("park", lane_held)
+        try:
+            j = self.jobs.get(job_id)
+            if not j or j["state"] != "running" or j["lease_token"] != lease_token:
+                return False
+            for kind, subject, epoch, lane in sorted(children, key=lambda c: c[:3]):
+                found = [
+                    c
+                    for c in self.jobs.values()
+                    if (c["kind"], c["subject"], c["epoch"]) == (kind, subject, epoch)
+                ]
+                child = (
+                    found[0]["job_id"]
+                    if found
+                    else self.add(kind=kind, subject=subject, epoch=epoch, lane=lane or j["lane"])
+                )
+                self.edges.add((job_id, child))
+            j.update(state="waiting", lease_token=None, expires=None, attempts=j["attempts"] - 1)
+            return True
+        finally:
+            held and held.release()
+
+    async def settle_batch(self, *, conn=None):
+        held = await self._laned("settle_batch", False)
+        try:
+            woken = blocked = 0
+            for j in self.jobs.values():
+                if j["state"] != "waiting":
+                    continue
+                kids = [self.jobs[c] for p, c in sorted(self.edges) if p == j["job_id"]]
+                bad = [c for c in kids if c["state"] in ("failed", "dead", "blocked")]
+                if bad:
+                    j.update(state="blocked", verdict=bad[0]["verdict"] or "dependency_failed")
+                    blocked += 1
+                elif all(c["state"] == "succeeded" for c in kids):
+                    j.update(state="ready", wait_round=j["wait_round"] + 1, next_at=self._clock())
+                    woken += 1
+            return woken, blocked, False
+        finally:
+            held.release()
+
+    async def enqueue(self, kind, subject, epoch, *, run_id, lane, conn=None):
+        held = await self._laned("enqueue", False)
+        try:
+            for j in self.jobs.values():
+                if (j["kind"], j["subject"], j["epoch"]) == (kind, subject, epoch):
+                    return j["job_id"], False
+            return self.add(
+                kind=kind, subject=subject, epoch=epoch, lane=int(lane), run_id=run_id
+            ), True
+        finally:
+            held.release()
+
+    async def ready_stats(self, *, conn=None):
+        held = await self._laned("ready_stats", False)
+        try:
+            now, stats = self._clock(), {10: (0, 0.0), 20: (0, 0.0)}
+            for lane in stats:
+                due = [
+                    j["next_at"]
+                    for j in self.jobs.values()
+                    if j["lane"] == lane and j["state"] == "ready" and j["next_at"] <= now
+                ]
+                if due:
+                    stats[lane] = (len(due), now - min(due))
+            return stats
+        finally:
+            held.release()
 
 
 @pytest.fixture

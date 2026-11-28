@@ -1070,7 +1070,7 @@ python3 ../../scripts/check-watcher-copies.py ../..
 
 ### Step 12 — test: worker runtime, takeover invariants and the handler contract
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_job_graph_worker.py` — create
@@ -1655,3 +1655,8 @@ _Populated by /sdd-execute as implementation proceeds._
   `PipelineJobsRepository.claim` gained the `lane_held=False` keyword `report` and `park` already have
   (one line in `app/repositories/pipeline_jobs.py`, outside Step 11's **Files**). **Disposition**:
   required by the step's own instructions; staged with Step 11 and reported at the feature-end checkpoint.
+- **Step 12 (execute, 2026-11-27) — shared seed helper.** The 1 200-parent seed SQL gained a second
+  consumer (Step 12's one-tick settle test), so it moved from Step 8's test into
+  `tests/conftest.py:seed_blocked_parents` and Step 8's test now calls it (`tests/test_pipeline_jobs_real_pg.py`
+  is outside Step 12's **Files**). **Disposition**: C-13 consolidation of this feature's own test code; no
+  behaviour change; reported at the feature-end checkpoint.

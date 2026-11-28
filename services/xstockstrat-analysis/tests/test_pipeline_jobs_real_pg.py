@@ -16,7 +16,12 @@ from app.repositories.pipeline_jobs import (
     prune_batch,
     prune_candidates_sql,
 )
-from tests.conftest import insert_pipeline_job, pipeline_pool, shift_pipeline_job
+from tests.conftest import (
+    insert_pipeline_job,
+    pipeline_pool,
+    seed_blocked_parents,
+    shift_pipeline_job,
+)
 
 pytestmark = pytest.mark.real_pg
 
@@ -522,26 +527,7 @@ async def test_ten_thousand_child_park_and_settle_finish_within_five_seconds(pip
 
 async def test_twelve_hundred_settleable_parents_take_three_full_or_partial_batches(pipeline_pg):
     repo = PipelineJobsRepository(pipeline_pg)
-    await pipeline_pg.execute(
-        """
-INSERT INTO analysis.pipeline_jobs
-       (kind, subject, epoch, run_id, lane, state, next_attempt_at, finished_at, error_class)
-SELECT 'probe', 'dead-' || g, 'e', 'r', 10, 'dead', now(), now(), 'transient'
-  FROM generate_series(1, 1200) g;
-INSERT INTO analysis.pipeline_jobs
-       (kind, subject, epoch, run_id, lane, state, next_attempt_at, finished_at, error_class)
-SELECT 'probe', 'failed-' || g, 'e', 'r', 10, 'failed', now(), now(), 'permanent'
-  FROM generate_series(1, 1200) g;
-INSERT INTO analysis.pipeline_jobs (kind, subject, epoch, run_id, lane, state, next_attempt_at)
-SELECT 'probe', 'parent-' || g, 'e', 'r', 10, 'waiting', now() FROM generate_series(1, 1200) g;
-INSERT INTO analysis.pipeline_job_deps (parent_id, child_id)
-SELECT p.job_id, c.job_id
-  FROM analysis.pipeline_jobs p
-  JOIN analysis.pipeline_jobs c
-    ON c.subject IN ('dead-' || substr(p.subject, 8), 'failed-' || substr(p.subject, 8))
- WHERE p.subject LIKE 'parent-%';
-"""
-    )
+    await seed_blocked_parents(pipeline_pg, 1200)
     assert BATCH_SIZE == 500
     batches = [await repo.settle_batch() for _ in range(3)]
     assert batches == [(0, 500, True), (0, 500, True), (0, 200, False)]

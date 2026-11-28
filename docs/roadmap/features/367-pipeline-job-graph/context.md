@@ -560,3 +560,26 @@ Carried from design.md § Open Risks; each needs an owner at `/sdd-spec` or late
   `services/xstockstrat-analysis/app/jobs/__init__.py`, and (deviation)
   `services/xstockstrat-analysis/app/repositories/pipeline_jobs.py` (`claim(lane_held=)`).
 - Deviations: `claim(lane_held=)` (Deviation Log).
+
+### Step 12 — worker runtime, takeover invariants and the handler contract [done]
+- `tests/conftest.py`: `VirtualTime` + the `virtual_time` fixture (`await advance(s)` runs due timers
+  in order; the loop's clock never follows real time), `FakeJobRepo` (in-memory repository on the
+  virtual clock: `calls`, `fail`, `delay`, `omit_renewals`, `lane_queue_max`), `seed_blocked_parents`.
+- `tests/test_job_graph_worker.py` (24): `start_listening`, `@AC-14`, `@AC-16`, `@AC-17`, `@AC-3`
+  takeover ≤ lease + 10 + 4 s, stop-in-block abort + refused block, unresponsive handler keeps its slot,
+  report retry keeps its slot, disabled blocked claim loop, renewal after a lowered lease, the claim
+  delay ladder, `ParkRace` re-runs only the park, the 300 s give-up, no false loss for a reporting
+  attempt, the four lane invariants, the daily ensure (and its marker on failure), maintenance steps
+  guarded independently.
+- `tests/test_job_graph_worker_real_pg.py` (7): `@AC-2`, `@AC-8`, `@AC-9`, the in-flight-heartbeat
+  runner (S-7), `@AC-6` + `@AC-5`, `@AC-7`, 1 200 parents in one maintenance tick.
+- `tests/test_job_handler_contract.py` (17): the AST checker, one synthetic offender per rule (15),
+  a compliant source, and every file under `app/jobs/`.
+- TDD: red — with the claim tick's two `worker_enabled` re-reads removed, `@AC-17` (second job still
+  ready, attempts 0), `@AC-14` and the disabled-blocked-loop test failed; with `start_listening`
+  emptied, its listening case failed; with the bare-`except` rule removed, its contract case failed.
+  Green — the three files 48 passed; full suite 2138 passed, coverage 92.30%; ruff clean; no non-zero
+  `asyncio.sleep` in the unit file; no real-PG test skipped.
+- Files modified: `services/xstockstrat-analysis/tests/{conftest,test_job_graph_worker,test_job_graph_worker_real_pg,test_job_handler_contract}.py`,
+  and (deviation) `services/xstockstrat-analysis/tests/test_pipeline_jobs_real_pg.py`.
+- Deviations: shared seed helper (Deviation Log).
