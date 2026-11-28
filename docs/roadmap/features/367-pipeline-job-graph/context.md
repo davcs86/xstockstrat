@@ -686,3 +686,17 @@ Carried from design.md § Open Risks; each needs an owner at `/sdd-spec` or late
 - Post-merge gates: wiring `--final` and `--doc-check` exit 0; migration order ok; watcher copies,
   context map and ledger guard clean; config 464 passed (c8 ≥ 40, lint 0 errors); analysis 2162 passed,
   coverage 92.28%, ruff clean.
+
+## Session 2026-11-28 — sdd-execute integration
+
+- **OPERATOR (feature-end checkpoint): "Proceed"** — open the integration PR.
+- **OPERATOR (C-16 promotion): "Yes, as planned"** — new suites
+  `services/xstockstrat-analysis/acceptance/pipeline-job-graph.feature` (`@AC-1`..`@AC-18` tagged
+  `@feature-367`, plus the EXTEND cases of `@AC-4 @feature-259` and `@AC-3 @feature-337`) and
+  `services/xstockstrat-config/acceptance/pipeline-job-graph.feature` (EXTEND of `@AC-14 @feature-295`),
+  and one scenario appended to `docs/sdd/business-rules/platform.feature` (EXTEND of `@AC-6
+  @feature-244`). No existing scenario edited. EXTEND cases carry a comment naming the rule extended
+  (no tag convention existed).
+- Defect reports (ALL-DONE 2.6): none in scope — design.md records no C-16 CHANGE.
+- Merge-order gate: 367 has no Blocking Dependencies row; the 367 ↔ 345 note is non-blocking and
+  345 has merged with `060`, so `061` stands.
