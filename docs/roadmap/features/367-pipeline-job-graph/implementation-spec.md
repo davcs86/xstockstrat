@@ -1422,7 +1422,7 @@ uv run --extra dev pytest tests/test_pipeline_telemetry.py -q -rs | grep -c SKIP
 
 ### Step 17 — service: startup wiring (control pool, worker, three boot tasks)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/main.py` — modify
@@ -1472,7 +1472,7 @@ uv run --extra dev pytest tests/test_pipeline_telemetry.py -q -rs | grep -c SKIP
 
 ### Step 18 — test: boot wiring
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_supervision.py` — modify

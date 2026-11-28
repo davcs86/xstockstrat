@@ -19,6 +19,9 @@ _BOOT_TASK_NAMES = (
     "opportunity-refresh",
     "readiness-materializer",
     "template-intent-sweep",
+    "pipeline-claim",
+    "pipeline-maintenance",
+    "pipeline-heartbeat",
 )
 
 

@@ -638,3 +638,25 @@ Carried from design.md § Open Risks; each needs an owner at `/sdd-spec` or late
   `services/xstockstrat-analysis/app/repositories/pipeline_jobs.py`,
   `services/xstockstrat-analysis/tests/{test_pipeline_telemetry,test_telemetry_allowlist,test_telemetry_instruments,test_analysis_tick_telemetry}.py`.
 - Deviations: none.
+
+### Steps 17+18 — startup wiring and boot tests [done]
+- `app/main.py`: `_create_pool(dsn, **kwargs)` holds the one copy of the PgBouncer
+  `statement_cache_size` rule; `_create_pools(dsn)` builds the service pool (`min_size=1`,
+  `DB_POOL_MAX` default 2) and the control pool (`min_size=0`, `max_size=2`,
+  `reset=control_pool_reset`, fixed). `serve()` starts with `db_pool = control_pool = None`, calls
+  `register_pipeline_gauges()` right after `init_telemetry()`, and inside the `db_pool` block builds
+  `JobGraphSettings`, `PipelineJobsRepository(control_pool)`, `build_registry` and `JobGraphWorker`,
+  calls `start_listening()` and spawns `pipeline-claim`, `pipeline-maintenance`, `pipeline-heartbeat`.
+- `tests/test_supervision.py`: three names appended to `_BOOT_TASK_NAMES`.
+  `tests/test_pipeline_boot.py` (7): the cache rule for four `DB_PGBOUNCER` values, the control pool
+  fixed at 2 with `DB_POOL_MAX=7`, gauge registration after init, disjointness from `job_schedule` /
+  `DurableSchedule`.
+- TDD: red — the three new `spawn(` calls turned `test_boot_sites_are_spawned_and_retained` red
+  (`assert 11 == 8`); against trunk's `main.py` the boot tests failed (`module 'app.main' has no
+  attribute '_create_pool'`). Green — the five files 107 passed; full suite 2162 passed, coverage
+  92.28%; ruff clean; 11 `spawn(`; no change to `docker-compose.yml`, `.do/` or
+  `deploy/homelab/compose.yml`.
+- Files modified: `services/xstockstrat-analysis/app/main.py`,
+  `services/xstockstrat-analysis/tests/test_supervision.py`,
+  `services/xstockstrat-analysis/tests/test_pipeline_boot.py`.
+- Deviations: none.

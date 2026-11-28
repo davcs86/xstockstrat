@@ -19,8 +19,9 @@ from grpc_reflection.v1alpha import reflection
 from app import mtls
 from app.config.watcher import ConfigWatcher
 from app.handlers.servicer import AnalysisServicer
+from app.repositories.read_budget import control_pool_reset
 from app.supervision import spawn
-from app.telemetry import init_telemetry, server_interceptors
+from app.telemetry import init_telemetry, register_pipeline_gauges, server_interceptors
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
 log = logging.getLogger(__name__)
@@ -37,8 +38,26 @@ TRADING_ENDPOINT = os.environ.get("TRADING_ENDPOINT", "xstockstrat-trading:50051
 DATABASE_URL = os.environ.get("DATABASE_URL", "")
 
 
+async def _create_pool(dsn, **kwargs):
+    return await asyncpg.create_pool(
+        dsn,
+        # Under PgBouncer transaction mode asyncpg's prepared-statement cache must be disabled
+        # (unsafe when consecutive queries land on different backend connections).
+        statement_cache_size=0 if os.environ.get("DB_PGBOUNCER") in ("true", "1") else 100,
+        **kwargs,
+    )
+
+
+async def _create_pools(dsn):
+    """The service pool and the pipeline job graph's control pool (fixed size, not env-tunable)."""
+    pool = await _create_pool(dsn, min_size=1, max_size=int(os.environ.get("DB_POOL_MAX", "2")))
+    control_pool = await _create_pool(dsn, min_size=0, max_size=2, reset=control_pool_reset)
+    return pool, control_pool
+
+
 async def serve():
     init_telemetry()
+    register_pipeline_gauges()
 
     cfg_watcher = ConfigWatcher(endpoint=CONFIG_ENDPOINT, namespace="analysis")
     await cfg_watcher.wait_for_snapshot(timeout_seconds=90)
@@ -50,17 +69,10 @@ async def serve():
     await md_cfg_watcher.wait_for_snapshot(timeout_seconds=90)
     log.info("marketdata config snapshot received")
 
-    db_pool = None
+    db_pool = control_pool = None
     if DATABASE_URL:
-        db_pool = await asyncpg.create_pool(
-            DATABASE_URL,
-            min_size=1,
-            max_size=int(os.environ.get("DB_POOL_MAX", "2")),
-            # Under PgBouncer transaction mode asyncpg's prepared-statement cache must be disabled
-            # (unsafe when consecutive queries land on different backend connections).
-            statement_cache_size=0 if os.environ.get("DB_PGBOUNCER") in ("true", "1") else 100,
-        )
-        log.info("analysis DB pool created")
+        db_pool, control_pool = await _create_pools(DATABASE_URL)
+        log.info("analysis DB pools created")
 
     servicer = AnalysisServicer(
         config_watcher=cfg_watcher,
@@ -227,6 +239,24 @@ async def serve():
         # ── Template intent reconcile sweep (feature 224) ──
         spawn(servicer.run_template_intent_sweep_forever(), "template-intent-sweep", forever=True)
         log.info("template intent sweep started")
+
+        # ── Pipeline job graph (feature 367) ──
+        from app.engine.job_graph import JobGraphSettings, JobGraphWorker
+        from app.jobs import build_registry
+        from app.repositories.pipeline_jobs import PipelineJobsRepository
+
+        pipeline_settings = JobGraphSettings(cfg_watcher)
+        pipeline_worker = JobGraphWorker(
+            PipelineJobsRepository(control_pool),
+            db_pool,
+            pipeline_settings,
+            build_registry(pipeline_settings),
+        )
+        pipeline_worker.start_listening()
+        spawn(pipeline_worker.run_claim_forever(), "pipeline-claim", forever=True)
+        spawn(pipeline_worker.run_maintenance_forever(), "pipeline-maintenance", forever=True)
+        spawn(pipeline_worker.run_heartbeat_forever(), "pipeline-heartbeat", forever=True)
+        log.info("pipeline job graph worker started")
 
     await grpc_server.wait_for_termination()
 
