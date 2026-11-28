@@ -36,7 +36,7 @@ import {
 } from './fixtures/alerts';
 import { PortfolioService } from '@xstockstrat/proto/portfolio/v1/portfolio_pb';
 import { TradingService } from '@xstockstrat/proto/trading/v1/trading_pb';
-import { REFRESH_STALL_TOKEN, signTestJwt } from './helpers/auth';
+import { REFRESH_STALL_TOKEN, signTestJwt, TEST_REFRESH_TOKEN } from './helpers/auth';
 import {
   HEADER_ACCESS_SCOPE,
   HEADER_INTERNAL_CALLER,
@@ -303,7 +303,7 @@ export async function startMockBackend(): Promise<void> {
       }
       return {
         accessToken: testAccessToken,
-        refreshToken: 'test-refresh-token',
+        refreshToken: TEST_REFRESH_TOKEN,
         claims: { userId: TEST_USER_ID, email: TEST_USER_EMAIL, roles: [] },
       };
     },
@@ -315,7 +315,7 @@ export async function startMockBackend(): Promise<void> {
       }
       return {
         accessToken: testAccessToken,
-        refreshToken: 'test-refresh-token',
+        refreshToken: TEST_REFRESH_TOKEN,
         claims: { userId: TEST_USER_ID, email: TEST_USER_EMAIL, roles: [] },
       };
     },
@@ -330,7 +330,7 @@ export async function startMockBackend(): Promise<void> {
       ssoRefusal(ssoStubState.issueRefusal);
       return {
         accessToken: await signTestJwt([], { id: req.userId, email: TEST_USER_EMAIL }),
-        refreshToken: 'test-refresh-token',
+        refreshToken: TEST_REFRESH_TOKEN,
         claims: { userId: req.userId, email: TEST_USER_EMAIL, roles: [] },
       };
     },

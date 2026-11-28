@@ -123,8 +123,10 @@ export async function revokeToken(token: string): Promise<void>;
 
 - Protect all routes **except** `/auth/login`, `/auth/oauth-login`, `/api/auth/login`, `/api/health`, `/health`, and Next.js asset paths.
 - **Matcher must include `/` explicitly** — the regex `/((?!...).*)` does not match the bare root. See `docs/patterns/nextjs-frontends.md` for the canonical matcher.
+- Every pass-through (public paths included) **deletes inbound `x-user-id` / `x-access-scope`** from the forwarded
+  request (feature 370): UI handlers never see a client-sent identity header. Identity comes from the session cookie.
 - If `getSessionFromRequest` returns claims → allow request, inject `x-trace-id` upstream.
-- If access token is within `ACCESS_TOKEN_REFRESH_THRESHOLD_SECONDS` of expiry → read the `refresh_token` cookie and call `refreshSession()` from `@/lib/identity` **in-process** (Node.js runtime, feature 128), then set the rotated cookies on the returned `NextResponse` via `setSessionCookies`; on a null result, redirect to `/auth/login` and `clearSessionCookies`. Do **not** self-`fetch` `/api/auth/refresh` — that loopback (`buildInternalRefreshUrl`, PR #925) was removed by feature 128.
+- If access token is within `ACCESS_TOKEN_REFRESH_THRESHOLD_SECONDS` of expiry → read the `refresh_token` cookie and call `refreshSession()` from `@/lib/identity` **in-process** (Node.js runtime, feature 128), then set the rotated cookies on the returned `NextResponse` via `setSessionCookies` **and** rewrite the forwarded request's `cookie` header to the rotated tokens, so the handler never sees the refresh token identity just revoked (feature 370); on a null result, redirect to `/auth/login` and `clearSessionCookies`. Do **not** self-`fetch` `/api/auth/refresh` — that loopback (`buildInternalRefreshUrl`, PR #925) was removed by feature 128.
 - Otherwise → redirect to `/auth/login?redirect=<encoded pathname>`. The redirect target is the **unified** login page at the domain root, so build it with `new URL('/auth/login', req.url)` — do **not** clone `req.nextUrl` and set `pathname`, because `req.nextUrl` carries the basePath and would yield `/trader/auth/login`.
 
 ---
@@ -144,12 +146,17 @@ UI's protected-resource document in `oidc`. `APP_URL` is the exact browser origi
   (PKCE verifier, state, nonce, redirect) into an `sso_txn_<sha256(state)>` cookie (JWE keyed from `JWT_SECRET`,
   path `/api/auth/sso/callback`, 600 s) and 303s to the issuer. `GET /api/auth/sso/callback` exchanges the code
   (`src/lib/oidcClient.ts`), then calls `ResolveExternalIdentity` and `IssueSessionForUser` with one `x-trace-id`
-  and sets the normal session cookies. Sign-in failures redirect to `/auth/login?error=<code>` (`src/lib/ssoErrors.ts`).
+  and sets the normal session cookies. Sign-in failures redirect to `/auth/login?error=<code>` (`src/lib/ssoErrors.ts`);
+  every failure after the transaction cookie is opened expires it (feature 370). Identity refuses both RPCs in `local`
+  (FAILED_PRECONDITION `sso disabled`).
 - **Link SSO** (`both` only): `/accounts/sso` calls `GET /accounts/api/sso`, `POST /accounts/api/sso/link` and
   `POST /accounts/api/sso/confirm` through `apiFetch` (`src/lib/authRedirect.ts`), never bare `fetch`
-  (ledger `fails.md:4251`). The link callback requires a fresh `auth_time` (`prompt=login`, `max_age=1`) and seals
-  the issuer identity into the `sso_link` cookie (path `/`, the transaction's absolute expiry); confirm sends it with
-  the user's password to `LinkExternalIdentity`.
+  (ledger `fails.md:4251`). Link start binds the transaction to SHA-256 of the session's `refresh_token` (identity's
+  `token_hash`), rotating the session first when its access token has under 600 + 60 s left; an access-token TTL
+  below 660 s refuses the link start (503 `failed`, WARN `sso_link_refused` `access_ttl_too_short`). The link
+  callback requires a fresh `auth_time` (`prompt=login`, `max_age=1`) and seals the issuer identity and that hash into
+  the `sso_link` cookie (path `/accounts/api/sso`, the transaction's absolute expiry); confirm compares the hash with
+  the live `refresh_token` in constant time and sends the user's password to `LinkExternalIdentity` (feature 370).
 - **Logout** (`/api/auth/logout`): step 0 refuses a present `Origin` that is not `APP_URL` with 403 (no cookie
   change); then `verifyAccessTokenForLogout`, `RevokeToken` only for a verified token, and in `both`/`oidc` the
   issuer logout URL (`src/lib/ssoLogout.ts`); it clears the session and `sso_link` cookies and answers

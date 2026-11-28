@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { addAuthCookie } from '../helpers/auth';
+import { addAuthCookie, TEST_REFRESH_TOKEN } from '../helpers/auth';
 import {
   expectFocusOnMarkedTrigger,
   expectRowMenuSettled,
@@ -122,7 +122,7 @@ test.describe('Accounts — My Authorized Apps', () => {
     await expect(page.getByText('Claude.ai (E2E)')).toBeVisible();
 
     const html = await page.content();
-    expect(html).not.toContain('test-refresh-token');
+    expect(html).not.toContain(TEST_REFRESH_TOKEN);
     expect(html.toLowerCase()).not.toContain('token_hash');
   });
 });

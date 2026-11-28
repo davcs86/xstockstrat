@@ -1,6 +1,6 @@
 # Implementation Spec: fix-sso-review-hardening
 
-**Status**: `pending`
+**Status**: `done`
 **Created**: 2026-11-28
 **Feature**: `docs/roadmap/features/370-fix-sso-review-hardening/feature.md`
 **Total Steps**: 6
@@ -28,7 +28,7 @@ AC-8, AC-9 → Step 4 · AC-10 → Step 5.
 
 ### Step 1 — service+test: UI middleware strips identity headers and forwards rotated cookies
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/middleware.ts` — modify
@@ -51,7 +51,7 @@ read Next's `x-middleware-request-*` / `x-middleware-override-headers` response 
 
 ### Step 2 — service+test: identity refuses IssueSessionForUser / ResolveExternalIdentity in `local`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-identity`
 **Files**:
 - `services/xstockstrat-identity/src/grpc/identityServiceImpl.ts` — modify
@@ -70,7 +70,7 @@ read Next's `x-middleware-request-*` / `x-middleware-override-headers` response 
 
 ### Step 3 — service+test: link transaction bound to the session's refresh-token hash
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/ssoTxn.ts` — modify (`session_hash` on the link txn and `SsoLink`; `sessionHash()`; `sessionHashMatches()`)
@@ -94,7 +94,7 @@ read Next's `x-middleware-request-*` / `x-middleware-override-headers` response 
 
 ### Step 4 — service+test: SSO cookie hygiene
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/api/auth/sso/callback/route.ts` — modify
@@ -114,7 +114,7 @@ read Next's `x-middleware-request-*` / `x-middleware-override-headers` response 
 
 ### Step 5 — service+test: agent JWKS skips non-signing keys
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/jwks.py` — modify
@@ -131,7 +131,7 @@ read Next's `x-middleware-request-*` / `x-middleware-override-headers` response 
 
 ### Step 6 — docs: behaviour docs and 345 context
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/`
 **Files**:
 - `docs/patterns/frontend-auth.md` — modify (middleware strips identity headers; rotated cookies forwarded)
@@ -147,4 +147,9 @@ read Next's `x-middleware-request-*` / `x-middleware-override-headers` response 
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+| Step | Deviation | Reason |
+|---|---|---|
+| 2 | `sso disabled` joins the `resolve` and `session` refusal sets in all four mirrors (identity `EXTERNAL_IDENTITY_REFUSALS`, `scripts/testdata/oidc-issuer-vectors.json`, UI `SSO_REFUSALS`, agent `RESOLVE_REFUSALS`); the UI gains `sessionRefusalCode` and the callback maps an IssueSession refusal through it (was: any FAILED_PRECONDITION → `inactive`) | D-123 declares these sets the only FAILED_PRECONDITION details; a mode-change window would otherwise show "account inactive" |
+| 2 | Ten existing Resolve/Issue tests now pass `auth.mode` `both` | they relied on the absent-key default, which is `local` |
+| 3 | e2e `addSessionCookies` / `TEST_REFRESH_TOKEN` (`e2e/helpers/auth.ts`, catalogued in `INVENTORY.md`); the Link SSO cases in `e2e/sso/sso.spec.ts` use it; the mock backend and `authorized-apps.spec.ts` use the constant | link start needs a refresh-token cookie, which every real session has; committed after Step 3 in the docs/e2e commit (an atomic-unit miss: the e2e suite was red between those two commits) |
+| 4 | the resolve/issue failures keep `loginFail` (login-only codes) with `clearTxnCookie` | `fail` is typed on codes valid for both purposes |

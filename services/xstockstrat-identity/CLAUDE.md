@@ -26,7 +26,8 @@ gRPC-only on `50058` (every `IdentityService` method; see `identity.proto`). `Li
 ### SSO (feature 345)
 
 `identity` / `auth.mode` (`local` | `both` | `oidc`) is the deployment's login mode: `oidc` refuses `AuthenticateUser`
-with `PERMISSION_DENIED` "password login disabled", and `LinkExternalIdentity` works only in `both`. The UI's web
+with `PERMISSION_DENIED` "password login disabled", `LinkExternalIdentity` works only in `both`, and
+`ResolveExternalIdentity` / `IssueSessionForUser` refuse in `local` with FAILED_PRECONDITION "sso disabled" (feature 370). The UI's web
 client is configured by the `ui/oidc.*` keys and the agent's MCP issuer by `agent/oidc.issuer`; identity reads
 neither and never talks to the issuer. Identity owns the links (`identity.external_identities`): Link SSO
 (`/accounts/sso`, password-confirmed) writes one, `ResolveExternalIdentity` maps `(issuer, subject)` to the user,
@@ -73,7 +74,7 @@ Namespace: `identity`
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `jwt.access_ttl_seconds` | int | `900` | Access token TTL (15 min) |
+| `jwt.access_ttl_seconds` | int | `900` | Access token TTL (15 min). Link SSO needs ≥ 660 (the UI's 600 s link window + 60 s refresh threshold); below that the UI refuses link start (feature 370) |
 | `jwt.refresh_ttl_seconds` | int | `2592000` | Refresh token TTL (30 days) |
 | `auth.mode` | string | `local` | `local` \| `both` \| `oidc` (feature 345). Read globally from the watcher snapshot at login, at Link, and on every watcher update; any other value reads `local` with WARN `auth_mode_invalid` once per value (`src/authMode.ts`). Set with `manage-users.py set-auth-mode`. |
 

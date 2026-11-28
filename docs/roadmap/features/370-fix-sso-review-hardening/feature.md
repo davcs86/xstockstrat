@@ -15,6 +15,7 @@
 |---|---|---|---|
 | 2026-11-28 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from defect report `2026-11-28-sso-review-hardening-nits-defect.md` |
 | 2026-11-28 | `draft` → `implementation-ready` | /sdd-spec | Implementation spec generated with 6 steps (design optional for Track C; not run) |
+| 2026-11-28 | `implementation-ready` → `code-completed` | /sdd-execute (sequential) | Steps 1–6 done on `claude/345-sso-security-nits`; integration PR to `main-dev` |
 
 ---
 
@@ -43,4 +44,4 @@ transaction bound to the session's refresh-token hash, SSO cookie hygiene, agent
 
 ## Next Action
 
-`/sdd-execute fix-sso-review-hardening sequential` — single integration PR to `main-dev`
+Integration PR review + merge by the coordinating session; the fix rides the next `/promote`

@@ -31,3 +31,21 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - The three header-copy sites are `middleware.ts:72,113,129`; four early returns forward the request untouched.
   - Only `GET /accounts/api/sso` and `POST /accounts/api/sso/confirm` read `sso_link`.
   - No session id survives `RefreshToken` rotation (both tokens rotate; the JWT carries no `sid`), hence the pre-rotation design.
+
+## Session 2026-11-28 — sdd-execute (sequential, one integration PR)
+
+- Mode entry: the coordinator's brief (one branch, one PR to `main-dev`, coordinator merges) stands in for the sequential confirmation.
+- Pass condition (stated before Step 1): every item has a test that fails on `origin/main-dev@df9532c` and passes after its fix. Then green UI typecheck, lint, `lint:dup`, test:unit and Playwright `chromium` + `chromium-sso`; identity `pnpm test` + lint; agent `pytest` + ruff.
+- RED → GREEN per step:
+  - Step 1: 10 failed (forged headers forwarded on every path, rotated cookies not forwarded) → middleware 49/49.
+  - Step 2: 4 failed (`local`/absent served both RPCs); UI callback "sso disabled" → `inactive` failed → identity 219/219; UI 55/55.
+  - Step 3: 9 failed (link/confirm) + 3 failed (callback carry) → 125/125.
+  - Step 4: 11 failed (txn cookie kept on failure, `sso_link` `Path=/`) → 800/800.
+  - Step 5: 3 failed (`use` `enc`/""/`SIG` accepted) → agent 1038 passed.
+- Final runs:
+  - UI: tsc clean; lint 0 errors; jscpd 0 clones; vitest 1144 passed / 2 skipped; `pnpm build` ok; Playwright `chromium` + `chromium-sso` 756 passed.
+  - Identity: 219/219, lint 0 errors.
+  - Agent: 1038 passed, ruff clean.
+- `[WebServer] ECONNRESET` lines appear throughout the e2e log. They are pre-existing: an unmodified `main-dev` build logs 62 over the same specs.
+- Deviations: see the implementation-spec Deviation Log. That includes the e2e fixture change landing one commit after Step 3.
+- Durable suites (C-16): no existing `@AC-*` contradicts the fixes; AC-1..AC-10 are promoted at launch by `/sdd-archiver`.
