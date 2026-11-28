@@ -123,3 +123,14 @@
 - Pending: product-spec.md and acceptance.feature amendments for D-9 to D-14 (FR-1, FR-3, FR-4,
   FR-5, FR-6, Affected Services, Config Key Changes). To be drafted when the design converges and
   shown to the operator as exact text before being applied.
+
+## Session 2026-11-28T07:30Z — sdd-design round 2
+
+- Round 2 run (lens: code-claim verification and a failure/timing walk). Register: +13 decisions
+  (D-16 to D-28), +1 rejected (R-13), 9 objections closed, 12 raised (O-19 to O-30; O-19 raised and
+  closed in the round), 2 petitions pending the operator (P-1 on D-1, P-2 on D-9). No Floor breach.
+  No un-petitioned register violation.
+- Open after the round: O-1 (drift measurement), O-4 (pending P-1), O-7 (non-filer cost), O-18
+  (seam: run-done query), O-20 to O-30.
+- Needs the operator: P-1, P-2, the meaning of the fundamentals state (O-22), and whether the
+  730-day window is a fixed invariant (O-24).

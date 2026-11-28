@@ -2,13 +2,14 @@
 
 **State**: in-debate
 **Mode**: full (round cap lifted by operator override, context.md 2026-11-28)
-**Rounds run**: 1
+**Rounds run**: 2
 
 ## Rounds
 
 | Round | Date | Run by | +D | +R | O closed | +O | Petitions | Progress |
 |---|---|---|---|---|---|---|---|---|
 | 1 | 2026-11-28 | /sdd-design | 8 (+7 at the gate, operator) | 5 (+7 at the gate) | 4 (at the gate) | 18 | 0 | yes |
+| 2 | 2026-11-28 | /sdd-design | 13 | 1 | 9 | 12 | 2 | yes |
 
 ## Settled Decisions
 
@@ -30,6 +31,19 @@
 | D-13 | 1 (gate) | Snapshotted users are the owners of at least one strategy. Operator decision 2026-11-28; narrows FR-1's "every user". | analysis `app/engine/live_loop.py:374-402`; context.md 2026-11-28 | settled |
 | D-14 | 1 (gate) | A user's universe is positions + watchlists + own signals + system-scope signals. Operator decision 2026-11-28. | `app/engine/live_loop.py:384`, `:409-413`; context.md 2026-11-28 | settled |
 | D-15 | 1 (gate) | The twelve promoted marketdata scenarios that rely on the `vendor` default (255 `@AC-1,2,3,5,6,9`; 340 `@AC-2,4`; 254 `@AC-1,2,5,7`) get an explicit Given `snapshot_source is "vendor"`; their outcomes do not change. C-16 CHANGE signed by the operator 2026-11-28. | recon.md § Existing Business Rules; context.md 2026-11-28 | settled |
+| D-16 | 2 | Bar finality: after the history fetch, one `BackfillBars` call covers session S alone, bounded by the New York calendar day of S (00:00:00 to 23:59:59 New York), and the history call ends at 23:59:59 New York of S−1. `overwrite_existing` is ignored by `BackfillBars`; the overwrite is the upsert in `InsertBars`. A symbol absent from `symbol_results` was written. A bar record requires that the S call returned written in an attempt that started at or after close + delay. | marketdata `internal/service/marketdata_service.go:1607-1621`, `:2391`; `internal/repository/marketdata_repo.go:91-93`; `internal/alpaca/client.go:422-426` | settled |
+| D-17 | 2 | The kill switch gates creation only: the ensure does not enqueue, and the universe job at round 0 succeeds without writing when the switch is off. Jobs already created run to completion; `pipeline.worker_enabled` stops execution. | analysis `app/engine/job_graph.py:725`; 367 `@AC-14/16/17` | settled |
+| D-18 | 2 | Identity: positions, watchlists and own signals use `owner_metadata(user)`; system-scope signals and every marketdata call use the system-read identity, moved from `live_loop.py` to `app/identity.py` (not copied), each with a fresh `x-trace-id` per attempt. | analysis `app/identity.py:11`; `app/engine/live_loop.py:78`; ingest `app/handlers/servicer.py:124`; marketdata `internal/service/authz.go:26-29` | settled |
+| D-19 | 2 | Universe job: an empty owner list or zero symbols succeeds without parking. Each attempt reads every owner first; if any read failed and `job.attempts < max_attempts` it raises a transient error before writing; on the last attempt it writes what was read and marks the failed users not snapshotted. Data jobs are created only by the park that commits. | `app/engine/job_graph.py:172-173`, `:297`; `app/repositories/pipeline_jobs.py:35`, `:50`, `:380-382` | settled |
+| D-20 | 2 | Retention is done by the universe job at round 0, not by `retention_prune`: session-keyed rows older than `max(30, pipeline.retention_days)` days and hole rows wholly older than the window are deleted. | `app/jobs/retention_prune.py:11`; `app/engine/job_graph.py:227` | settled |
+| D-21 | 2 | The watchlist and signal drain bodies move to one shared module and raise with a reason (`rpc` or `page_cap`). The live-loop wrappers keep today's behaviour exactly: count a failure on `rpc`, stay silent on `page_cap`. A regression test pins both. | `app/engine/live_loop.py:539`, `:591`, `:600-625` | settled |
+| D-22 | 2 | The ensure asks marketdata for the last closed session at most once per 60 s with a 2 s timeout, and enqueues only when `now >= closed_at + delay`. Only the current last closed session gets a run; a missed session gets none and its bars are filled by the next run's history fetch. | `packages/proto/marketsession/marketsession.go:66-71`; marketdata `internal/timeframe/timeframe.go:108-111` | settled |
+| D-23 | 2 | The stage calls no fundamentals snapshot RPC and no quote or bar read RPC. It therefore spends no vendor snapshot quota, marks no symbol warm, and behaves the same on the `vendor` and `edgar` sources. | marketdata `internal/service/marketdata_service.go:301`, `:651`, `:681`, `:794`, `:854`, `:971` | settled |
+| D-24 | 2 | Telemetry: counters for symbols by verdict, fundamentals by state, backfills by outcome, filings by outcome and snapshot users by outcome; a verdict is counted when the coverage row is inserted or its verdict changes; authoritative per-run counts are a query on the coverage table for the session. | analysis `app/telemetry.py:428-435`, `:566` | settled |
+| D-25 | 2 | New filings are fetched by calling marketdata `BackfillFundamentals` directly, as a guarded step that can never fail the data job or change the bar verdict. It is never a child whose failure blocks the data job. | marketdata `internal/service/marketdata_service.go:2363-2420`; `internal/service/authz.go:26-29` | settled |
+| D-26 | 2 | Hole storage: a confirmed run is the whole coverage gap as read after the fetch, clipped to sessions before S and to the call's range, upserted on `(symbol, first_session)` keeping the greater `last_session`. A coverage gap is confirmed when one stored run contains it. Session S itself is never stored as a hole. History-call outcome `SKIPPED` confirms nothing. | marketdata `internal/timeframe/timeframe.go:102-103`, `:122`, `:130` | settled |
+| D-27 | 2 | New key `analysis.pipeline.data_stage_delay_minutes`: int, default 30, bounds [5, 360], read fresh by the ensure through `JobGraphSettings`. | analysis `app/engine/job_graph.py:198-213`; config `src/grpc/configServiceImpl.ts` (`SCALAR_BOUNDS_REGISTRY`) | settled |
+| D-28 | 2 | The calendar RPC is `GetLastClosedSession(as_of) → (session_date, closed_at)`; `marketsession` exports the 16:00 close helper it already has. Refines D-4. | `packages/proto/marketsession/marketsession.go:41`, `:66-71` | settled |
 
 ## Rejected Alternatives (locked)
 
@@ -48,6 +62,7 @@
 | R-10 | 1 (gate) | Snapshot every user through a new cross-user owner read. | Adds a service, proto and grant change for users who have nothing to evaluate. Operator chose D-13. | locked |
 | R-11 | 1 (gate) | Exclude system-scope signals from the universe. | Diverges from what the live loop covers, which 369 compares against. Operator chose D-14. | locked |
 | R-12 | 1 (gate) | Fundamentals: re-derive only, defer new filings to program feature 6. | Operator chose D-12. | locked |
+| R-13 | 2 | The universe job enqueues data jobs directly instead of parking on them. | Handlers cannot enqueue, and run id and lane are inherited only through a park; it would need a new 367 primitive (analysis `tests/test_job_handler_contract.py:67-68`; `app/repositories/pipeline_jobs.py:101-108`). | locked |
 
 ## Objections
 
@@ -56,25 +71,39 @@
 |---|---|---|---|---|
 | O-1 | 1 | Bar finality. Coverage is presence by date; a forming bar written before the close passes as `covered` for good unless a post-close write happens, and that depends on the in-memory warm set (`timeframe.go:113-116`; `marketdata_service.go:1203-1222`). The time of day finalizes nothing. | yes | open |
 | O-2 | 1 | Backfill wait. A 60 s poll then a transient retry dies after about 6.5 minutes; ingest queues above 3 jobs, so children die from queueing alone, and each poll is reported as a retry (`job_graph.py:114-116`, `:621-627`; ingest `servicer.py:691-693`). | yes | closed @ round 1 gate (D-9: synchronous call, no polling of an external job) |
-| O-3 | 1 | Universe job fails for good on an empty `WaitOn` (fresh deployment, or every user's read failing) and a partial outage drops users for the whole day (`job_graph.py:172-173`). | yes | open |
+| O-3 | 1 | Universe job fails for good on an empty `WaitOn` (fresh deployment, or every user's read failing) and a partial outage drops users for the whole day (`job_graph.py:172-173`). | yes | closed @ round 2 (D-19); snapshot sizing carried as O-23 |
 | O-4 | 1 | A park of 10,000 children under the 5 s control budget is unmeasured; the 10,000 bound equals the D-13 ceiling and "held first, then by symbol" starves late symbols for good (`pipeline_jobs.py:13`, `:379-390`). | yes | open |
-| O-5 | 1 | An unfillable interior hole (IEX feed, halts) makes a symbol `no_vendor_data` for about two years and triggers a backfill every session. FR-3 vs vendor reality needs a rule. | yes | open |
-| O-6 | 1 | Two verdict rules disagree: the data job tolerates a head gap after the wake while the outcome table maps `INCOMPLETE` to `no_vendor_data`; "same earliest bar" cannot tell a young listing from an unfillable head hole (ingest `servicer.py:921-937`). | yes | open |
+| O-5 | 1 | An unfillable interior hole (IEX feed, halts) makes a symbol `no_vendor_data` for about two years and triggers a backfill every session. FR-3 vs vendor reality needs a rule. | yes | closed @ round 2 (D-10, D-26) |
+| O-6 | 1 | Two verdict rules disagree: the data job tolerates a head gap after the wake while the outcome table maps `INCOMPLETE` to `no_vendor_data`; "same earliest bar" cannot tell a young listing from an unfillable head hole (ingest `servicer.py:921-937`). | yes | closed @ round 2 (D-10, D-26: one rule, no head-gap special case) |
 | O-7 | 1 | Side effects FR-11 and C-14 deny: ingest jobs and ledger events attributed to a user who asked for nothing; untargeted backfill alerts visible to every user (ingest `servicer.py:673-683`); `ListWatchlists` creating a system list for owners with no live strategy (`portfolio_service.go:2452-2453`); fundamentals reads marking the whole universe warm, so the quote poller and bar ingester then poll it (`marketdata_service.go:2144-2145`, `:680-682`). | yes | open |
-| O-8 | 1 | Vendor axis. Production stays on `vendor` until the operator flips it (operator decision). One `GetFundamentals` per symbol per day spends the 250-call budget and starves interactive reads (`marketdata_service.go:1992-2003`). The stage must be safe on both axes. | yes | open |
+| O-8 | 1 | Vendor axis. Production stays on `vendor` until the operator flips it (operator decision). One `GetFundamentals` per symbol per day spends the 250-call budget and starves interactive reads (`marketdata_service.go:1992-2003`). The stage must be safe on both axes. | yes | closed @ round 2 (D-23) |
 | O-9 | 1 | System-scope signals: the live loop already joins them into every live strategy's set (`live_loop.py:384`, `:409-413`), so "leak" is not a reason to exclude them; excluding them diverges from the legacy path that 369 compares against. | no | closed @ round 1 gate (D-14) |
 | O-10 | 1 | The 729-day window is coupled to ingest's tunable `backfill.self_serve_max_range_days`; lowering it fails every stage backfill (ingest `servicer.py:472`, `:533`). | no | closed @ round 1 gate (D-9: no self-serve envelope) |
-| O-11 | 1 | Kill switch as `Verdict("stage_disabled")` leaves blocked rows for 30 days and makes the session unrecoverable after re-enabling. Gating creation is enough for `@AC-18`. | no | open |
-| O-12 | 1 | Pruning the feature tables inside `retention_prune` couples 367's kind to 368's tables; a fixed 30 days can disagree with `pipeline.retention_days`. | no | open |
+| O-11 | 1 | Kill switch as `Verdict("stage_disabled")` leaves blocked rows for 30 days and makes the session unrecoverable after re-enabling. Gating creation is enough for `@AC-18`. | no | closed @ round 2 (D-17) |
+| O-12 | 1 | Pruning the feature tables inside `retention_prune` couples 367's kind to 368's tables; a fixed 30 days can disagree with `pipeline.retention_days`. | no | closed @ round 2 (D-20); bound carried as O-26 |
 | O-13 | 1 | `symbol_backfill.outcome` duplicates the coverage record; on `ALREADY_EXISTS` the child triggers a second no-op job. | no | closed @ round 1 gate (D-9: no ingest job to track) |
-| O-14 | 1 | Telemetry: an upgrade from `no_vendor_data` to `covered` is never counted; "backfills started" counts re-triggers; multiple instances multiply the in-flight bound. | no | open |
-| O-15 | 1 | Ensure hook: while marketdata is down a 5 s timeout delays reap and settle every tick; a session whose trigger passes while analysis is down is never run. | no | open |
-| O-16 | 1 | Extracting the drains: hitting the page cap is silent today (`live_loop.py:600-625`); a strict version that raises must not make the legacy wrapper count a failure (feature 356 scenarios). | no | open |
-| O-17 | 1 | Identity: marketdata reads are ungated, so a representative owner's identity is not needed for them; use the system-read identity for global reads. | no | open |
+| O-14 | 1 | Telemetry: an upgrade from `no_vendor_data` to `covered` is never counted; "backfills started" counts re-triggers; multiple instances multiply the in-flight bound. | no | closed @ round 2 (D-24) |
+| O-15 | 1 | Ensure hook: while marketdata is down a 5 s timeout delays reap and settle every tick; a session whose trigger passes while analysis is down is never run. | no | closed @ round 2 (D-22) |
+| O-16 | 1 | Extracting the drains: hitting the page cap is silent today (`live_loop.py:600-625`); a strict version that raises must not make the legacy wrapper count a failure (feature 356 scenarios). | no | closed @ round 2 (D-21) |
+| O-17 | 1 | Identity: marketdata reads are ungated, so a representative owner's identity is not needed for them; use the system-read identity for global reads. | no | closed @ round 2 (D-18) |
 | O-18 | 1 | Seam for 369: a bar record does not imply a complete snapshot (a user's read can fail), does not imply final OHLC (O-1), and the universe job's state is no run barrier because the first dead child blocks it while siblings keep running (`pipeline_jobs.py:146-153`). | yes | open |
+| O-19 | 2 | The proposed fetch ranges ended at 16:00Z, which is before the New York close; if the vendor builds a daily bar only from trades up to `end`, every final bar would be a midday partial and the history call would overwrite S−1 with one (`internal/alpaca/client.go:422-426`). | yes | closed @ round 2 (D-16: New York calendar-day bounds) |
+| O-20 | 2 | Non-filers: `resolveCIK` has no negative cache, so each miss downloads the full ticker file and ends `FAILED`, adding about 430 downloads and failure counts a day; `filings_checked_on` and the recheck cadence for a symbol with no CIK are unspecified (`edgar_client.go:159-180`; `marketdata_service.go:2399`, `:2429-2430`). | yes | open |
+| O-21 | 2 | A single 120-day freshness test labels up-to-date filers `stale` for one to two months a year (a 10-K arrives up to 90 days after year end); `as_of_date=now` hides a filing made today (`marketdata_repo.go:918-920`). Needs a check-due threshold and a separate stale threshold. | yes | open |
+| O-22 | 2 | `@AC-12` expects a failed refresh to give `unavailable`; with a state derived from stored filings a failed fetch leaves `fresh` or `stale`. The meaning of the fundamentals state must be decided and the scenario amended. | yes | open |
+| O-23 | 2 | Snapshot write: one DELETE+INSERT must fit the 30 s handler block; adding the system-signal set to every owner multiplies rows by the number of owners (`job_graph.py:43`, `:305`; `live_loop.py:68-69`). | yes | open |
+| O-24 | 2 | The 730-day window copies the default of the tunable `backtest.max_range_days`; it must either read that key or be signed off as a fixed invariant (F-07 risk). | no | open |
+| O-25 | 2 | A wrongly confirmed hole is invisible: one vendor `EMPTY` on a new symbol confirms about 500 sessions and the symbol reads `covered` with one bar. Needs a log line, a counter and a count on the coverage record. | no | open |
+| O-26 | 2 | Retention inside the universe attempt is unbounded after a long disable. | no | open |
+| O-27 | 2 | The `ensures` hook is a change to the 367 runtime and must be listed; the system-read metadata carries no trace id today; `test_owner_header_guard.py` enumerates paths. | no | open |
+| O-28 | 2 | Vendor finality at close + delay is an unmeasured assumption; nothing would detect drift. | no | open |
+| O-29 | 2 | Seam: `GetBars`, `BatchGetBars` and `BatchGetLatestPrice` mark symbols warm; if feature 369 reads bars through them the whole universe becomes warm (`marketdata_service.go:301`, `:854`, `:971`). | no | open |
+| O-30 | 2 | With D-11 the fetch child exists for every symbol: about six control-lane transactions per symbol on one lock, about 10,000 waiting parents scanned per settle tick, and a `symbol_fetch` table that exists only to pass the child's outcome, for no isolation gain (`pipeline_jobs.py:149-156`, `:232`, `:258-265`). | yes | open |
 
 ## Reopen Petitions
 
 <!-- Verdict: dropped (evidence not new — already on record at <ID>) | pending user | user reopened | user declined -->
 | ID | Round | Target | New evidence | Verdict |
 |---|---|---|---|---|
+| P-1 | 2 | D-1 | A park above 10,000 children is a permanent job error, so the session's universe job fails for good at symbol 10,001 (analysis `app/engine/job_graph.py:174-175`); settle cost is per edge, so a shard level adds none (`app/repositories/pipeline_jobs.py:151-156`). Requested: universe → shards of at most 500 → data jobs. | pending user |
+| P-2 | 2 | D-9 (the clause "by the backfill child" only) | D-11 makes the fetch unconditional, so the child exists for every symbol and brings the cost in O-30; a dead child and a dead data job leave the same outcome. Requested: the data job fetches inline, no child and no `symbol_fetch` table. | pending user |
